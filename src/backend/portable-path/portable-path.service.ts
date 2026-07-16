@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { dirname, join } from 'node:path';
 
 export interface ElectronAppPathProvider {
@@ -6,11 +6,17 @@ export interface ElectronAppPathProvider {
   isPackaged?: boolean;
 }
 
+export const ELECTRON_APP_PATH_PROVIDER = 'ELECTRON_APP_PATH_PROVIDER';
+
 @Injectable()
 export class PortablePathService {
   private readonly developmentRoot = process.cwd();
 
-  constructor(private readonly appPathProvider?: ElectronAppPathProvider) {}
+  constructor(
+    @Optional()
+    @Inject(ELECTRON_APP_PATH_PROVIDER)
+    private readonly appPathProvider?: ElectronAppPathProvider
+  ) {}
 
   getPortableRoot(): string {
     if (this.appPathProvider?.isPackaged === true) {
