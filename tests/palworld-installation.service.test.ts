@@ -4,10 +4,16 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { OperationManagerService } from '../src/backend/operations/operation-manager.service';
 import { PALWORLD_DEDICATED_SERVER_APP_ID, PalworldInstallationService } from '../src/backend/palworld-installation/palworld-installation.service';
 import { PortablePathService } from '../src/backend/portable-path/portable-path.service';
+import { PortableStateService } from '../src/backend/portable-state/portable-state.service';
 import type { SteamCmdService } from '../src/backend/steamcmd/steamcmd.service';
 
 describe('PalworldInstallationService', () => {
-  const portablePathService = new PortablePathService();
+  const portableRoot = join(process.cwd(), '.tmp-tests', 'palworld-installation');
+  const portablePathService = new PortablePathService({
+    isPackaged: true,
+    getPath: () => join(portableRoot, 'PalCM.exe')
+  });
+  const portableStateService = new PortableStateService(portablePathService);
   const serverRoot = portablePathService.getPalworldServerRoot();
   const steamCmdService = {
     getStatus: () => ({
@@ -20,14 +26,15 @@ describe('PalworldInstallationService', () => {
   } as SteamCmdService;
 
   afterEach(async () => {
-    await rm(serverRoot, { recursive: true, force: true });
+    await rm(portableRoot, { recursive: true, force: true });
   });
 
   it('reports missing when PalServer.exe does not exist', () => {
     const service = new PalworldInstallationService(
       portablePathService,
       new OperationManagerService(),
-      steamCmdService
+      steamCmdService,
+      portableStateService
     );
 
     expect(service.getStatus()).toMatchObject({
@@ -42,7 +49,8 @@ describe('PalworldInstallationService', () => {
     const service = new PalworldInstallationService(
       portablePathService,
       new OperationManagerService(),
-      steamCmdService
+      steamCmdService,
+      portableStateService
     );
 
     expect(service.getStatus().status).toBe('READY');
@@ -52,7 +60,8 @@ describe('PalworldInstallationService', () => {
     const service = new PalworldInstallationService(
       portablePathService,
       new OperationManagerService(),
-      steamCmdService
+      steamCmdService,
+      portableStateService
     );
 
     expect(() => service.install({ confirmed: false })).toThrow('PALWORLD_INSTALL_REQUIRES_CONFIRMATION');

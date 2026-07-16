@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { OperationManagerService } from '../operations/operation-manager.service';
 import { PortablePathService } from '../portable-path/portable-path.service';
+import { PortableStateService } from '../portable-state/portable-state.service';
 import { SteamCmdService } from '../steamcmd/steamcmd.service';
 import type { OperationAcceptedDto } from '../../shared/dto/operation-progress.dto';
 import type {
@@ -23,13 +24,26 @@ export class PalworldInstallationService {
   constructor(
     private readonly portablePathService: PortablePathService,
     private readonly operationManagerService: OperationManagerService,
-    private readonly steamCmdService: SteamCmdService
+    private readonly steamCmdService: SteamCmdService,
+    private readonly portableStateService: PortableStateService
   ) {}
 
   getStatus(): PalworldInstallationStatusDto {
-    const installDirectory = this.portablePathService.getPalworldServerRoot();
-    const executablePath = join(installDirectory, 'PalServer.exe');
+    const expectedInstallDirectory = this.portablePathService.getPalworldServerRoot();
+    const expectedExecutablePath = join(expectedInstallDirectory, 'PalServer.exe');
+    const state = this.portableStateService.read();
+    const persistedExecutablePath = state.server?.executablePath;
+    const executablePath =
+      persistedExecutablePath && existsSync(persistedExecutablePath) ? persistedExecutablePath : expectedExecutablePath;
+    const installDirectory =
+      persistedExecutablePath && existsSync(persistedExecutablePath)
+        ? state.server?.installDirectory ?? expectedInstallDirectory
+        : expectedInstallDirectory;
     const isInstalled = existsSync(executablePath);
+
+    if (isInstalled) {
+      this.portableStateService.rememberServer(installDirectory, executablePath);
+    }
 
     return {
       status: isInstalled ? 'READY' : 'MISSING',
@@ -89,6 +103,7 @@ export class PalworldInstallationService {
       if (!existsSync(join(installDirectory, 'PalServer.exe'))) {
         throw new Error('PALSERVER_EXE_NOT_FOUND_AFTER_INSTALL');
       }
+      this.portableStateService.rememberServer(installDirectory, join(installDirectory, 'PalServer.exe'));
 
       this.operationManagerService.update(operationId, {
         status: 'COMPLETED',

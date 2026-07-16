@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { OperationManagerService } from '../operations/operation-manager.service';
 import { PortablePathService } from '../portable-path/portable-path.service';
+import { PortableStateService } from '../portable-state/portable-state.service';
 import type { OperationAcceptedDto } from '../../shared/dto/operation-progress.dto';
 import type {
   PalworldConfigurationStatusDto,
@@ -14,13 +15,23 @@ import type {
 export class PalworldConfigurationService {
   constructor(
     private readonly portablePathService: PortablePathService,
-    private readonly operationManagerService: OperationManagerService
+    private readonly operationManagerService: OperationManagerService,
+    private readonly portableStateService: PortableStateService
   ) {}
 
   getStatus(): PalworldConfigurationStatusDto {
-    const templatePath = this.getTemplatePath();
-    const activePath = this.getActivePath();
+    const state = this.portableStateService.read();
+    const persistedActivePath = state.configuration?.activePath;
+    const templatePath =
+      persistedActivePath && existsSync(persistedActivePath)
+        ? state.configuration?.templatePath ?? this.getTemplatePath()
+        : this.getTemplatePath();
+    const activePath = persistedActivePath && existsSync(persistedActivePath) ? persistedActivePath : this.getActivePath();
     const isReady = existsSync(activePath);
+
+    if (isReady) {
+      this.portableStateService.rememberConfiguration(templatePath, activePath);
+    }
 
     return {
       status: isReady ? 'READY' : 'MISSING',
@@ -59,6 +70,7 @@ export class PalworldConfigurationService {
       }
 
       if (existsSync(activePath)) {
+        this.portableStateService.rememberConfiguration(templatePath, activePath);
         this.operationManagerService.update(operationId, {
           status: 'COMPLETED',
           percent: 100,
@@ -82,6 +94,7 @@ export class PalworldConfigurationService {
       });
       this.operationManagerService.appendLog(operationId, `copy "${templatePath}" "${activePath}"`);
       await copyFile(templatePath, activePath);
+      this.portableStateService.rememberConfiguration(templatePath, activePath);
 
       this.operationManagerService.update(operationId, {
         status: 'COMPLETED',

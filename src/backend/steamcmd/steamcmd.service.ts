@@ -7,6 +7,7 @@ import { get } from 'node:https';
 import { join } from 'node:path';
 import { OperationManagerService } from '../operations/operation-manager.service';
 import { PortablePathService } from '../portable-path/portable-path.service';
+import { PortableStateService } from '../portable-state/portable-state.service';
 import type { OperationAcceptedDto } from '../../shared/dto/operation-progress.dto';
 import type { SteamCmdInstallRequestDto, SteamCmdStatusDto } from '../../shared/dto/steamcmd-status.dto';
 
@@ -17,13 +18,26 @@ export const STEAMCMD_OFFICIAL_DOWNLOAD_URL =
 export class SteamCmdService {
   constructor(
     private readonly portablePathService: PortablePathService,
-    private readonly operationManagerService: OperationManagerService
+    private readonly operationManagerService: OperationManagerService,
+    private readonly portableStateService: PortableStateService
   ) {}
 
   getStatus(): SteamCmdStatusDto {
-    const installDirectory = this.portablePathService.getSteamCmdRoot();
-    const executablePath = join(installDirectory, 'steamcmd.exe');
+    const expectedInstallDirectory = this.portablePathService.getSteamCmdRoot();
+    const expectedExecutablePath = join(expectedInstallDirectory, 'steamcmd.exe');
+    const state = this.portableStateService.read();
+    const persistedExecutablePath = state.steamCmd?.executablePath;
+    const executablePath =
+      persistedExecutablePath && existsSync(persistedExecutablePath) ? persistedExecutablePath : expectedExecutablePath;
+    const installDirectory =
+      persistedExecutablePath && existsSync(persistedExecutablePath)
+        ? state.steamCmd?.installDirectory ?? expectedInstallDirectory
+        : expectedInstallDirectory;
     const isInstalled = existsSync(executablePath);
+
+    if (isInstalled) {
+      this.portableStateService.rememberSteamCmd(installDirectory, executablePath);
+    }
 
     return {
       status: isInstalled ? 'READY' : 'MISSING',
@@ -82,6 +96,7 @@ export class SteamCmdService {
         message: 'Inicializando SteamCMD.'
       });
       await this.initializeSteamCmd(operationId, join(installDirectory, 'steamcmd.exe'));
+      this.portableStateService.rememberSteamCmd(installDirectory, join(installDirectory, 'steamcmd.exe'));
 
       this.operationManagerService.update(operationId, {
         status: 'COMPLETED',
