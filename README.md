@@ -131,6 +131,24 @@ https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip
 
 Antes de descargar se pide confirmacion explicita. Durante la descarga y extraccion se muestra porcentaje de progreso.
 
+## Palworld Dedicated Server en desarrollo
+
+Cuando SteamCMD ya existe, la aplicacion pasa a `SERVER_MISSING` y habilita la instalacion del servidor.
+
+En `start:dev`, Palworld Dedicated Server se instala dentro de:
+
+```text
+ejecucionPruebas/server/palworld/
+```
+
+La instalacion usa SteamCMD con el AppID oficial del servidor dedicado:
+
+```text
+2394010
+```
+
+Antes de ejecutar SteamCMD se pide confirmacion explicita. Durante la ejecucion se muestra porcentaje y el ultimo mensaje recibido desde SteamCMD.
+
 ## Estructura editable esperada junto al portable
 
 En fases posteriores, la aplicacion creara o usara estas carpetas junto al ejecutable:

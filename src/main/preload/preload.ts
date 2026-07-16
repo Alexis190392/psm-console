@@ -2,6 +2,10 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { AllowedActionsDto } from '../../shared/dto/allowed-actions.dto';
 import type { ApplicationStatusDto } from '../../shared/dto/application-status.dto';
 import type { OperationAcceptedDto, OperationProgressDto } from '../../shared/dto/operation-progress.dto';
+import type {
+  PalworldInstallationStatusDto,
+  PalworldInstallRequestDto
+} from '../../shared/dto/palworld-installation-status.dto';
 import type { SteamCmdInstallRequestDto, SteamCmdStatusDto } from '../../shared/dto/steamcmd-status.dto';
 
 const ipcChannels = {
@@ -10,6 +14,8 @@ const ipcChannels = {
   operationGet: 'operation:get',
   steamCmdGetStatus: 'steamcmd:get-status',
   steamCmdInstall: 'steamcmd:install',
+  serverGetInstallationStatus: 'server:get-installation-status',
+  serverInstall: 'server:install',
   windowMinimize: 'window:minimize',
   windowToggleMaximize: 'window:toggle-maximize',
   windowClose: 'window:close'
@@ -26,6 +32,10 @@ export interface PalcmApi {
   steamCmd: {
     getStatus: () => Promise<SteamCmdStatusDto>;
     install: (request: SteamCmdInstallRequestDto) => Promise<OperationAcceptedDto>;
+  };
+  server: {
+    getInstallationStatus: () => Promise<PalworldInstallationStatusDto>;
+    install: (request: PalworldInstallRequestDto) => Promise<OperationAcceptedDto>;
   };
   window: {
     minimize: () => Promise<void>;
@@ -47,6 +57,12 @@ const api: PalcmApi = {
     getStatus: () => ipcRenderer.invoke(ipcChannels.steamCmdGetStatus) as Promise<SteamCmdStatusDto>,
     install: (request) =>
       ipcRenderer.invoke(ipcChannels.steamCmdInstall, request) as Promise<OperationAcceptedDto>
+  },
+  server: {
+    getInstallationStatus: () =>
+      ipcRenderer.invoke(ipcChannels.serverGetInstallationStatus) as Promise<PalworldInstallationStatusDto>,
+    install: (request) =>
+      ipcRenderer.invoke(ipcChannels.serverInstall, request) as Promise<OperationAcceptedDto>
   },
   window: {
     minimize: () => ipcRenderer.invoke(ipcChannels.windowMinimize) as Promise<void>,

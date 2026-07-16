@@ -2,8 +2,10 @@ import type { INestApplicationContext } from '@nestjs/common';
 import { BrowserWindow, type IpcMain, type IpcMainInvokeEvent } from 'electron';
 import { ApplicationStateService } from '../../backend/application-state/application-state.service';
 import { OperationManagerService } from '../../backend/operations/operation-manager.service';
+import { PalworldInstallationService } from '../../backend/palworld-installation/palworld-installation.service';
 import { SteamCmdService } from '../../backend/steamcmd/steamcmd.service';
 import { ipcChannels } from '../../shared/contracts/ipc-channels';
+import type { PalworldInstallRequestDto } from '../../shared/dto/palworld-installation-status.dto';
 import type { SteamCmdInstallRequestDto } from '../../shared/dto/steamcmd-status.dto';
 
 export function registerIpcHandlers(
@@ -12,6 +14,7 @@ export function registerIpcHandlers(
 ): void {
   const applicationStateService = nestContext.get(ApplicationStateService);
   const steamCmdService = nestContext.get(SteamCmdService);
+  const palworldInstallationService = nestContext.get(PalworldInstallationService);
   const operationManagerService = nestContext.get(OperationManagerService);
 
   ipcMain.handle(ipcChannels.appGetStatus, () =>
@@ -26,6 +29,14 @@ export function registerIpcHandlers(
 
   ipcMain.handle(ipcChannels.steamCmdInstall, (_event, request: SteamCmdInstallRequestDto) =>
     steamCmdService.install(request)
+  );
+
+  ipcMain.handle(ipcChannels.serverGetInstallationStatus, () =>
+    palworldInstallationService.getStatus()
+  );
+
+  ipcMain.handle(ipcChannels.serverInstall, (_event, request: PalworldInstallRequestDto) =>
+    palworldInstallationService.install(request)
   );
 
   ipcMain.handle(ipcChannels.operationGet, (_event, request: { operationId: string }) =>

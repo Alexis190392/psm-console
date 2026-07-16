@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { PalworldInstallationService } from '../palworld-installation/palworld-installation.service';
 import { PortablePathService } from '../portable-path/portable-path.service';
 import { SteamCmdService } from '../steamcmd/steamcmd.service';
 import { ApplicationStatus } from '../../shared/enums/application-status';
@@ -9,7 +10,8 @@ import type { ApplicationStatusDto } from '../../shared/dto/application-status.d
 export class ApplicationStateService {
   constructor(
     private readonly portablePathService: PortablePathService,
-    private readonly steamCmdService: SteamCmdService
+    private readonly steamCmdService: SteamCmdService,
+    private readonly palworldInstallationService: PalworldInstallationService
   ) {}
 
   getStatus(): ApplicationStatusDto {
@@ -55,6 +57,12 @@ export class ApplicationStateService {
       return ApplicationStatus.STEAMCMD_MISSING;
     }
 
-    return ApplicationStatus.SERVER_MISSING;
+    const serverStatus = this.palworldInstallationService.getStatus();
+
+    if (serverStatus.status === 'MISSING') {
+      return ApplicationStatus.SERVER_MISSING;
+    }
+
+    return ApplicationStatus.CONFIGURATION_MISSING;
   }
 }

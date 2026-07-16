@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ApplicationStateService } from '../src/backend/application-state/application-state.service';
+import type { PalworldInstallationService } from '../src/backend/palworld-installation/palworld-installation.service';
 import { PortablePathService } from '../src/backend/portable-path/portable-path.service';
 import { ApplicationStatus } from '../src/shared/enums/application-status';
 import type { SteamCmdService } from '../src/backend/steamcmd/steamcmd.service';
@@ -8,7 +9,8 @@ describe('ApplicationStateService', () => {
   it('enables SteamCMD install when SteamCMD is missing', () => {
     const service = new ApplicationStateService(
       new PortablePathService(),
-      createSteamCmdServiceStub('MISSING')
+      createSteamCmdServiceStub('MISSING'),
+      createPalworldInstallationServiceStub('MISSING')
     );
 
     expect(service.getStatus().status).toBe(ApplicationStatus.STEAMCMD_MISSING);
@@ -21,10 +23,25 @@ describe('ApplicationStateService', () => {
   it('moves to server missing after SteamCMD is ready', () => {
     const service = new ApplicationStateService(
       new PortablePathService(),
-      createSteamCmdServiceStub('READY')
+      createSteamCmdServiceStub('READY'),
+      createPalworldInstallationServiceStub('MISSING')
     );
 
     expect(service.getStatus().status).toBe(ApplicationStatus.SERVER_MISSING);
+    expect(service.getAllowedActions()).toMatchObject({
+      canInstallSteamCmd: false,
+      canInstallServer: true
+    });
+  });
+
+  it('moves to configuration missing after the server is installed', () => {
+    const service = new ApplicationStateService(
+      new PortablePathService(),
+      createSteamCmdServiceStub('READY'),
+      createPalworldInstallationServiceStub('READY')
+    );
+
+    expect(service.getStatus().status).toBe(ApplicationStatus.CONFIGURATION_MISSING);
   });
 });
 
@@ -38,4 +55,16 @@ function createSteamCmdServiceStub(status: 'MISSING' | 'READY'): SteamCmdService
       message: status
     })
   } as SteamCmdService;
+}
+
+function createPalworldInstallationServiceStub(status: 'MISSING' | 'READY'): PalworldInstallationService {
+  return {
+    getStatus: () => ({
+      status,
+      appId: '2394010',
+      installDirectory: 'C:\\portable\\server\\palworld',
+      executablePath: 'C:\\portable\\server\\palworld\\PalServer.exe',
+      message: status
+    })
+  } as PalworldInstallationService;
 }
