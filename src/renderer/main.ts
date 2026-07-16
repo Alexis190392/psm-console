@@ -14,12 +14,12 @@ appRoot.innerHTML = `
     <div class="titlebar__badge">INITIALIZING</div>
     <div class="titlebar__spacer"></div>
     <button id="window-minimize" class="window-button" aria-label="Minimizar">-</button>
-    <button id="window-maximize" class="window-button" aria-label="Maximizar">□</button>
-    <button id="window-close" class="window-button window-button--close" aria-label="Cerrar">×</button>
+    <button id="window-maximize" class="window-button" aria-label="Maximizar">[]</button>
+    <button id="window-close" class="window-button window-button--close" aria-label="Cerrar">x</button>
   </header>
   <aside class="sidebar">
     <section class="sidebar__identity">
-      <div class="sidebar__logo">▣</div>
+      <div class="sidebar__logo">P</div>
       <div>
         <h1>PSM Console</h1>
         <p>v0.1.0 Base</p>
@@ -33,7 +33,7 @@ appRoot.innerHTML = `
       <a class="sidebar__link sidebar__link--locked" href="#">Backups</a>
       <a class="sidebar__link sidebar__link--locked" href="#">Logs</a>
     </nav>
-    <button class="primary-action" disabled>Start Server</button>
+    <button id="start-server-action" class="primary-action" type="button" disabled>Start Server</button>
   </aside>
   <main class="workspace">
     <section class="hero">
@@ -49,6 +49,22 @@ appRoot.innerHTML = `
       <div class="progress"><div class="progress__bar"></div></div>
       <pre id="status-json" class="log">Consultando IPC seguro...</pre>
     </section>
+    <section class="panel panel--notice">
+      <div class="panel__header">
+        <span>Politica de confirmacion</span>
+        <strong>OBLIGATORIA</strong>
+      </div>
+      <p>
+        Crear el servidor, descargar SteamCMD, descargar Palworld Dedicated Server,
+        modificar Firewall, restaurar backups o reemplazar configuracion requerira
+        una confirmacion explicita antes de ejecutar cualquier accion real.
+      </p>
+      <ul class="confirmation-list">
+        <li>Sin confirmacion: solo lectura, diagnostico y preflight.</li>
+        <li>Con confirmacion: descargas, instalaciones, firewall, backups y procesos.</li>
+        <li>En tests: siempre mocks y fixtures, sin tocar servicios reales.</li>
+      </ul>
+    </section>
   </main>
   <footer class="statusbar">
     <span id="portable-root">Portable Path: pendiente</span>
@@ -61,21 +77,50 @@ const palcmApi = window.palcm;
 
 bindWindowControls();
 
-if (palcmApi) {
-  const status = await palcmApi.app.getStatus();
-  const statusLabel = document.querySelector('#status-label');
-  const portableRoot = document.querySelector('#portable-root');
-  const statusJson = document.querySelector('#status-json');
+const statusLabel = document.querySelector('#status-label');
+const portableRoot = document.querySelector('#portable-root');
+const statusJson = document.querySelector('#status-json');
+const titlebarBadge = document.querySelector('.titlebar__badge');
 
+if (!palcmApi) {
+  showIpcError('El preload seguro no expuso window.palcm. Revisar preload, sandbox y build.');
+} else {
+  try {
+    const status = await palcmApi.app.getStatus();
+    const actions = await palcmApi.app.getActions();
+
+    if (statusLabel) {
+      statusLabel.textContent = status.status;
+    }
+
+    if (titlebarBadge) {
+      titlebarBadge.textContent = status.status;
+    }
+
+    if (portableRoot) {
+      portableRoot.textContent = `Portable Path: ${status.portableRoot}`;
+    }
+
+    if (statusJson) {
+      statusJson.textContent = JSON.stringify({ status, actions }, null, 2);
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    showIpcError(`No se pudo consultar IPC seguro: ${message}`);
+  }
+}
+
+function showIpcError(message: string): void {
   if (statusLabel) {
-    statusLabel.textContent = status.status;
+    statusLabel.textContent = ApplicationStatus.ERROR;
   }
 
-  if (portableRoot) {
-    portableRoot.textContent = `Portable Path: ${status.portableRoot}`;
+  if (titlebarBadge) {
+    titlebarBadge.textContent = ApplicationStatus.ERROR;
   }
 
   if (statusJson) {
-    statusJson.textContent = JSON.stringify(status, null, 2);
+    statusJson.textContent = message;
+    statusJson.classList.add('log--error');
   }
 }

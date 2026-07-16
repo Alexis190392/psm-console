@@ -1,7 +1,14 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { ipcChannels } from '../../shared/contracts/ipc-channels';
 import type { AllowedActionsDto } from '../../shared/dto/allowed-actions.dto';
 import type { ApplicationStatusDto } from '../../shared/dto/application-status.dto';
+
+const ipcChannels = {
+  appGetStatus: 'app:get-status',
+  appGetActions: 'app:get-actions',
+  windowMinimize: 'window:minimize',
+  windowToggleMaximize: 'window:toggle-maximize',
+  windowClose: 'window:close'
+} as const;
 
 export interface PalcmApi {
   app: {

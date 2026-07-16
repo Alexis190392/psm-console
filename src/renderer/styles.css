@@ -165,6 +165,11 @@ button {
   color: rgba(0, 229, 255, 0.65);
 }
 
+.primary-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.75;
+}
+
 .workspace {
   min-height: calc(100vh - 40px);
   margin-left: var(--sidebar-width);
@@ -204,6 +209,20 @@ button {
   backdrop-filter: blur(12px);
 }
 
+.panel + .panel {
+  margin-top: 20px;
+}
+
+.panel--notice {
+  border-color: rgba(0, 229, 255, 0.22);
+}
+
+.panel--notice p {
+  margin: 18px 0 12px;
+  color: var(--color-text-muted);
+  line-height: 1.6;
+}
+
 .panel__header {
   display: flex;
   justify-content: space-between;
@@ -235,6 +254,19 @@ button {
   overflow: auto;
   border-radius: 10px;
   background: rgba(11, 15, 19, 0.88);
+  color: var(--color-text-muted);
+}
+
+.log--error {
+  color: #ffb4ab;
+  border: 1px solid rgba(255, 82, 82, 0.35);
+}
+
+.confirmation-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 20px;
   color: var(--color-text-muted);
 }
 

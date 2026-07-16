@@ -1,0 +1,17 @@
+import { describe, expect, it } from 'vitest';
+import { requiresUserConfirmation } from '../src/shared/contracts/confirmation-policy';
+
+describe('confirmation policy', () => {
+  it('requires confirmation before downloads, server actions, firewall and backups', () => {
+    expect(requiresUserConfirmation('steamcmd:install')).toBe(true);
+    expect(requiresUserConfirmation('server:install')).toBe(true);
+    expect(requiresUserConfirmation('firewall:create-rule')).toBe(true);
+    expect(requiresUserConfirmation('backup:restore')).toBe(true);
+  });
+
+  it('allows read-only diagnostics without confirmation', () => {
+    expect(requiresUserConfirmation('app:get-status')).toBe(false);
+    expect(requiresUserConfirmation('firewall:get-status')).toBe(false);
+    expect(requiresUserConfirmation('network:get-local-addresses')).toBe(false);
+  });
+});
