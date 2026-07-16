@@ -28,3 +28,8 @@ const api: PalcmApi = {
 };
 
 contextBridge.exposeInMainWorld('palcm', api);
+contextBridge.exposeInMainWorld('windowControls', {
+  minimize: api.window.minimize,
+  maximizeToggle: api.window.toggleMaximize,
+  close: api.window.close
+});

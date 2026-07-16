@@ -36,6 +36,15 @@ Este comando:
 2. Abre Electron usando los archivos generados en `dist/`.
 3. Define `PALCM_RUNTIME_ENV=development`.
 
+Alias disponibles, siguiendo el formato usado en otras apps Electron locales:
+
+```powershell
+npm.cmd run electron:dev
+npm.cmd run dev
+```
+
+`electron:dev` abre Electron con el ultimo build disponible. `dev` ejecuta el mismo flujo que `start:dev`.
+
 ## Ejecutar en modo test local
 
 ```powershell
@@ -67,6 +76,14 @@ dist/
 └── renderer/
 ```
 
+Tambien existe el alias:
+
+```powershell
+npm.cmd run build:backend
+```
+
+En PalCM ese alias compila el proceso principal, preload y backend NestJS embebido.
+
 ## Crear el portable
 
 ```powershell
@@ -82,8 +99,18 @@ release/
 El nombre final lo define `electron-builder` usando `productName` y `version`, por ejemplo:
 
 ```text
-release/Palworld Server Manager 0.1.0.exe
+release/PalCM-Portable-0.1.0.exe
 ```
+
+Otros comandos de empaquetado:
+
+```powershell
+npm.cmd run pack
+npm.cmd run dist
+```
+
+- `pack` genera una carpeta desempaquetada para inspeccion.
+- `dist` genera un instalador NSIS en `release/`, por ejemplo `PalCM-Setup-0.1.0.exe`.
 
 Ese `.exe` es el artefacto portable. Al ejecutarse empaquetado, la aplicacion debe resolver su raiz portable desde la ubicacion real del ejecutable con `app.getPath('exe')` y `path.dirname(...)`; no se debe hardcodear la ruta de desarrollo `D:\MyAPIS\PalCM`.
 

@@ -1,5 +1,6 @@
 import './styles.css';
 import { ApplicationStatus } from '../shared/enums/application-status';
+import { bindWindowControls } from './components/window-controls';
 
 const appRoot = document.querySelector<HTMLDivElement>('#app');
 
@@ -12,9 +13,9 @@ appRoot.innerHTML = `
     <div class="titlebar__brand">Palworld Server Manager</div>
     <div class="titlebar__badge">INITIALIZING</div>
     <div class="titlebar__spacer"></div>
-    <button class="window-button" data-window-action="minimize" aria-label="Minimizar">-</button>
-    <button class="window-button" data-window-action="toggle-maximize" aria-label="Maximizar">□</button>
-    <button class="window-button window-button--close" data-window-action="close" aria-label="Cerrar">×</button>
+    <button id="window-minimize" class="window-button" aria-label="Minimizar">-</button>
+    <button id="window-maximize" class="window-button" aria-label="Maximizar">□</button>
+    <button id="window-close" class="window-button window-button--close" aria-label="Cerrar">×</button>
   </header>
   <aside class="sidebar">
     <section class="sidebar__identity">
@@ -58,25 +59,7 @@ appRoot.innerHTML = `
 
 const palcmApi = window.palcm;
 
-document.querySelectorAll<HTMLButtonElement>('[data-window-action]').forEach((button) => {
-  button.addEventListener('click', () => {
-    const action = button.dataset.windowAction;
-
-    if (action === 'minimize') {
-      void palcmApi?.window.minimize();
-      return;
-    }
-
-    if (action === 'toggle-maximize') {
-      void palcmApi?.window.toggleMaximize();
-      return;
-    }
-
-    if (action === 'close') {
-      void palcmApi?.window.close();
-    }
-  });
-});
+bindWindowControls();
 
 if (palcmApi) {
   const status = await palcmApi.app.getStatus();

@@ -9,11 +9,17 @@
     "lint": "eslint .",
     "test": "vitest run",
     "build:main": "tsc -p tsconfig.main.json",
+    "build:backend": "npm run build:main",
     "build:renderer": "vite build",
     "build": "npm run build:main && npm run build:renderer",
     "start:dev": "set PALCM_RUNTIME_ENV=development&& npm run build && electron .",
     "start:test": "set PALCM_RUNTIME_ENV=test&& npm run build && electron .",
+    "start:backend": "npm run build:backend",
+    "electron:dev": "electron .",
+    "dev": "npm run start:dev",
     "start": "electron .",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder --win nsis",
     "dist:portable": "npm run build && electron-builder --win portable"
   },
   "dependencies": {
@@ -45,8 +51,21 @@
     },
     "win": {
       "target": [
+        "nsis",
         "portable"
       ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "PalCM",
+      "artifactName": "PalCM-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "PalCM-Portable-${version}.${ext}"
     }
   }
 }
