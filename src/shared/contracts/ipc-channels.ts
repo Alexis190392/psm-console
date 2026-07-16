@@ -25,7 +25,10 @@ export const ipcChannels = {
   networkGetPublicAddress: 'network:get-public-address',
   networkCheckPort: 'network:check-port',
   logsSubscribe: 'logs:subscribe',
-  logsUnsubscribe: 'logs:unsubscribe'
+  logsUnsubscribe: 'logs:unsubscribe',
+  windowMinimize: 'window:minimize',
+  windowToggleMaximize: 'window:toggle-maximize',
+  windowClose: 'window:close'
 } as const;
 
 export type IpcChannel = (typeof ipcChannels)[keyof typeof ipcChannels];
