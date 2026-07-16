@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "Node16",
+    "moduleResolution": "Node16",
+    "outDir": "dist",
+    "rootDir": "src",
+    "lib": ["ES2023"],
+    "types": ["node", "electron"],
+    "declaration": true,
+    "sourceMap": true
+  },
+  "include": [
+    "src/main/**/*.ts",
+    "src/backend/**/*.ts",
+    "src/shared/**/*.ts"
+  ]
+}

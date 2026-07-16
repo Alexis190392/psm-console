@@ -1,0 +1,31 @@
+export const ipcChannels = {
+  appGetStatus: 'app:get-status',
+  appGetActions: 'app:get-actions',
+  operationGet: 'operation:get',
+  operationCancel: 'operation:cancel',
+  steamCmdGetStatus: 'steamcmd:get-status',
+  steamCmdInstall: 'steamcmd:install',
+  steamCmdRepair: 'steamcmd:repair',
+  serverGetInstallationStatus: 'server:get-installation-status',
+  serverInstall: 'server:install',
+  serverRepair: 'server:repair',
+  serverStart: 'server:start',
+  serverStop: 'server:stop',
+  serverRestart: 'server:restart',
+  serverGetRuntimeStatus: 'server:get-runtime-status',
+  configRead: 'config:read',
+  configValidate: 'config:validate',
+  configSave: 'config:save',
+  configCreateDefault: 'config:create-default',
+  firewallGetStatus: 'firewall:get-status',
+  firewallCreateRule: 'firewall:create-rule',
+  firewallUpdateRule: 'firewall:update-rule',
+  firewallRemoveRule: 'firewall:remove-rule',
+  networkGetLocalAddresses: 'network:get-local-addresses',
+  networkGetPublicAddress: 'network:get-public-address',
+  networkCheckPort: 'network:check-port',
+  logsSubscribe: 'logs:subscribe',
+  logsUnsubscribe: 'logs:unsubscribe'
+} as const;
+
+export type IpcChannel = (typeof ipcChannels)[keyof typeof ipcChannels];

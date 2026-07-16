@@ -1,0 +1,252 @@
+:root {
+  --color-background: #0b0f13;
+  --color-surface: #101418;
+  --color-surface-panel: #151b23;
+  --color-surface-high: #262a2f;
+  --color-outline: #3b494c;
+  --color-text: #e0e3e8;
+  --color-text-muted: #bac9cc;
+  --color-primary: #00e5ff;
+  --color-primary-soft: #c3f5ff;
+  --color-danger: #ff5252;
+  --sidebar-width: 280px;
+  font-family: Inter, "Segoe UI", Arial, sans-serif;
+  color: var(--color-text);
+  background: var(--color-background);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 1100px;
+  min-height: 700px;
+  background:
+    radial-gradient(circle at 2px 2px, rgba(0, 229, 255, 0.05) 1px, transparent 0),
+    var(--color-background);
+  background-size: 24px 24px;
+}
+
+button {
+  font: inherit;
+}
+
+.titlebar {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 40px;
+  padding: 0 16px;
+  background: #181c20;
+  border-bottom: 1px solid var(--color-outline);
+  user-select: none;
+}
+
+.titlebar__brand,
+.sidebar h1,
+.eyebrow,
+.panel__header,
+.log,
+.statusbar {
+  font-family: "JetBrains Mono", Consolas, monospace;
+}
+
+.titlebar__brand {
+  font-weight: 700;
+}
+
+.titlebar__badge {
+  border-radius: 6px;
+  padding: 4px 8px;
+  background: var(--color-surface-high);
+  color: var(--color-text-muted);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+.titlebar__spacer {
+  flex: 1;
+}
+
+.window-button {
+  width: 32px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--color-text-muted);
+  background: transparent;
+}
+
+.window-button:hover {
+  background: var(--color-surface-high);
+  color: var(--color-text);
+}
+
+.window-button--close:hover {
+  background: var(--color-danger);
+  color: white;
+}
+
+.sidebar {
+  position: fixed;
+  inset: 40px auto 0 0;
+  width: var(--sidebar-width);
+  display: flex;
+  flex-direction: column;
+  background: #1c2024;
+  border-right: 1px solid var(--color-outline);
+}
+
+.sidebar__identity {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 28px 24px;
+  border-bottom: 1px solid rgba(59, 73, 76, 0.45);
+}
+
+.sidebar__logo {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: var(--color-primary);
+  color: #00363d;
+  font-weight: 900;
+}
+
+.sidebar h1 {
+  margin: 0;
+  color: var(--color-primary-soft);
+  font-size: 24px;
+}
+
+.sidebar p {
+  margin: 4px 0 0;
+  color: var(--color-text-muted);
+}
+
+.sidebar__nav {
+  display: grid;
+  gap: 8px;
+  padding: 24px 12px;
+}
+
+.sidebar__link {
+  padding: 14px 18px;
+  border-radius: 8px;
+  color: var(--color-text-muted);
+  text-decoration: none;
+  font-family: "JetBrains Mono", Consolas, monospace;
+}
+
+.sidebar__link--active {
+  color: var(--color-primary-soft);
+  background: var(--color-surface-high);
+  box-shadow: inset -2px 0 0 var(--color-primary-soft);
+}
+
+.sidebar__link--locked {
+  opacity: 0.45;
+}
+
+.primary-action {
+  margin: auto 24px 24px;
+  padding: 14px 20px;
+  border: 1px solid rgba(0, 229, 255, 0.25);
+  border-radius: 10px;
+  background: rgba(0, 229, 255, 0.16);
+  color: rgba(0, 229, 255, 0.65);
+}
+
+.workspace {
+  min-height: calc(100vh - 40px);
+  margin-left: var(--sidebar-width);
+  padding: 96px 40px 72px;
+}
+
+.hero {
+  max-width: 980px;
+  margin: 0 auto 32px;
+  text-align: center;
+}
+
+.eyebrow {
+  color: var(--color-primary);
+  letter-spacing: 0.12em;
+}
+
+.hero h2 {
+  margin: 0;
+  color: var(--color-primary-soft);
+  font-size: 48px;
+  line-height: 56px;
+}
+
+.hero p {
+  color: var(--color-text-muted);
+  font-size: 18px;
+}
+
+.panel {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: rgba(21, 27, 35, 0.8);
+  backdrop-filter: blur(12px);
+}
+
+.panel__header {
+  display: flex;
+  justify-content: space-between;
+  color: var(--color-text-muted);
+}
+
+.panel__header strong {
+  color: var(--color-primary);
+}
+
+.progress {
+  height: 14px;
+  margin: 24px 0;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--color-surface-high);
+}
+
+.progress__bar {
+  width: 35%;
+  height: 100%;
+  background: linear-gradient(90deg, #00daf3, #5c00f7);
+}
+
+.log {
+  min-height: 160px;
+  margin: 0;
+  padding: 16px;
+  overflow: auto;
+  border-radius: 10px;
+  background: rgba(11, 15, 19, 0.88);
+  color: var(--color-text-muted);
+}
+
+.statusbar {
+  position: fixed;
+  inset: auto 0 0 var(--sidebar-width);
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  height: 32px;
+  padding: 6px 20px;
+  border-top: 1px solid var(--color-outline);
+  background: #101418;
+  color: var(--color-text-muted);
+}
