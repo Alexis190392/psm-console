@@ -21,12 +21,19 @@
 
 body {
   margin: 0;
-  min-width: 1100px;
-  min-height: 700px;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
   background:
     radial-gradient(circle at 2px 2px, rgba(0, 229, 255, 0.05) 1px, transparent 0),
     var(--color-background);
   background-size: 24px 24px;
+}
+
+#app {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
 }
 
 button {
@@ -207,14 +214,22 @@ button {
 }
 
 .workspace {
-  min-height: calc(100vh - 40px);
-  margin-left: var(--sidebar-width);
-  padding: 96px 40px 72px;
+  position: fixed;
+  inset: 40px 0 32px var(--sidebar-width);
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  margin-left: 0;
+  padding: clamp(24px, 4vh, 56px) clamp(20px, 4vw, 40px) 24px;
+  overflow: hidden;
 }
 
 .hero {
+  flex: 0 0 auto;
   max-width: 980px;
-  margin: 0 auto 32px;
+  width: min(980px, 100%);
+  margin: 0 auto clamp(16px, 3vh, 28px);
   text-align: center;
 }
 
@@ -226,19 +241,24 @@ button {
 .hero h2 {
   margin: 0;
   color: var(--color-primary-soft);
-  font-size: 48px;
-  line-height: 56px;
+  font-size: clamp(30px, 4.5vh, 48px);
+  line-height: 1.12;
 }
 
 .hero p {
   color: var(--color-text-muted);
-  font-size: 18px;
+  font-size: clamp(14px, 2vh, 18px);
 }
 
 .panel {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
   max-width: 900px;
+  width: min(900px, 100%);
   margin: 0 auto;
-  padding: 28px;
+  padding: clamp(16px, 2.5vh, 28px);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 16px;
   background: rgba(21, 27, 35, 0.8);
@@ -271,7 +291,8 @@ button {
 
 .progress {
   height: 14px;
-  margin: 24px 0;
+  flex: 0 0 auto;
+  margin: clamp(14px, 2.5vh, 24px) 0;
   overflow: hidden;
   border-radius: 999px;
   background: var(--color-surface-high);
@@ -298,7 +319,8 @@ button {
 }
 
 .log {
-  min-height: 320px;
+  min-height: 0;
+  height: 100%;
   margin: 0;
   padding: 16px;
   overflow: auto;
@@ -306,6 +328,32 @@ button {
   background: rgba(11, 15, 19, 0.88);
   color: var(--color-text-muted);
   white-space: pre-wrap;
+}
+
+.console-shell {
+  position: relative;
+  min-height: 160px;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.console-export {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  padding: 5px 9px;
+  border: 1px solid rgba(0, 229, 255, 0.28);
+  border-radius: 6px;
+  background: rgba(16, 20, 24, 0.92);
+  color: var(--color-primary-soft);
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 11px;
+}
+
+.console-export:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
 }
 
 .log--error {
@@ -322,6 +370,7 @@ button {
 }
 
 .confirmation-panel {
+  flex: 0 0 auto;
   display: grid;
   gap: 18px;
   margin-top: 20px;

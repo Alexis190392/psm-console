@@ -2,9 +2,11 @@ import type { INestApplicationContext } from '@nestjs/common';
 import { BrowserWindow, type IpcMain, type IpcMainInvokeEvent } from 'electron';
 import { ApplicationStateService } from '../../backend/application-state/application-state.service';
 import { OperationManagerService } from '../../backend/operations/operation-manager.service';
+import { PalworldConfigurationService } from '../../backend/palworld-configuration/palworld-configuration.service';
 import { PalworldInstallationService } from '../../backend/palworld-installation/palworld-installation.service';
 import { SteamCmdService } from '../../backend/steamcmd/steamcmd.service';
 import { ipcChannels } from '../../shared/contracts/ipc-channels';
+import type { PalworldCreateDefaultConfigurationRequestDto } from '../../shared/dto/palworld-configuration-status.dto';
 import type { PalworldInstallRequestDto } from '../../shared/dto/palworld-installation-status.dto';
 import type { SteamCmdInstallRequestDto } from '../../shared/dto/steamcmd-status.dto';
 
@@ -15,6 +17,7 @@ export function registerIpcHandlers(
   const applicationStateService = nestContext.get(ApplicationStateService);
   const steamCmdService = nestContext.get(SteamCmdService);
   const palworldInstallationService = nestContext.get(PalworldInstallationService);
+  const palworldConfigurationService = nestContext.get(PalworldConfigurationService);
   const operationManagerService = nestContext.get(OperationManagerService);
 
   ipcMain.handle(ipcChannels.appGetStatus, () =>
@@ -37,6 +40,12 @@ export function registerIpcHandlers(
 
   ipcMain.handle(ipcChannels.serverInstall, (_event, request: PalworldInstallRequestDto) =>
     palworldInstallationService.install(request)
+  );
+
+  ipcMain.handle(ipcChannels.configValidate, () => palworldConfigurationService.getStatus());
+
+  ipcMain.handle(ipcChannels.configCreateDefault, (_event, request: PalworldCreateDefaultConfigurationRequestDto) =>
+    palworldConfigurationService.createDefault(request)
   );
 
   ipcMain.handle(ipcChannels.operationGet, (_event, request: { operationId: string }) =>

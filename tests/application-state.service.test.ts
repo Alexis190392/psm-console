@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ApplicationStateService } from '../src/backend/application-state/application-state.service';
+import type { PalworldConfigurationService } from '../src/backend/palworld-configuration/palworld-configuration.service';
 import type { PalworldInstallationService } from '../src/backend/palworld-installation/palworld-installation.service';
 import { PortablePathService } from '../src/backend/portable-path/portable-path.service';
 import { ApplicationStatus } from '../src/shared/enums/application-status';
@@ -10,7 +11,8 @@ describe('ApplicationStateService', () => {
     const service = new ApplicationStateService(
       new PortablePathService(),
       createSteamCmdServiceStub('MISSING'),
-      createPalworldInstallationServiceStub('MISSING')
+      createPalworldInstallationServiceStub('MISSING'),
+      createPalworldConfigurationServiceStub('MISSING')
     );
 
     expect(service.getStatus().status).toBe(ApplicationStatus.STEAMCMD_MISSING);
@@ -24,7 +26,8 @@ describe('ApplicationStateService', () => {
     const service = new ApplicationStateService(
       new PortablePathService(),
       createSteamCmdServiceStub('READY'),
-      createPalworldInstallationServiceStub('MISSING')
+      createPalworldInstallationServiceStub('MISSING'),
+      createPalworldConfigurationServiceStub('MISSING')
     );
 
     expect(service.getStatus().status).toBe(ApplicationStatus.SERVER_MISSING);
@@ -38,10 +41,26 @@ describe('ApplicationStateService', () => {
     const service = new ApplicationStateService(
       new PortablePathService(),
       createSteamCmdServiceStub('READY'),
-      createPalworldInstallationServiceStub('READY')
+      createPalworldInstallationServiceStub('READY'),
+      createPalworldConfigurationServiceStub('MISSING')
     );
 
     expect(service.getStatus().status).toBe(ApplicationStatus.CONFIGURATION_MISSING);
+    expect(service.getAllowedActions()).toMatchObject({
+      canEditConfiguration: true,
+      canStartServer: false
+    });
+  });
+
+  it('moves to ready after the active configuration exists', () => {
+    const service = new ApplicationStateService(
+      new PortablePathService(),
+      createSteamCmdServiceStub('READY'),
+      createPalworldInstallationServiceStub('READY'),
+      createPalworldConfigurationServiceStub('READY')
+    );
+
+    expect(service.getStatus().status).toBe(ApplicationStatus.READY);
   });
 });
 
@@ -67,4 +86,15 @@ function createPalworldInstallationServiceStub(status: 'MISSING' | 'READY'): Pal
       message: status
     })
   } as PalworldInstallationService;
+}
+
+function createPalworldConfigurationServiceStub(status: 'MISSING' | 'READY'): PalworldConfigurationService {
+  return {
+    getStatus: () => ({
+      status,
+      templatePath: 'C:\\portable\\server\\palworld\\DefaultPalWorldSettings.ini',
+      activePath: 'C:\\portable\\server\\palworld\\Pal\\Saved\\Config\\WindowsServer\\PalWorldSettings.ini',
+      message: status
+    })
+  } as PalworldConfigurationService;
 }

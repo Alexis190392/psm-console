@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { PalworldConfigurationService } from '../palworld-configuration/palworld-configuration.service';
 import { PalworldInstallationService } from '../palworld-installation/palworld-installation.service';
 import { PortablePathService } from '../portable-path/portable-path.service';
 import { SteamCmdService } from '../steamcmd/steamcmd.service';
@@ -11,7 +12,8 @@ export class ApplicationStateService {
   constructor(
     private readonly portablePathService: PortablePathService,
     private readonly steamCmdService: SteamCmdService,
-    private readonly palworldInstallationService: PalworldInstallationService
+    private readonly palworldInstallationService: PalworldInstallationService,
+    private readonly palworldConfigurationService: PalworldConfigurationService
   ) {}
 
   getStatus(): ApplicationStatusDto {
@@ -33,6 +35,7 @@ export class ApplicationStateService {
       canInstallSteamCmd: status === ApplicationStatus.STEAMCMD_MISSING,
       canInstallServer: status === ApplicationStatus.SERVER_MISSING,
       canEditConfiguration: [
+        ApplicationStatus.CONFIGURATION_MISSING,
         ApplicationStatus.CONFIGURATION_READY,
         ApplicationStatus.READY
       ].includes(status),
@@ -43,6 +46,7 @@ export class ApplicationStateService {
       canStartServer: status === ApplicationStatus.READY,
       canStopServer: status === ApplicationStatus.SERVER_RUNNING,
       canCreateBackup: [
+        ApplicationStatus.CONFIGURATION_MISSING,
         ApplicationStatus.READY,
         ApplicationStatus.SERVER_RUNNING
       ].includes(status),
@@ -63,6 +67,12 @@ export class ApplicationStateService {
       return ApplicationStatus.SERVER_MISSING;
     }
 
-    return ApplicationStatus.CONFIGURATION_MISSING;
+    const configurationStatus = this.palworldConfigurationService.getStatus();
+
+    if (configurationStatus.status === 'MISSING') {
+      return ApplicationStatus.CONFIGURATION_MISSING;
+    }
+
+    return ApplicationStatus.READY;
   }
 }

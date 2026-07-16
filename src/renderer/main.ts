@@ -1,5 +1,6 @@
 import './styles.css';
 import { ApplicationStatus } from '../shared/enums/application-status';
+import type { AllowedActionsDto } from '../shared/dto/allowed-actions.dto';
 import type { OperationProgressDto } from '../shared/dto/operation-progress.dto';
 import { bindWindowControls } from './components/window-controls';
 
@@ -27,12 +28,12 @@ appRoot.innerHTML = `
       </div>
     </section>
     <nav class="sidebar__nav" aria-label="Navegacion principal">
-      <a class="sidebar__link sidebar__link--active" href="#">Home</a>
-      <a class="sidebar__link sidebar__link--locked" href="#">Server</a>
-      <a class="sidebar__link sidebar__link--locked" href="#">Configuration</a>
-      <a class="sidebar__link sidebar__link--locked" href="#">Network & Firewall</a>
-      <a class="sidebar__link sidebar__link--locked" href="#">Backups</a>
-      <a class="sidebar__link sidebar__link--locked" href="#">Logs</a>
+      <a class="sidebar__link sidebar__link--active" data-nav="home" href="#">Home</a>
+      <a class="sidebar__link sidebar__link--locked" data-nav="server" href="#">Server</a>
+      <a class="sidebar__link sidebar__link--locked" data-nav="configuration" href="#">Configuration</a>
+      <a class="sidebar__link sidebar__link--locked" data-nav="network" href="#">Network & Firewall</a>
+      <a class="sidebar__link sidebar__link--locked" data-nav="backups" href="#">Backups</a>
+      <a class="sidebar__link sidebar__link--locked" data-nav="logs" href="#">Logs</a>
     </nav>
     <button id="start-server-action" class="primary-action" type="button" disabled>Start Server</button>
   </aside>
@@ -48,7 +49,10 @@ appRoot.innerHTML = `
         <strong id="status-label">${ApplicationStatus.BOOTSTRAPPING}</strong>
       </div>
       <div class="progress"><div id="progress-bar" class="progress__bar"></div></div>
-      <pre id="console-output" class="log">Consultando IPC seguro...</pre>
+      <div class="console-shell">
+        <button id="export-console" class="console-export" type="button" aria-label="Exportar consola">Exportar</button>
+        <pre id="console-output" class="log">Consultando IPC seguro...</pre>
+      </div>
       <div id="confirmation-panel" class="confirmation-panel hidden">
         <div>
           <div class="confirmation-panel__eyebrow" id="confirmation-kind">ACCION REQUERIDA</div>
@@ -72,22 +76,6 @@ appRoot.innerHTML = `
         </div>
       </div>
     </section>
-    <section class="panel panel--notice">
-      <div class="panel__header">
-        <span>Politica de confirmacion</span>
-        <strong>OBLIGATORIA</strong>
-      </div>
-      <p>
-        Crear el servidor, descargar SteamCMD, descargar Palworld Dedicated Server,
-        modificar Firewall, restaurar backups o reemplazar configuracion requerira
-        una confirmacion explicita antes de ejecutar cualquier accion real.
-      </p>
-      <ul class="confirmation-list">
-        <li>Sin confirmacion: solo lectura, diagnostico y preflight.</li>
-        <li>Con confirmacion: descargas, instalaciones, firewall, backups y procesos.</li>
-        <li>En tests: siempre mocks y fixtures, sin tocar servicios reales.</li>
-      </ul>
-    </section>
   </main>
   <footer class="statusbar">
     <span id="portable-root">Portable Path: pendiente</span>
@@ -105,6 +93,7 @@ const portableRoot = document.querySelector('#portable-root');
 const heroTitle = document.querySelector('#hero-title');
 const heroSubtitle = document.querySelector('#hero-subtitle');
 const consoleOutput = document.querySelector<HTMLPreElement>('#console-output');
+const exportConsoleButton = document.querySelector<HTMLButtonElement>('#export-console');
 const titlebarBadge = document.querySelector('.titlebar__badge');
 const progressBar = document.querySelector<HTMLDivElement>('#progress-bar');
 const steamCmdFooter = document.querySelector('#steamcmd-footer');
@@ -117,9 +106,10 @@ const confirmationSource = document.querySelector('#confirmation-source');
 const confirmationTarget = document.querySelector('#confirmation-target');
 const confirmActionButton = document.querySelector<HTMLButtonElement>('#confirm-action');
 const cancelActionButton = document.querySelector<HTMLButtonElement>('#cancel-action');
+const navLinks = Array.from(document.querySelectorAll<HTMLAnchorElement>('.sidebar__link[data-nav]'));
 const consoleLines: string[] = [];
 const operationLogOffsets = new Map<string, number>();
-let pendingAction: 'steamcmd' | 'server' | null = null;
+let pendingAction: 'steamcmd' | 'server' | 'config' | null = null;
 
 if (!palcmApi) {
   showIpcError('El preload seguro no expuso window.palcm. Revisar preload, sandbox y build.');
@@ -134,6 +124,8 @@ if (!palcmApi) {
     appendConsoleLine('Accion cancelada por el usuario.');
     hideConfirmation();
   });
+
+  exportConsoleButton?.addEventListener('click', exportConsole);
 }
 
 async function refreshState(): Promise<void> {
@@ -146,6 +138,7 @@ async function refreshState(): Promise<void> {
     const actions = await palcmApi.app.getActions();
     const steamCmd = await palcmApi.steamCmd.getStatus();
     const server = await palcmApi.server.getInstallationStatus();
+    const config = await palcmApi.config.getStatus();
 
     setText(statusLabel, status.status);
     setText(titlebarBadge, status.status);
@@ -157,6 +150,8 @@ async function refreshState(): Promise<void> {
     appendConsoleLine(`Raiz de ejecucion: ${status.portableRoot}`);
     appendConsoleLine(`SteamCMD: ${steamCmd.status} - ${steamCmd.executablePath}`);
     appendConsoleLine(`Servidor Palworld: ${server.status} - ${server.executablePath}`);
+    appendConsoleLine(`Configuracion: ${config.status} - ${config.activePath}`);
+    updateNavigation(status.status, actions);
 
     if (actions.canInstallSteamCmd) {
       showSteamCmdConfirmation(steamCmd.officialDownloadUrl, steamCmd.installDirectory);
@@ -165,6 +160,11 @@ async function refreshState(): Promise<void> {
 
     if (actions.canInstallServer) {
       showServerConfirmation(server.appId, server.installDirectory);
+      return;
+    }
+
+    if (status.status === ApplicationStatus.CONFIGURATION_MISSING) {
+      showConfigConfirmation(config.templatePath, config.activePath);
       return;
     }
 
@@ -187,6 +187,11 @@ async function runPendingAction(): Promise<void> {
 
   if (pendingAction === 'server') {
     await installServer();
+    return;
+  }
+
+  if (pendingAction === 'config') {
+    await createDefaultConfiguration();
   }
 }
 
@@ -210,6 +215,18 @@ async function installServer(): Promise<void> {
   disableConfirmationButtons();
   appendConsoleLine('Confirmado: instalar Palworld Dedicated Server.');
   const accepted = await palcmApi.server.install({ confirmed: true });
+  await pollOperation(accepted.operationId);
+  await refreshState();
+}
+
+async function createDefaultConfiguration(): Promise<void> {
+  if (!palcmApi) {
+    return;
+  }
+
+  disableConfirmationButtons();
+  appendConsoleLine('Confirmado: crear configuracion inicial.');
+  const accepted = await palcmApi.config.createDefault({ confirmed: true });
   await pollOperation(accepted.operationId);
   await refreshState();
 }
@@ -309,6 +326,17 @@ function showServerConfirmation(appId: string, target: string): void {
   });
 }
 
+function showConfigConfirmation(source: string, target: string): void {
+  pendingAction = 'config';
+  showConfirmation({
+    kind: 'CONFIGURACION',
+    title: 'Crear configuracion inicial',
+    message: 'El servidor ya esta instalado. Falta crear el archivo de configuracion activo desde la plantilla.',
+    source,
+    target
+  });
+}
+
 function showConfirmation(details: {
   kind: string;
   title: string;
@@ -368,6 +396,39 @@ function appendConsoleLine(line: string, includeTimestamp = true): void {
     consoleOutput.textContent = consoleLines.join('\n');
     consoleOutput.scrollTop = consoleOutput.scrollHeight;
   }
+}
+
+function updateNavigation(status: ApplicationStatus, actions: AllowedActionsDto): void {
+  const serverAvailable = ![
+    ApplicationStatus.STEAMCMD_MISSING,
+    ApplicationStatus.SERVER_MISSING
+  ].includes(status);
+  const configurationAvailable = actions.canEditConfiguration;
+  const logsAvailable = serverAvailable;
+
+  navLinks.forEach((link) => {
+    const nav = link.dataset['nav'];
+    const enabled =
+      nav === 'home' ||
+      (nav === 'server' && serverAvailable) ||
+      (nav === 'configuration' && configurationAvailable) ||
+      (nav === 'logs' && logsAvailable) ||
+      (nav === 'backups' && actions.canCreateBackup) ||
+      (nav === 'network' && actions.canManageFirewall);
+
+    link.classList.toggle('sidebar__link--locked', !enabled);
+    link.setAttribute('aria-disabled', enabled ? 'false' : 'true');
+  });
+}
+
+function exportConsole(): void {
+  const blob = new Blob([consoleLines.join('\n')], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `palcm-console-${new Date().toISOString().replace(/[:.]/g, '-')}.txt`;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 function setText(element: Element | null, value: string): void {

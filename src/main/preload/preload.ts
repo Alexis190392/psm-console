@@ -3,6 +3,10 @@ import type { AllowedActionsDto } from '../../shared/dto/allowed-actions.dto';
 import type { ApplicationStatusDto } from '../../shared/dto/application-status.dto';
 import type { OperationAcceptedDto, OperationProgressDto } from '../../shared/dto/operation-progress.dto';
 import type {
+  PalworldConfigurationStatusDto,
+  PalworldCreateDefaultConfigurationRequestDto
+} from '../../shared/dto/palworld-configuration-status.dto';
+import type {
   PalworldInstallationStatusDto,
   PalworldInstallRequestDto
 } from '../../shared/dto/palworld-installation-status.dto';
@@ -16,6 +20,8 @@ const ipcChannels = {
   steamCmdInstall: 'steamcmd:install',
   serverGetInstallationStatus: 'server:get-installation-status',
   serverInstall: 'server:install',
+  configValidate: 'config:validate',
+  configCreateDefault: 'config:create-default',
   windowMinimize: 'window:minimize',
   windowToggleMaximize: 'window:toggle-maximize',
   windowClose: 'window:close'
@@ -36,6 +42,10 @@ export interface PalcmApi {
   server: {
     getInstallationStatus: () => Promise<PalworldInstallationStatusDto>;
     install: (request: PalworldInstallRequestDto) => Promise<OperationAcceptedDto>;
+  };
+  config: {
+    getStatus: () => Promise<PalworldConfigurationStatusDto>;
+    createDefault: (request: PalworldCreateDefaultConfigurationRequestDto) => Promise<OperationAcceptedDto>;
   };
   window: {
     minimize: () => Promise<void>;
@@ -63,6 +73,11 @@ const api: PalcmApi = {
       ipcRenderer.invoke(ipcChannels.serverGetInstallationStatus) as Promise<PalworldInstallationStatusDto>,
     install: (request) =>
       ipcRenderer.invoke(ipcChannels.serverInstall, request) as Promise<OperationAcceptedDto>
+  },
+  config: {
+    getStatus: () => ipcRenderer.invoke(ipcChannels.configValidate) as Promise<PalworldConfigurationStatusDto>,
+    createDefault: (request) =>
+      ipcRenderer.invoke(ipcChannels.configCreateDefault, request) as Promise<OperationAcceptedDto>
   },
   window: {
     minimize: () => ipcRenderer.invoke(ipcChannels.windowMinimize) as Promise<void>,
