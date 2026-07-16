@@ -63,6 +63,7 @@ export class SteamCmdService {
         message: `Creando carpeta ${installDirectory}`
       });
       await mkdir(installDirectory, { recursive: true });
+      this.operationManagerService.appendLog(operationId, `mkdir "${installDirectory}"`);
 
       await this.downloadSteamCmdZip(operationId, zipPath);
 
@@ -71,6 +72,7 @@ export class SteamCmdService {
         percent: 85,
         message: 'Extrayendo SteamCMD.'
       });
+      this.operationManagerService.appendLog(operationId, `extract steamcmd.zip -> "${installDirectory}"`);
       await extract(zipPath, { dir: installDirectory });
 
       this.operationManagerService.update(operationId, {
@@ -90,6 +92,7 @@ export class SteamCmdService {
 
   private async downloadSteamCmdZip(operationId: string, zipPath: string): Promise<void> {
     await new Promise<void>((resolve, reject) => {
+      this.operationManagerService.appendLog(operationId, `GET ${STEAMCMD_OFFICIAL_DOWNLOAD_URL}`);
       const request = get(STEAMCMD_OFFICIAL_DOWNLOAD_URL, (response) => {
         if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
           reject(new Error(`Redireccion no soportada al descargar SteamCMD: ${response.headers.location}`));
@@ -102,6 +105,7 @@ export class SteamCmdService {
           return;
         }
 
+        this.operationManagerService.appendLog(operationId, `HTTP ${String(response.statusCode)} -> "${zipPath}"`);
         const totalBytes = Number(response.headers['content-length'] ?? 0);
         let downloadedBytes = 0;
         const file = createWriteStream(zipPath);
@@ -123,6 +127,7 @@ export class SteamCmdService {
         response.pipe(file);
         file.on('finish', () => {
           file.close(() => {
+            this.operationManagerService.appendLog(operationId, `download complete "${zipPath}"`);
             resolve();
           });
         });

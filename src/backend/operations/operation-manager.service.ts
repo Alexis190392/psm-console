@@ -12,6 +12,7 @@ export class OperationManagerService {
       status: 'PENDING',
       title,
       message,
+      logs: [formatLogLine(message)],
       percent: 0,
       canCancel: false,
       updatedAt: new Date().toISOString()
@@ -30,6 +31,7 @@ export class OperationManagerService {
         status: 'FAILED',
         title: 'Operacion no encontrada',
         message: 'No existe una operacion con ese identificador.',
+        logs: [formatLogLine('No existe una operacion con ese identificador.')],
         percent: 0,
         canCancel: false,
         error: 'OPERATION_NOT_FOUND',
@@ -42,14 +44,16 @@ export class OperationManagerService {
 
   update(
     operationId: string,
-    patch: Partial<Pick<OperationProgressDto, 'message' | 'percent' | 'error' | 'canCancel'>> & {
+    patch: Partial<Pick<OperationProgressDto, 'message' | 'percent' | 'error' | 'canCancel' | 'logs'>> & {
       status?: OperationStatus;
     }
   ): OperationProgressDto {
     const current = this.get(operationId);
+    const hasNewMessage = typeof patch.message === 'string' && patch.message !== current.message;
     const next: OperationProgressDto = {
       ...current,
       ...patch,
+      logs: patch.logs ?? (hasNewMessage ? [...current.logs, formatLogLine(patch.message ?? '')] : current.logs),
       percent: clampPercent(patch.percent ?? current.percent),
       updatedAt: new Date().toISOString()
     };
@@ -57,8 +61,19 @@ export class OperationManagerService {
     this.operations.set(operationId, next);
     return next;
   }
+
+  appendLog(operationId: string, line: string): OperationProgressDto {
+    const current = this.get(operationId);
+    return this.update(operationId, {
+      logs: [...current.logs, formatLogLine(line)]
+    });
+  }
 }
 
 function clampPercent(value: number): number {
   return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function formatLogLine(line: string): string {
+  return `[${new Date().toISOString()}] ${line}`;
 }

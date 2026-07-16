@@ -70,6 +70,10 @@ export class PalworldInstallationService {
         percent: 5,
         message: 'Ejecutando SteamCMD para descargar Palworld Dedicated Server.'
       });
+      this.operationManagerService.appendLog(
+        operationId,
+        `"${steamCmdExecutable}" +force_install_dir "${installDirectory}" +login anonymous +app_update ${PALWORLD_DEDICATED_SERVER_APP_ID} validate +quit`
+      );
 
       await this.runSteamCmd(operationId, steamCmdExecutable, installDirectory);
 
@@ -118,6 +122,13 @@ export class PalworldInstallationService {
       const handleOutput = (chunk: Buffer): void => {
         lastOutput = chunk.toString('utf8').trim();
         progress = Math.min(95, progress + 3);
+        lastOutput
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter((line) => line.length > 0)
+          .forEach((line) => {
+            this.operationManagerService.appendLog(operationId, line);
+          });
 
         this.operationManagerService.update(operationId, {
           status: 'RUNNING',

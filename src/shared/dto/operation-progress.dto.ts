@@ -5,6 +5,7 @@ export interface OperationProgressDto {
   status: OperationStatus;
   title: string;
   message: string;
+  logs: string[];
   percent: number;
   canCancel: boolean;
   error?: string;

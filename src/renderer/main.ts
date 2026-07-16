@@ -39,8 +39,8 @@ appRoot.innerHTML = `
   <main class="workspace">
     <section class="hero">
       <p class="eyebrow">PREPARACION</p>
-      <h2>Preparando entorno portable</h2>
-      <p>El modo desarrollo usa una carpeta aislada para pruebas y requiere confirmacion antes de descargar o instalar.</p>
+      <h2 id="hero-title">Preparando entorno</h2>
+      <p id="hero-subtitle">Verificando dependencias, rutas y archivos necesarios para administrar el servidor.</p>
     </section>
     <section class="panel">
       <div class="panel__header">
@@ -48,32 +48,28 @@ appRoot.innerHTML = `
         <strong id="status-label">${ApplicationStatus.BOOTSTRAPPING}</strong>
       </div>
       <div class="progress"><div id="progress-bar" class="progress__bar"></div></div>
-      <pre id="status-json" class="log">Consultando IPC seguro...</pre>
-    </section>
-    <section class="panel panel--notice">
-      <div class="panel__header">
-        <span>SteamCMD</span>
-        <strong id="steamcmd-status">PENDING</strong>
-      </div>
-      <p id="steamcmd-message">Verificando SteamCMD...</p>
-      <div class="action-row">
-        <button id="install-steamcmd" class="primary-button" type="button" disabled>
-          Descargar SteamCMD
-        </button>
-        <span id="operation-message" class="operation-message">Sin operacion activa.</span>
-      </div>
-    </section>
-    <section class="panel panel--notice">
-      <div class="panel__header">
-        <span>Servidor Palworld</span>
-        <strong id="server-status">PENDING</strong>
-      </div>
-      <p id="server-message">Verificando servidor dedicado...</p>
-      <div class="action-row">
-        <button id="install-server" class="primary-button" type="button" disabled>
-          Instalar servidor
-        </button>
-        <span id="server-operation-message" class="operation-message">Sin operacion activa.</span>
+      <pre id="console-output" class="log">Consultando IPC seguro...</pre>
+      <div id="confirmation-panel" class="confirmation-panel hidden">
+        <div>
+          <div class="confirmation-panel__eyebrow" id="confirmation-kind">ACCION REQUERIDA</div>
+          <h3 id="confirmation-title">Confirmar accion</h3>
+          <p id="confirmation-message">La accion requiere confirmacion explicita.</p>
+          <dl class="confirmation-panel__details">
+            <div>
+              <dt>Origen</dt>
+              <dd id="confirmation-source">-</dd>
+            </div>
+            <div>
+              <dt>Destino</dt>
+              <dd id="confirmation-target">-</dd>
+            </div>
+          </dl>
+        </div>
+        <div class="action-row">
+          <button id="confirm-action" class="primary-button" type="button">Aceptar y continuar</button>
+          <button id="cancel-action" class="secondary-button" type="button">Cancelar</button>
+          <span id="operation-message" class="operation-message">Sin operacion activa.</span>
+        </div>
       </div>
     </section>
     <section class="panel panel--notice">
@@ -106,31 +102,37 @@ bindWindowControls();
 
 const statusLabel = document.querySelector('#status-label');
 const portableRoot = document.querySelector('#portable-root');
-const statusJson = document.querySelector('#status-json');
+const heroTitle = document.querySelector('#hero-title');
+const heroSubtitle = document.querySelector('#hero-subtitle');
+const consoleOutput = document.querySelector<HTMLPreElement>('#console-output');
 const titlebarBadge = document.querySelector('.titlebar__badge');
 const progressBar = document.querySelector<HTMLDivElement>('#progress-bar');
-const steamCmdStatus = document.querySelector('#steamcmd-status');
-const steamCmdMessage = document.querySelector('#steamcmd-message');
 const steamCmdFooter = document.querySelector('#steamcmd-footer');
-const installSteamCmdButton = document.querySelector<HTMLButtonElement>('#install-steamcmd');
 const operationMessage = document.querySelector('#operation-message');
-const serverStatus = document.querySelector('#server-status');
-const serverMessage = document.querySelector('#server-message');
-const installServerButton = document.querySelector<HTMLButtonElement>('#install-server');
-const serverOperationMessage = document.querySelector('#server-operation-message');
-let serverInstallPromptWasShown = false;
+const confirmationPanel = document.querySelector<HTMLDivElement>('#confirmation-panel');
+const confirmationKind = document.querySelector('#confirmation-kind');
+const confirmationTitle = document.querySelector('#confirmation-title');
+const confirmationMessage = document.querySelector('#confirmation-message');
+const confirmationSource = document.querySelector('#confirmation-source');
+const confirmationTarget = document.querySelector('#confirmation-target');
+const confirmActionButton = document.querySelector<HTMLButtonElement>('#confirm-action');
+const cancelActionButton = document.querySelector<HTMLButtonElement>('#cancel-action');
+const consoleLines: string[] = [];
+const operationLogOffsets = new Map<string, number>();
+let pendingAction: 'steamcmd' | 'server' | null = null;
 
 if (!palcmApi) {
   showIpcError('El preload seguro no expuso window.palcm. Revisar preload, sandbox y build.');
 } else {
   await refreshState();
 
-  installSteamCmdButton?.addEventListener('click', () => {
-    void confirmAndInstallSteamCmd();
+  confirmActionButton?.addEventListener('click', () => {
+    void runPendingAction();
   });
 
-  installServerButton?.addEventListener('click', () => {
-    void confirmAndInstallServer();
+  cancelActionButton?.addEventListener('click', () => {
+    appendConsoleLine('Accion cancelada por el usuario.');
+    hideConfirmation();
   });
 }
 
@@ -148,83 +150,71 @@ async function refreshState(): Promise<void> {
     setText(statusLabel, status.status);
     setText(titlebarBadge, status.status);
     setText(portableRoot, `Portable Path: ${status.portableRoot}`);
-    setText(steamCmdStatus, steamCmd.status);
-    setText(steamCmdMessage, `${steamCmd.message}\nDestino: ${steamCmd.installDirectory}`);
     setText(steamCmdFooter, `SteamCMD: ${steamCmd.status}`);
-    setText(serverStatus, server.status);
-    setText(serverMessage, `${server.message}\nDestino: ${server.installDirectory}\nAppID: ${server.appId}`);
+    renderHero(status.status);
+    setProgressForStatus(status.status);
+    appendConsoleLine(`Estado: ${status.status}`);
+    appendConsoleLine(`Raiz de ejecucion: ${status.portableRoot}`);
+    appendConsoleLine(`SteamCMD: ${steamCmd.status} - ${steamCmd.executablePath}`);
+    appendConsoleLine(`Servidor Palworld: ${server.status} - ${server.executablePath}`);
 
-    if (installSteamCmdButton) {
-      installSteamCmdButton.disabled = !actions.canInstallSteamCmd;
+    if (actions.canInstallSteamCmd) {
+      showSteamCmdConfirmation(steamCmd.officialDownloadUrl, steamCmd.installDirectory);
+      return;
     }
 
-    if (installServerButton) {
-      installServerButton.disabled = !actions.canInstallServer;
+    if (actions.canInstallServer) {
+      showServerConfirmation(server.appId, server.installDirectory);
+      return;
     }
 
-    if (statusJson) {
-      statusJson.textContent = JSON.stringify({ status, actions, steamCmd, server }, null, 2);
-    }
-
-    if (actions.canInstallServer && !serverInstallPromptWasShown) {
-      serverInstallPromptWasShown = true;
-      void confirmAndInstallServer();
-    }
+    hideConfirmation();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     showIpcError(`No se pudo consultar IPC seguro: ${message}`);
   }
 }
 
-async function confirmAndInstallSteamCmd(): Promise<void> {
+async function runPendingAction(): Promise<void> {
   if (!palcmApi) {
     return;
   }
 
-  const steamCmd = await palcmApi.steamCmd.getStatus();
-  const confirmed = window.confirm(
-    `Se descargara SteamCMD desde el sitio oficial de Valve.\n\n` +
-      `Origen:\n${steamCmd.officialDownloadUrl}\n\n` +
-      `Destino:\n${steamCmd.installDirectory}\n\n` +
-      `Continuar?`
-  );
-
-  if (!confirmed) {
-    setText(operationMessage, 'Instalacion cancelada por el usuario.');
+  if (pendingAction === 'steamcmd') {
+    await installSteamCmd();
     return;
   }
 
-  installSteamCmdButton?.setAttribute('disabled', 'true');
+  if (pendingAction === 'server') {
+    await installServer();
+  }
+}
+
+async function installSteamCmd(): Promise<void> {
+  if (!palcmApi) {
+    return;
+  }
+
+  disableConfirmationButtons();
+  appendConsoleLine('Confirmado: descargar SteamCMD.');
   const accepted = await palcmApi.steamCmd.install({ confirmed: true });
   await pollOperation(accepted.operationId);
   await refreshState();
 }
 
-async function confirmAndInstallServer(): Promise<void> {
+async function installServer(): Promise<void> {
   if (!palcmApi) {
     return;
   }
 
-  const server = await palcmApi.server.getInstallationStatus();
-  const confirmed = window.confirm(
-    `Se instalara Palworld Dedicated Server mediante SteamCMD.\n\n` +
-      `AppID:\n${server.appId}\n\n` +
-      `Destino:\n${server.installDirectory}\n\n` +
-      `SteamCMD descargara archivos del servidor. Continuar?`
-  );
-
-  if (!confirmed) {
-    setText(serverOperationMessage, 'Instalacion cancelada por el usuario.');
-    return;
-  }
-
-  installServerButton?.setAttribute('disabled', 'true');
+  disableConfirmationButtons();
+  appendConsoleLine('Confirmado: instalar Palworld Dedicated Server.');
   const accepted = await palcmApi.server.install({ confirmed: true });
-  await pollOperation(accepted.operationId, serverOperationMessage);
+  await pollOperation(accepted.operationId);
   await refreshState();
 }
 
-async function pollOperation(operationId: string, targetMessage: Element | null = operationMessage): Promise<void> {
+async function pollOperation(operationId: string): Promise<void> {
   if (!palcmApi) {
     return;
   }
@@ -235,7 +225,7 @@ async function pollOperation(operationId: string, targetMessage: Element | null 
 
   while (shouldContinuePolling) {
     operation = await palcmApi.operation.get(operationId);
-    renderOperation(operation, targetMessage);
+    renderOperation(operation);
 
     if (['COMPLETED', 'FAILED', 'CANCELLED'].includes(operation.status)) {
       shouldContinuePolling = false;
@@ -246,15 +236,12 @@ async function pollOperation(operationId: string, targetMessage: Element | null 
   }
 }
 
-function renderOperation(operation: OperationProgressDto, targetMessage: Element | null): void {
-  setText(targetMessage, `${String(operation.percent)}% - ${operation.message}`);
+function renderOperation(operation: OperationProgressDto): void {
+  setText(operationMessage, `${String(operation.percent)}% - ${operation.message}`);
+  appendOperationLogs(operation);
 
   if (progressBar) {
     progressBar.style.width = `${String(operation.percent)}%`;
-  }
-
-  if (statusJson) {
-    statusJson.textContent = JSON.stringify({ operation }, null, 2);
   }
 }
 
@@ -262,9 +249,124 @@ function showIpcError(message: string): void {
   setText(statusLabel, ApplicationStatus.ERROR);
   setText(titlebarBadge, ApplicationStatus.ERROR);
 
-  if (statusJson) {
-    statusJson.textContent = message;
-    statusJson.classList.add('log--error');
+  if (consoleOutput) {
+    consoleOutput.textContent = message;
+    consoleOutput.classList.add('log--error');
+  }
+}
+
+function renderHero(status: ApplicationStatus): void {
+  if (status === ApplicationStatus.READY) {
+    setText(heroTitle, 'Entorno listo');
+    setText(heroSubtitle, 'SteamCMD, servidor, configuracion y acciones principales estan disponibles.');
+    return;
+  }
+
+  if (status === ApplicationStatus.CONFIGURATION_MISSING) {
+    setText(heroTitle, 'Entorno base listo');
+    setText(heroSubtitle, 'SteamCMD y el servidor estan instalados. Falta preparar la configuracion inicial.');
+    return;
+  }
+
+  setText(heroTitle, 'Preparando entorno');
+  setText(heroSubtitle, 'Verificando dependencias, rutas y archivos necesarios para administrar el servidor.');
+}
+
+function setProgressForStatus(status: ApplicationStatus): void {
+  const statusProgress: Partial<Record<ApplicationStatus, number>> = {
+    [ApplicationStatus.STEAMCMD_MISSING]: 25,
+    [ApplicationStatus.STEAMCMD_INSTALLING]: 40,
+    [ApplicationStatus.SERVER_MISSING]: 60,
+    [ApplicationStatus.SERVER_INSTALLING]: 75,
+    [ApplicationStatus.CONFIGURATION_MISSING]: 90,
+    [ApplicationStatus.READY]: 100
+  };
+
+  if (progressBar) {
+    progressBar.style.width = `${String(statusProgress[status] ?? 15)}%`;
+  }
+}
+
+function showSteamCmdConfirmation(source: string, target: string): void {
+  pendingAction = 'steamcmd';
+  showConfirmation({
+    kind: 'STEAMCMD',
+    title: 'Descargar SteamCMD',
+    message: 'SteamCMD no esta instalado. Para continuar se descargara desde el sitio oficial de Valve.',
+    source,
+    target
+  });
+}
+
+function showServerConfirmation(appId: string, target: string): void {
+  pendingAction = 'server';
+  showConfirmation({
+    kind: 'PALWORLD SERVER',
+    title: 'Instalar servidor Palworld',
+    message: `SteamCMD instalara Palworld Dedicated Server usando AppID ${appId}.`,
+    source: `SteamCMD app_update ${appId} validate`,
+    target
+  });
+}
+
+function showConfirmation(details: {
+  kind: string;
+  title: string;
+  message: string;
+  source: string;
+  target: string;
+}): void {
+  confirmationPanel?.classList.remove('hidden');
+  setText(confirmationKind, details.kind);
+  setText(confirmationTitle, details.title);
+  setText(confirmationMessage, details.message);
+  setText(confirmationSource, details.source);
+  setText(confirmationTarget, details.target);
+
+  if (confirmActionButton) {
+    confirmActionButton.disabled = false;
+  }
+
+  if (cancelActionButton) {
+    cancelActionButton.disabled = false;
+  }
+}
+
+function hideConfirmation(): void {
+  pendingAction = null;
+  confirmationPanel?.classList.add('hidden');
+}
+
+function disableConfirmationButtons(): void {
+  if (confirmActionButton) {
+    confirmActionButton.disabled = true;
+  }
+
+  if (cancelActionButton) {
+    cancelActionButton.disabled = true;
+  }
+}
+
+function appendOperationLogs(operation: OperationProgressDto): void {
+  const offset = operationLogOffsets.get(operation.operationId) ?? 0;
+  const nextLines = operation.logs.slice(offset);
+  operationLogOffsets.set(operation.operationId, operation.logs.length);
+  nextLines.forEach((line) => {
+    appendConsoleLine(line, false);
+  });
+}
+
+function appendConsoleLine(line: string, includeTimestamp = true): void {
+  const text = includeTimestamp ? `[${new Date().toISOString()}] ${line}` : line;
+  consoleLines.push(text);
+
+  if (consoleLines.length > 500) {
+    consoleLines.splice(0, consoleLines.length - 500);
+  }
+
+  if (consoleOutput) {
+    consoleOutput.textContent = consoleLines.join('\n');
+    consoleOutput.scrollTop = consoleOutput.scrollHeight;
   }
 }
 

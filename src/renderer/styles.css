@@ -186,6 +186,26 @@ button {
   opacity: 0.55;
 }
 
+.secondary-button {
+  min-width: 130px;
+  padding: 12px 18px;
+  border: 1px solid rgba(186, 201, 204, 0.28);
+  border-radius: 8px;
+  background: rgba(186, 201, 204, 0.08);
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.secondary-button:hover {
+  border-color: rgba(195, 245, 255, 0.45);
+  background: rgba(195, 245, 255, 0.12);
+}
+
+.secondary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .workspace {
   min-height: calc(100vh - 40px);
   margin-left: var(--sidebar-width);
@@ -278,13 +298,14 @@ button {
 }
 
 .log {
-  min-height: 160px;
+  min-height: 320px;
   margin: 0;
   padding: 16px;
   overflow: auto;
   border-radius: 10px;
   background: rgba(11, 15, 19, 0.88);
   color: var(--color-text-muted);
+  white-space: pre-wrap;
 }
 
 .log--error {
@@ -297,6 +318,65 @@ button {
   gap: 8px;
   margin: 0;
   padding-left: 20px;
+  color: var(--color-text-muted);
+}
+
+.confirmation-panel {
+  display: grid;
+  gap: 18px;
+  margin-top: 20px;
+  padding: 20px;
+  border: 1px solid rgba(0, 229, 255, 0.28);
+  border-radius: 10px;
+  background: rgba(0, 229, 255, 0.06);
+}
+
+.confirmation-panel.hidden {
+  display: none;
+}
+
+.confirmation-panel__eyebrow {
+  margin-bottom: 8px;
+  color: var(--color-primary);
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.confirmation-panel h3 {
+  margin: 0;
+  color: var(--color-primary-soft);
+  font-size: 22px;
+}
+
+.confirmation-panel p {
+  margin: 8px 0 0;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+.confirmation-panel__details {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0 0;
+}
+
+.confirmation-panel__details div {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 12px;
+}
+
+.confirmation-panel__details dt {
+  color: var(--color-primary);
+  font-family: "JetBrains Mono", Consolas, monospace;
+}
+
+.confirmation-panel__details dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
   color: var(--color-text-muted);
 }
 
