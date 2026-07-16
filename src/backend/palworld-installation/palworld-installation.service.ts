@@ -13,6 +13,11 @@ import type {
 
 export const PALWORLD_DEDICATED_SERVER_APP_ID = '2394010';
 
+interface SteamCmdRunResult {
+  exitCode: number | null;
+  output: string;
+}
+
 @Injectable()
 export class PalworldInstallationService {
   constructor(
@@ -75,7 +80,11 @@ export class PalworldInstallationService {
         `"${steamCmdExecutable}" +force_install_dir "${installDirectory}" +login anonymous +app_update ${PALWORLD_DEDICATED_SERVER_APP_ID} validate +quit`
       );
 
-      await this.runSteamCmd(operationId, steamCmdExecutable, installDirectory);
+      const result = await this.runSteamCmdWithRetry(operationId, steamCmdExecutable, installDirectory);
+
+      if (result.exitCode !== 0) {
+        throw new Error(`SteamCMD termino con codigo ${String(result.exitCode)}. ${result.output}`.trim());
+      }
 
       if (!existsSync(join(installDirectory, 'PalServer.exe'))) {
         throw new Error('PALSERVER_EXE_NOT_FOUND_AFTER_INSTALL');
@@ -96,8 +105,33 @@ export class PalworldInstallationService {
     }
   }
 
-  private async runSteamCmd(operationId: string, executablePath: string, installDirectory: string): Promise<void> {
-    await new Promise<void>((resolve, reject) => {
+  private async runSteamCmdWithRetry(
+    operationId: string,
+    executablePath: string,
+    installDirectory: string
+  ): Promise<SteamCmdRunResult> {
+    const firstResult = await this.runSteamCmd(operationId, executablePath, installDirectory, 1);
+
+    if (firstResult.exitCode === 0 || !shouldRetryAfterSteamCmdBootstrap(firstResult.output)) {
+      return firstResult;
+    }
+
+    this.operationManagerService.appendLog(
+      operationId,
+      'SteamCMD se actualizo o reinicio durante el primer intento. Reintentando instalacion del servidor.'
+    );
+    await wait(1500);
+
+    return this.runSteamCmd(operationId, executablePath, installDirectory, 2);
+  }
+
+  private async runSteamCmd(
+    operationId: string,
+    executablePath: string,
+    installDirectory: string,
+    attempt: number
+  ): Promise<SteamCmdRunResult> {
+    return new Promise<SteamCmdRunResult>((resolve, reject) => {
       const child = spawn(
         executablePath,
         [
@@ -118,9 +152,12 @@ export class PalworldInstallationService {
 
       let progress = 10;
       let lastOutput = '';
+      let allOutput = '';
+      this.operationManagerService.appendLog(operationId, `Intento ${String(attempt)} de instalacion con SteamCMD.`);
 
       const handleOutput = (chunk: Buffer): void => {
         lastOutput = chunk.toString('utf8').trim();
+        allOutput = `${allOutput}\n${lastOutput}`.trim();
         progress = Math.min(95, progress + 3);
         lastOutput
           .split(/\r?\n/)
@@ -133,7 +170,8 @@ export class PalworldInstallationService {
         this.operationManagerService.update(operationId, {
           status: 'RUNNING',
           percent: progress,
-          message: lastOutput.length > 0 ? lastOutput : 'SteamCMD sigue instalando el servidor.'
+          message: lastOutput.length > 0 ? lastOutput : 'SteamCMD sigue instalando el servidor.',
+          logMessage: false
         });
       };
 
@@ -141,13 +179,21 @@ export class PalworldInstallationService {
       child.stderr.on('data', handleOutput);
       child.on('error', reject);
       child.on('close', (code) => {
-        if (code === 0) {
-          resolve();
-          return;
-        }
-
-        reject(new Error(`SteamCMD termino con codigo ${String(code)}. ${lastOutput}`.trim()));
+        resolve({
+          exitCode: code,
+          output: allOutput || lastOutput
+        });
       });
     });
   }
+}
+
+function shouldRetryAfterSteamCmdBootstrap(output: string): boolean {
+  return /Missing configuration|Update complete, launching|Actualizaci[oÃ³]n completa/i.test(output);
+}
+
+async function wait(milliseconds: number): Promise<void> {
+  await new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
 }

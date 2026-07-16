@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { spawn } from 'node:child_process';
 import extract from 'extract-zip';
 import { createWriteStream, existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
@@ -76,6 +77,13 @@ export class SteamCmdService {
       await extract(zipPath, { dir: installDirectory });
 
       this.operationManagerService.update(operationId, {
+        status: 'RUNNING',
+        percent: 92,
+        message: 'Inicializando SteamCMD.'
+      });
+      await this.initializeSteamCmd(operationId, join(installDirectory, 'steamcmd.exe'));
+
+      this.operationManagerService.update(operationId, {
         status: 'COMPLETED',
         percent: 100,
         message: 'SteamCMD descargado y extraido correctamente.'
@@ -135,6 +143,41 @@ export class SteamCmdService {
       });
 
       request.on('error', reject);
+    });
+  }
+
+  private async initializeSteamCmd(operationId: string, executablePath: string): Promise<void> {
+    await new Promise<void>((resolve, reject) => {
+      this.operationManagerService.appendLog(operationId, `"${executablePath}" +quit`);
+      const child = spawn(executablePath, ['+quit'], {
+        windowsHide: true,
+        shell: false
+      });
+
+      let lastOutput = '';
+
+      const handleOutput = (chunk: Buffer): void => {
+        lastOutput = chunk.toString('utf8').trim();
+        lastOutput
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter((line) => line.length > 0)
+          .forEach((line) => {
+            this.operationManagerService.appendLog(operationId, line);
+          });
+      };
+
+      child.stdout.on('data', handleOutput);
+      child.stderr.on('data', handleOutput);
+      child.on('error', reject);
+      child.on('close', (code) => {
+        if (code === 0) {
+          resolve();
+          return;
+        }
+
+        reject(new Error(`SteamCMD no pudo inicializarse. Codigo ${String(code)}. ${lastOutput}`.trim()));
+      });
     });
   }
 }

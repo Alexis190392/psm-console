@@ -46,15 +46,21 @@ export class OperationManagerService {
     operationId: string,
     patch: Partial<Pick<OperationProgressDto, 'message' | 'percent' | 'error' | 'canCancel' | 'logs'>> & {
       status?: OperationStatus;
+      logMessage?: boolean;
     }
   ): OperationProgressDto {
     const current = this.get(operationId);
-    const hasNewMessage = typeof patch.message === 'string' && patch.message !== current.message;
+    const { logMessage, ...operationPatch } = patch;
+    const shouldLogMessage = logMessage ?? true;
+    const hasNewMessage =
+      shouldLogMessage && typeof operationPatch.message === 'string' && operationPatch.message !== current.message;
     const next: OperationProgressDto = {
       ...current,
-      ...patch,
-      logs: patch.logs ?? (hasNewMessage ? [...current.logs, formatLogLine(patch.message ?? '')] : current.logs),
-      percent: clampPercent(patch.percent ?? current.percent),
+      ...operationPatch,
+      logs:
+        operationPatch.logs ??
+        (hasNewMessage ? [...current.logs, formatLogLine(operationPatch.message ?? '')] : current.logs),
+      percent: clampPercent(operationPatch.percent ?? current.percent),
       updatedAt: new Date().toISOString()
     };
 
