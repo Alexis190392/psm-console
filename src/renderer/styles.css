@@ -170,6 +170,22 @@ button {
   opacity: 0.75;
 }
 
+.primary-button {
+  min-width: 190px;
+  padding: 12px 18px;
+  border: 1px solid rgba(0, 229, 255, 0.35);
+  border-radius: 8px;
+  background: var(--color-primary);
+  color: #00363d;
+  font-weight: 700;
+}
+
+.primary-button:disabled {
+  cursor: not-allowed;
+  filter: grayscale(1);
+  opacity: 0.55;
+}
+
 .workspace {
   min-height: calc(100vh - 40px);
   margin-left: var(--sidebar-width);
@@ -245,6 +261,20 @@ button {
   width: 35%;
   height: 100%;
   background: linear-gradient(90deg, #00daf3, #5c00f7);
+}
+
+.action-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.operation-message {
+  color: var(--color-text-muted);
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 13px;
+  white-space: pre-wrap;
 }
 
 .log {

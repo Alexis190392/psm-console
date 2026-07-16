@@ -35,6 +35,7 @@ Este comando:
 1. Compila main/preload/backend y renderer.
 2. Abre Electron usando los archivos generados en `dist/`.
 3. Define `PALCM_RUNTIME_ENV=development`.
+4. Usa `ejecucionPruebas/` como raiz portable aislada para descargas e instalaciones de prueba.
 
 Alias disponibles, siguiendo el formato usado en otras apps Electron locales:
 
@@ -113,6 +114,22 @@ npm.cmd run dist
 - `dist` genera un instalador NSIS en `release/`, por ejemplo `PalCM-Setup-0.1.0.exe`.
 
 Ese `.exe` es el artefacto portable. Al ejecutarse empaquetado, la aplicacion debe resolver su raiz portable desde la ubicacion real del ejecutable con `app.getPath('exe')` y `path.dirname(...)`; no se debe hardcodear la ruta de desarrollo `D:\MyAPIS\PalCM`.
+
+## SteamCMD en desarrollo
+
+En `start:dev`, SteamCMD se instala dentro de:
+
+```text
+ejecucionPruebas/tools/steamcmd/
+```
+
+La aplicacion descarga SteamCMD desde la URL oficial indicada por Valve:
+
+```text
+https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip
+```
+
+Antes de descargar se pide confirmacion explicita. Durante la descarga y extraccion se muestra porcentaje de progreso.
 
 ## Estructura editable esperada junto al portable
 

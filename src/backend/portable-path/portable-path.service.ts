@@ -1,4 +1,5 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
+import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 export interface ElectronAppPathProvider {
@@ -23,6 +24,10 @@ export class PortablePathService {
       return dirname(this.appPathProvider.getPath('exe'));
     }
 
+    if (process.env['PALCM_RUNTIME_ENV'] === 'development') {
+      return join(this.developmentRoot, 'ejecucionPruebas');
+    }
+
     return this.developmentRoot;
   }
 
@@ -44,5 +49,20 @@ export class PortablePathService {
 
   getLogsRoot(): string {
     return join(this.getPortableRoot(), 'logs');
+  }
+
+  ensurePortableLayout(): void {
+    [
+      this.getPortableRoot(),
+      this.getToolsRoot(),
+      this.getSteamCmdRoot(),
+      this.getPalworldServerRoot(),
+      this.getConfigRoot(),
+      join(this.getPortableRoot(), 'backups', 'configuration'),
+      join(this.getPortableRoot(), 'backups', 'world'),
+      this.getLogsRoot()
+    ].forEach((directory) => {
+      mkdirSync(directory, { recursive: true });
+    });
   }
 }
