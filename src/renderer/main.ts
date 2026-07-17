@@ -28,7 +28,7 @@ appRoot.innerHTML = `
       </div>
     </section>
     <nav class="sidebar__nav" aria-label="Navegacion principal">
-      <a class="sidebar__link sidebar__link--active" data-nav="home" href="#">Home</a>
+      <a class="sidebar__link sidebar__link--active" data-nav="home" href="#">General</a>
       <a class="sidebar__link sidebar__link--locked" data-nav="server" href="#">Server</a>
       <a class="sidebar__link sidebar__link--locked" data-nav="configuration" href="#">Configuration</a>
       <a class="sidebar__link sidebar__link--locked" data-nav="network" href="#">Network & Firewall</a>
@@ -91,8 +91,10 @@ bindWindowControls();
 
 const statusLabel = document.querySelector('#status-label');
 const portableRoot = document.querySelector('#portable-root');
+const heroEyebrow = document.querySelector('.eyebrow');
 const heroTitle = document.querySelector('#hero-title');
 const heroSubtitle = document.querySelector('#hero-subtitle');
+const panelStatusHeader = document.querySelector('.panel__header');
 const consoleOutput = document.querySelector<HTMLPreElement>('#console-output');
 const exportConsoleButton = document.querySelector<HTMLButtonElement>('#export-console');
 const titlebarBadge = document.querySelector('.titlebar__badge');
@@ -116,6 +118,13 @@ let pendingAction: 'steamcmd' | 'server' | 'config' | null = null;
 let activeView = 'home';
 let latestStatus: ApplicationStatus = ApplicationStatus.BOOTSTRAPPING;
 let latestActions: AllowedActionsDto | null = null;
+let latestSummary: {
+  steamCmdStatus: string;
+  serverStatus: string;
+  configurationStatus: string;
+  configurationPath: string;
+  serverPath: string;
+} | null = null;
 
 if (!palcmApi) {
   showIpcError('El preload seguro no expuso window.palcm. Revisar preload, sandbox y build.');
@@ -160,6 +169,13 @@ async function refreshState(): Promise<void> {
     const config = await palcmApi.config.getStatus();
     latestStatus = status.status;
     latestActions = actions;
+    latestSummary = {
+      steamCmdStatus: steamCmd.status,
+      serverStatus: server.status,
+      configurationStatus: config.status,
+      configurationPath: config.activePath,
+      serverPath: server.executablePath
+    };
 
     setText(statusLabel, status.status);
     setText(titlebarBadge, status.status);
@@ -202,6 +218,8 @@ async function refreshState(): Promise<void> {
 }
 
 function showPreflight(): void {
+  panelStatusHeader?.classList.remove('hidden');
+  progressBar?.parentElement?.classList.remove('hidden');
   contentView?.classList.add('hidden');
   document.querySelector('.console-shell')?.classList.remove('hidden');
 }
@@ -305,17 +323,20 @@ function showIpcError(message: string): void {
 
 function renderHero(status: ApplicationStatus): void {
   if (status === ApplicationStatus.READY) {
+    setText(heroEyebrow, 'GENERAL');
     setText(heroTitle, 'Entorno listo');
     setText(heroSubtitle, 'SteamCMD, servidor, configuracion y acciones principales estan disponibles.');
     return;
   }
 
   if (status === ApplicationStatus.CONFIGURATION_MISSING) {
+    setText(heroEyebrow, 'PREPARACION');
     setText(heroTitle, 'Entorno base listo');
     setText(heroSubtitle, 'SteamCMD y el servidor estan instalados. Falta preparar la configuracion inicial.');
     return;
   }
 
+  setText(heroEyebrow, 'PREPARACION');
   setText(heroTitle, 'Preparando entorno');
   setText(heroSubtitle, 'Verificando dependencias, rutas y archivos necesarios para administrar el servidor.');
 }
@@ -468,6 +489,7 @@ function renderActiveView(): void {
   }
 
   hideConfirmation();
+  updateReadyChrome();
   document.querySelector('.console-shell')?.classList.toggle('hidden', activeView !== 'logs');
   contentView?.classList.toggle('hidden', activeView === 'logs');
   navLinks.forEach((link) => {
@@ -475,7 +497,7 @@ function renderActiveView(): void {
   });
 
   if (activeView === 'home') {
-    renderHomeView();
+    void renderGeneralView();
     return;
   }
 
@@ -499,7 +521,71 @@ function renderActiveView(): void {
   }
 }
 
-function renderHomeView(): void {
+async function renderGeneralView(): Promise<void> {
+  updateReadyChrome();
+
+  if (latestStatus !== ApplicationStatus.READY) {
+    renderPreflightSummary();
+    return;
+  }
+
+  const port = await readConfiguredPort();
+  const portState = port ? createHealthCardState('ok') : createHealthCardState('warning');
+
+  setContent(`
+    <div class="view-stack">
+      <section class="summary-grid summary-grid--ready">
+        ${renderHealthCard({
+          title: 'SteamCMD',
+          value: 'Instalado',
+          detail: 'Cliente listo para actualizar y validar archivos.',
+          target: 'logs',
+          ...createHealthCardState('ok')
+        })}
+        ${renderHealthCard({
+          title: 'Servidor',
+          value: 'Instalado',
+          detail: latestSummary?.serverPath ?? 'PalServer.exe detectado.',
+          target: 'server',
+          ...createHealthCardState('ok')
+        })}
+        ${renderHealthCard({
+          title: 'Configuracion',
+          value: 'Activa',
+          detail: latestSummary?.configurationPath ?? 'PalWorldSettings.ini disponible.',
+          target: 'configuration',
+          ...createHealthCardState('ok')
+        })}
+        ${renderHealthCard({
+          title: 'Puerto',
+          value: port ? `UDP ${port}` : 'Sin validar',
+          detail: port ? 'Puerto leido desde la configuracion activa.' : 'No se encontro PublicPort en el INI activo.',
+          target: 'network',
+          ...portState
+        })}
+        ${renderHealthCard({
+          title: 'Firewall',
+          value: 'Pendiente',
+          detail: 'La verificacion y regla de Windows se implementa en la fase de red.',
+          target: 'network',
+          ...createHealthCardState('warning')
+        })}
+        ${renderHealthCard({
+          title: 'Backups',
+          value: 'Configuracion',
+          detail: 'Los guardados del INI ya generan backup previo.',
+          target: 'backups',
+          ...createHealthCardState('optional')
+        })}
+      </section>
+    </div>
+  `);
+  bindSummaryCards();
+}
+
+function renderPreflightSummary(): void {
+  panelStatusHeader?.classList.remove('hidden');
+  progressBar?.parentElement?.classList.remove('hidden');
   setContent(`
     <div class="view-stack">
       <section class="summary-grid">
@@ -516,7 +602,6 @@ function renderHomeView(): void {
           <strong>${latestActions?.canStartServer ? 'Listo para iniciar' : 'Pendiente'}</strong>
         </article>
       </section>
-      <p class="view-note">Usa el menu lateral para abrir configuracion o revisar logs. Las acciones pendientes apareceran dentro de esta misma pantalla.</p>
     </div>
   `);
 }
@@ -525,6 +610,8 @@ async function renderConfigurationView(): Promise<void> {
   if (!palcmApi) {
     return;
   }
+
+  updateReadyChrome();
 
   try {
     const file = await palcmApi.config.read();
@@ -574,6 +661,8 @@ async function saveConfiguration(): Promise<void> {
 }
 
 function renderSimpleView(title: string, message: string): void {
+  panelStatusHeader?.classList.remove('hidden');
+  progressBar?.parentElement?.classList.remove('hidden');
   setContent(`
     <div class="view-stack">
       <div class="view-header">
@@ -585,6 +674,75 @@ function renderSimpleView(title: string, message: string): void {
       </div>
     </div>
   `);
+}
+
+function updateReadyChrome(): void {
+  const shouldHidePreflightChrome = latestStatus === ApplicationStatus.READY && activeView === 'home';
+  panelStatusHeader?.classList.toggle('hidden', shouldHidePreflightChrome);
+  progressBar?.parentElement?.classList.toggle('hidden', shouldHidePreflightChrome);
+}
+
+function renderHealthCard(details: {
+  title: string;
+  value: string;
+  detail: string;
+  target: string;
+  icon: string;
+  tone: string;
+  label: string;
+}): string {
+  return `
+    <button class="summary-card summary-card--${details.tone}" data-target="${details.target}" type="button">
+      <span class="summary-card__body">
+        <span class="summary-card__title">${escapeHtml(details.title)}</span>
+        <strong>${escapeHtml(details.value)}</strong>
+        <small>${escapeHtml(details.detail)}</small>
+      </span>
+      <span class="summary-card__icon" aria-label="${escapeHtml(details.label)}">${details.icon}</span>
+    </button>
+  `;
+}
+
+function createHealthCardState(state: 'ok' | 'error' | 'warning' | 'optional'): {
+  icon: string;
+  tone: string;
+  label: string;
+} {
+  if (state === 'ok') {
+    return { icon: '✓', tone: 'ok', label: 'Correcto' };
+  }
+
+  if (state === 'error') {
+    return { icon: '×', tone: 'error', label: 'Incorrecto' };
+  }
+
+  if (state === 'warning') {
+    return { icon: '!', tone: 'warning', label: 'Revisar' };
+  }
+
+  return { icon: '⚙', tone: 'optional', label: 'Configuracion opcional' };
+}
+
+function bindSummaryCards(): void {
+  document.querySelectorAll<HTMLButtonElement>('.summary-card[data-target]').forEach((card) => {
+    card.addEventListener('click', () => {
+      activeView = card.dataset['target'] ?? 'home';
+      renderActiveView();
+    });
+  });
+}
+
+async function readConfiguredPort(): Promise<string | null> {
+  if (!palcmApi) {
+    return null;
+  }
+
+  try {
+    const file = await palcmApi.config.read();
+    return file.content.match(/PublicPort=(\d+)/)?.[1] ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function setContent(html: string): void {
