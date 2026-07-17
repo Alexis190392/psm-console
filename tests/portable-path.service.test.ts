@@ -1,4 +1,4 @@
-import { existsSync, rmSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { PortablePathService } from '../src/backend/portable-path/portable-path.service';
@@ -6,7 +6,6 @@ import { PortablePathService } from '../src/backend/portable-path/portable-path.
 describe('PortablePathService', () => {
   afterEach(() => {
     delete process.env['PALCM_RUNTIME_ENV'];
-    rmSync(join(process.cwd(), 'ejecucionPruebas'), { force: true, recursive: true });
   });
 
   it('uses the executable directory when packaged', () => {
