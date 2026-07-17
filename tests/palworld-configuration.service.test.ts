@@ -82,6 +82,21 @@ describe('PalworldConfigurationService', () => {
       content: 'after'
     });
   });
+
+  it('restores the active configuration from the default template', async () => {
+    await mkdir(join(serverRoot, 'Pal', 'Saved', 'Config', 'WindowsServer'), { recursive: true });
+    await writeFile(templatePath, 'default-content');
+    await writeFile(activePath, 'custom-content');
+    const operationManager = new OperationManagerService();
+    const service = new PalworldConfigurationService(portablePathService, operationManager, portableStateService);
+
+    const accepted = service.restoreDefault({ confirmed: true });
+    await waitForOperation(accepted.operationId, operationManager);
+
+    await expect(service.readActive()).resolves.toMatchObject({
+      content: 'default-content'
+    });
+  });
 });
 
 async function waitForOperation(operationId: string, operationManager: OperationManagerService): Promise<void> {

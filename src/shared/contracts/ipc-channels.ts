@@ -17,6 +17,7 @@ export const ipcChannels = {
   configValidate: 'config:validate',
   configSave: 'config:save',
   configCreateDefault: 'config:create-default',
+  configRestoreDefault: 'config:restore-default',
   firewallGetStatus: 'firewall:get-status',
   firewallCreateRule: 'firewall:create-rule',
   firewallUpdateRule: 'firewall:update-rule',

@@ -7,6 +7,7 @@ import { PortablePathService } from '../portable-path/portable-path.service';
 import { PortableStateService } from '../portable-state/portable-state.service';
 import type {
   PalworldConfigurationFileDto,
+  PalworldRestoreDefaultConfigurationRequestDto,
   PalworldSaveConfigurationRequestDto
 } from '../../shared/dto/palworld-configuration-file.dto';
 import type { OperationAcceptedDto } from '../../shared/dto/operation-progress.dto';
@@ -89,6 +90,23 @@ export class PalworldConfigurationService {
     );
 
     void this.saveActiveAsync(operation.operationId, request.content);
+
+    return {
+      operationId: operation.operationId
+    };
+  }
+
+  restoreDefault(request: PalworldRestoreDefaultConfigurationRequestDto): OperationAcceptedDto {
+    if (!request.confirmed) {
+      throw new Error('CONFIGURATION_RESTORE_DEFAULT_REQUIRES_CONFIRMATION');
+    }
+
+    const operation = this.operationManagerService.create(
+      'Restauracion de configuracion default',
+      'Preparando restauracion desde DefaultPalWorldSettings.ini.'
+    );
+
+    void this.restoreDefaultAsync(operation.operationId);
 
     return {
       operationId: operation.operationId
@@ -197,6 +215,58 @@ export class PalworldConfigurationService {
         status: 'FAILED',
         percent: 100,
         message: 'No se pudo guardar la configuracion.',
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  private async restoreDefaultAsync(operationId: string): Promise<void> {
+    const templatePath = this.getStatus().templatePath;
+    const activePath = this.getStatus().activePath;
+
+    try {
+      if (!existsSync(templatePath)) {
+        throw new Error(`DEFAULT_CONFIGURATION_TEMPLATE_NOT_FOUND: ${templatePath}`);
+      }
+
+      if (!existsSync(activePath)) {
+        throw new Error(`ACTIVE_CONFIGURATION_NOT_FOUND: ${activePath}`);
+      }
+
+      const backupPath = join(
+        this.portablePathService.getPortableRoot(),
+        'backups',
+        'configuration',
+        `PalWorldSettings.before-default.${new Date().toISOString().replace(/[:.]/g, '-')}.ini`
+      );
+
+      this.operationManagerService.update(operationId, {
+        status: 'RUNNING',
+        percent: 30,
+        message: 'Creando backup antes de restaurar defaults.'
+      });
+      await mkdir(dirname(backupPath), { recursive: true });
+      await copyFile(activePath, backupPath);
+      this.operationManagerService.appendLog(operationId, `copy "${activePath}" "${backupPath}"`);
+
+      this.operationManagerService.update(operationId, {
+        status: 'RUNNING',
+        percent: 75,
+        message: 'Copiando plantilla default como configuracion activa.'
+      });
+      await copyFile(templatePath, activePath);
+      this.operationManagerService.appendLog(operationId, `copy "${templatePath}" "${activePath}"`);
+
+      this.operationManagerService.update(operationId, {
+        status: 'COMPLETED',
+        percent: 100,
+        message: 'Configuracion restaurada a valores default.'
+      });
+    } catch (error) {
+      this.operationManagerService.update(operationId, {
+        status: 'FAILED',
+        percent: 100,
+        message: 'No se pudo restaurar la configuracion default.',
         error: error instanceof Error ? error.message : String(error)
       });
     }

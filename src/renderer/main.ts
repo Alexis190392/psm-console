@@ -1,8 +1,13 @@
-import './styles.css';
+﻿import './styles.css';
 import { ApplicationStatus } from '../shared/enums/application-status';
 import type { AllowedActionsDto } from '../shared/dto/allowed-actions.dto';
 import type { OperationProgressDto } from '../shared/dto/operation-progress.dto';
 import { bindWindowControls } from './components/window-controls';
+import {
+  DEFAULT_SETTING_HELP,
+  PALWORLD_SETTING_DEFINITIONS,
+  type PalworldSettingDefinition
+} from './config/palworld-settings-catalog';
 
 const appRoot = document.querySelector<HTMLDivElement>('#app');
 
@@ -502,12 +507,15 @@ function renderActiveView(): void {
   }
 
   if (activeView === 'configuration') {
-    void renderConfigurationView();
+    renderSimpleView(
+      'Configuration',
+      'La configuracion editable del servidor ahora esta en la pestaÃ±a Server. Esta seccion queda reservada para opciones avanzadas de la app.'
+    );
     return;
   }
 
   if (activeView === 'server') {
-    renderSimpleView('Servidor', 'El servidor esta instalado. Los controles de inicio, detencion y logs runtime se agregan en la siguiente fase.');
+    void renderServerConfigurationView();
     return;
   }
 
@@ -606,7 +614,7 @@ function renderPreflightSummary(): void {
   `);
 }
 
-async function renderConfigurationView(): Promise<void> {
+async function renderServerConfigurationView(): Promise<void> {
   if (!palcmApi) {
     return;
   }
@@ -615,36 +623,63 @@ async function renderConfigurationView(): Promise<void> {
 
   try {
     const file = await palcmApi.config.read();
+    const parsed = parsePalworldSettings(file.content);
     setContent(`
       <div class="view-stack">
         <div class="view-header">
           <div>
-            <span class="view-kicker">CONFIGURACION</span>
-            <h3>PalWorldSettings.ini</h3>
+            <span class="view-kicker">SERVER</span>
+            <h3>Configuracion del servidor</h3>
             <p>${escapeHtml(file.path)}</p>
           </div>
-          <button id="save-config" class="primary-button" type="button">Guardar</button>
+          <div class="view-actions">
+            <button id="restore-default-config" class="secondary-button" type="button">Volver a default</button>
+            <button id="save-config" class="primary-button" type="button">Guardar</button>
+          </div>
         </div>
-        <textarea id="config-editor" class="config-editor" spellcheck="false">${escapeHtml(file.content)}</textarea>
+        <div id="default-confirmation" class="inline-confirm hidden">
+          <span>Se creara un backup y se reemplazara la configuracion activa por los valores default instalados.</span>
+          <button id="confirm-restore-default" class="primary-button" type="button">Confirmar</button>
+          <button id="cancel-restore-default" class="secondary-button" type="button">Cancelar</button>
+        </div>
+        <form id="settings-form" class="settings-form">
+          ${renderSettingsForm(parsed)}
+        </form>
+        <details class="advanced-config">
+          <summary>Ver INI avanzado</summary>
+          <textarea id="config-editor" class="config-editor" spellcheck="false">${escapeHtml(file.content)}</textarea>
+        </details>
       </div>
     `);
     document.querySelector<HTMLButtonElement>('#save-config')?.addEventListener('click', () => {
-      void saveConfiguration();
+      void saveConfiguration(parsed);
     });
+    document.querySelector<HTMLButtonElement>('#restore-default-config')?.addEventListener(
+      'click',
+      showRestoreDefaultConfirmation
+    );
+    document.querySelector<HTMLButtonElement>('#confirm-restore-default')?.addEventListener('click', () => {
+      void restoreDefaultConfiguration();
+    });
+    document.querySelector<HTMLButtonElement>('#cancel-restore-default')?.addEventListener(
+      'click',
+      hideRestoreDefaultConfirmation
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    renderSimpleView('Configuracion', `No se pudo leer la configuracion activa. ${message}`);
+    renderSimpleView('Server', `No se pudo leer la configuracion activa. ${message}`);
   }
 }
 
-async function saveConfiguration(): Promise<void> {
+async function saveConfiguration(parsed?: ParsedPalworldSettings): Promise<void> {
   if (!palcmApi) {
     return;
   }
 
   const editor = document.querySelector<HTMLTextAreaElement>('#config-editor');
+  const content = parsed ? serializePalworldSettings(parsed, readSettingsFormValues(parsed)) : editor?.value;
 
-  if (!editor) {
+  if (!content) {
     return;
   }
 
@@ -653,11 +688,33 @@ async function saveConfiguration(): Promise<void> {
   renderActiveView();
   const accepted = await palcmApi.config.save({
     confirmed: true,
-    content: editor.value
+    content
   });
   await pollOperation(accepted.operationId);
-  activeView = 'configuration';
+  activeView = 'server';
   await refreshState();
+}
+
+async function restoreDefaultConfiguration(): Promise<void> {
+  if (!palcmApi) {
+    return;
+  }
+
+  appendConsoleLine('Confirmado: restaurar configuracion default.');
+  activeView = 'logs';
+  renderActiveView();
+  const accepted = await palcmApi.config.restoreDefault({ confirmed: true });
+  await pollOperation(accepted.operationId);
+  activeView = 'server';
+  await refreshState();
+}
+
+function showRestoreDefaultConfirmation(): void {
+  document.querySelector('#default-confirmation')?.classList.remove('hidden');
+}
+
+function hideRestoreDefaultConfirmation(): void {
+  document.querySelector('#default-confirmation')?.classList.add('hidden');
 }
 
 function renderSimpleView(title: string, message: string): void {
@@ -709,18 +766,18 @@ function createHealthCardState(state: 'ok' | 'error' | 'warning' | 'optional'): 
   label: string;
 } {
   if (state === 'ok') {
-    return { icon: '✓', tone: 'ok', label: 'Correcto' };
+    return { icon: '&#10003;', tone: 'ok', label: 'Correcto' };
   }
 
   if (state === 'error') {
-    return { icon: '×', tone: 'error', label: 'Incorrecto' };
+    return { icon: '&times;', tone: 'error', label: 'Incorrecto' };
   }
 
   if (state === 'warning') {
     return { icon: '!', tone: 'warning', label: 'Revisar' };
   }
 
-  return { icon: '⚙', tone: 'optional', label: 'Configuracion opcional' };
+  return { icon: '&#9881;', tone: 'optional', label: 'Configuracion opcional' };
 }
 
 function bindSummaryCards(): void {
@@ -743,6 +800,285 @@ async function readConfiguredPort(): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+interface ParsedPalworldSetting {
+  key: string;
+  value: string;
+}
+
+interface ParsedPalworldSettings {
+  originalContent: string;
+  prefix: string;
+  suffix: string;
+  settings: ParsedPalworldSetting[];
+}
+
+function parsePalworldSettings(content: string): ParsedPalworldSettings {
+  const marker = 'OptionSettings=(';
+  const start = content.indexOf(marker);
+
+  if (start < 0) {
+    return {
+      originalContent: content,
+      prefix: content,
+      suffix: '',
+      settings: []
+    };
+  }
+
+  const valueStart = start + marker.length;
+  const valueEnd = findOptionSettingsEnd(content, valueStart);
+  const body = content.slice(valueStart, valueEnd);
+
+  return {
+    originalContent: content,
+    prefix: content.slice(0, valueStart),
+    suffix: content.slice(valueEnd),
+    settings: splitTopLevel(body).map((entry) => {
+      const separator = entry.indexOf('=');
+      return {
+        key: entry.slice(0, separator).trim(),
+        value: entry.slice(separator + 1).trim()
+      };
+    })
+  };
+}
+
+function findOptionSettingsEnd(content: string, valueStart: number): number {
+  let isQuoted = false;
+  let depth = 0;
+
+  for (let index = valueStart; index < content.length; index += 1) {
+    const char = content[index];
+
+    if (char === '"' && content[index - 1] !== '\\') {
+      isQuoted = !isQuoted;
+      continue;
+    }
+
+    if (!isQuoted && char === '(') {
+      depth += 1;
+      continue;
+    }
+
+    if (!isQuoted && char === ')' && depth > 0) {
+      depth -= 1;
+      continue;
+    }
+
+    if (!isQuoted && char === ')') {
+      return index;
+    }
+  }
+
+  return content.length;
+}
+
+function splitTopLevel(value: string): string[] {
+  const parts: string[] = [];
+  let current = '';
+  let depth = 0;
+  let isQuoted = false;
+
+  for (const char of value) {
+    if (char === '"') {
+      isQuoted = !isQuoted;
+    }
+
+    if (!isQuoted && char === '(') {
+      depth += 1;
+    }
+
+    if (!isQuoted && char === ')') {
+      depth -= 1;
+    }
+
+    if (!isQuoted && depth === 0 && char === ',') {
+      parts.push(current);
+      current = '';
+      continue;
+    }
+
+    current += char;
+  }
+
+  if (current.trim().length > 0) {
+    parts.push(current);
+  }
+
+  return parts;
+}
+
+function serializePalworldSettings(parsed: ParsedPalworldSettings, values: Map<string, string>): string {
+  const nextBody = parsed.settings
+    .map((setting) => `${setting.key}=${values.get(setting.key) ?? setting.value}`)
+    .join(',');
+
+  return `${parsed.prefix}${nextBody}${parsed.suffix}`;
+}
+
+function readSettingsFormValues(parsed: ParsedPalworldSettings): Map<string, string> {
+  const values = new Map<string, string>();
+
+  parsed.settings.forEach((setting) => {
+    const definition = getSettingDefinition(setting.key, setting.value);
+    const input = document.querySelector<HTMLInputElement | HTMLSelectElement>(
+      `[data-setting-key="${cssEscape(setting.key)}"]`
+    );
+
+    if (!input) {
+      values.set(setting.key, setting.value);
+      return;
+    }
+
+    if (definition.kind === 'boolean') {
+      values.set(setting.key, input instanceof HTMLInputElement && input.checked ? 'True' : 'False');
+      return;
+    }
+
+    values.set(setting.key, formatSettingValue(definition, input.value, setting.value));
+  });
+
+  return values;
+}
+
+function renderSettingsForm(parsed: ParsedPalworldSettings): string {
+  const grouped = groupSettings(parsed.settings);
+
+  return Array.from(grouped.entries())
+    .map(
+      ([group, settings]) => `
+        <section class="settings-group">
+          <h4>${escapeHtml(group)}</h4>
+          <div class="settings-grid">
+            ${settings.map((setting) => renderSettingControl(setting)).join('')}
+          </div>
+        </section>
+      `
+    )
+    .join('');
+}
+
+function groupSettings(settings: ParsedPalworldSetting[]): Map<string, ParsedPalworldSetting[]> {
+  const grouped = new Map<string, ParsedPalworldSetting[]>();
+
+  settings.forEach((setting) => {
+    const definition = getSettingDefinition(setting.key, setting.value);
+    const group = definition.group;
+    grouped.set(group, [...(grouped.get(group) ?? []), setting]);
+  });
+
+  return grouped;
+}
+
+function renderSettingControl(setting: ParsedPalworldSetting): string {
+  const definition = getSettingDefinition(setting.key, setting.value);
+  const rawValue = unquoteSettingValue(setting.value);
+  const info = `${definition.help}${definition.range ? ` Rango: ${definition.range}` : ''}`;
+
+  return `
+    <label class="setting-field">
+      <span class="setting-field__top">
+        <span>
+          <strong>${escapeHtml(definition.label)}</strong>
+          <small>${escapeHtml(setting.key)}</small>
+        </span>
+        <button class="setting-info" type="button" aria-label="${escapeHtml(info)}" title="${escapeHtml(info)}">i</button>
+      </span>
+      ${renderSettingInput(definition, setting.key, rawValue)}
+    </label>
+  `;
+}
+
+function renderSettingInput(definition: PalworldSettingDefinition, key: string, value: string): string {
+  if (definition.kind === 'boolean') {
+    return `
+      <span class="setting-toggle">
+        <input data-setting-key="${escapeHtml(key)}" type="checkbox" ${value.toLowerCase() === 'true' ? 'checked' : ''} />
+        <span>Activo</span>
+      </span>
+    `;
+  }
+
+  if (definition.kind === 'select' && definition.options) {
+    return `
+      <select data-setting-key="${escapeHtml(key)}">
+        ${definition.options
+          .map((option) => `<option value="${escapeHtml(option)}" ${option === value ? 'selected' : ''}>${escapeHtml(option)}</option>`)
+          .join('')}
+      </select>
+    `;
+  }
+
+  if (definition.kind === 'number') {
+    return `<input data-setting-key="${escapeHtml(key)}" type="number" step="any" value="${escapeHtml(value)}" />`;
+  }
+
+  return `<input data-setting-key="${escapeHtml(key)}" type="text" value="${escapeHtml(value)}" />`;
+}
+
+function getSettingDefinition(key: string, value: string): PalworldSettingDefinition {
+  const known = PALWORLD_SETTING_DEFINITIONS[key];
+
+  if (known) {
+    return known;
+  }
+
+  return {
+    key,
+    label: splitSettingKey(key),
+    group: 'Avanzado',
+    kind: inferSettingKind(value),
+    help: DEFAULT_SETTING_HELP
+  };
+}
+
+function inferSettingKind(value: string): 'text' | 'number' | 'boolean' {
+  if (['true', 'false'].includes(value.toLowerCase())) {
+    return 'boolean';
+  }
+
+  if (/^-?\d+(\.\d+)?$/.test(value)) {
+    return 'number';
+  }
+
+  return 'text';
+}
+
+function formatSettingValue(definition: PalworldSettingDefinition, value: string, originalValue: string): string {
+  if (definition.kind === 'text' && shouldQuoteTextValue(value, originalValue)) {
+    return `"${value.replaceAll('"', '\\"')}"`;
+  }
+
+  return value;
+}
+
+function shouldQuoteTextValue(value: string, originalValue: string): boolean {
+  if (value.startsWith('(') && value.endsWith(')')) {
+    return false;
+  }
+
+  return originalValue.startsWith('"') || value.length === 0 || /[\s:/\\]/.test(value);
+}
+
+function unquoteSettingValue(value: string): string {
+  if (value.startsWith('"') && value.endsWith('"')) {
+    return value.slice(1, -1).replaceAll('\\"', '"');
+  }
+
+  return value;
+}
+
+function splitSettingKey(key: string): string {
+  return key
+    .replace(/^b(?=[A-Z])/, '')
+    .replaceAll('_', ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2');
+}
+
+function cssEscape(value: string): string {
+  return value.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
 }
 
 function setContent(html: string): void {

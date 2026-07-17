@@ -467,6 +467,12 @@ button {
   gap: 20px;
 }
 
+.view-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 10px;
+}
+
 .view-header h3 {
   margin: 4px 0 6px;
   color: var(--color-primary-soft);
@@ -617,4 +623,138 @@ button {
 
 .config-editor:focus {
   border-color: rgba(0, 229, 255, 0.45);
+}
+
+.settings-form {
+  display: grid;
+  min-height: 0;
+  overflow: auto;
+  gap: 18px;
+  padding-right: 4px;
+}
+
+.settings-group {
+  display: grid;
+  gap: 10px;
+}
+
+.settings-group h4 {
+  margin: 0;
+  color: var(--color-primary);
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.setting-field {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid rgba(0, 229, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(11, 15, 19, 0.45);
+}
+
+.setting-field__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.setting-field strong {
+  display: block;
+  color: var(--color-primary-soft);
+  font-size: 14px;
+}
+
+.setting-field small {
+  display: block;
+  margin-top: 4px;
+  color: var(--color-text-muted);
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 11px;
+}
+
+.setting-field input,
+.setting-field select {
+  width: 100%;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(186, 201, 204, 0.18);
+  border-radius: 7px;
+  outline: none;
+  background: rgba(16, 20, 24, 0.88);
+  color: var(--color-text);
+}
+
+.setting-field input:focus,
+.setting-field select:focus {
+  border-color: rgba(0, 229, 255, 0.5);
+}
+
+.setting-info {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(0, 229, 255, 0.28);
+  border-radius: 999px;
+  background: rgba(0, 229, 255, 0.08);
+  color: var(--color-primary);
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.setting-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--color-text-muted);
+}
+
+.setting-toggle input {
+  width: 18px;
+  height: 18px;
+}
+
+.advanced-config {
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+}
+
+.advanced-config summary {
+  cursor: pointer;
+  color: var(--color-primary-soft);
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 13px;
+}
+
+.advanced-config .config-editor {
+  height: 180px;
+  margin-top: 10px;
+}
+
+.inline-confirm {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid rgba(255, 199, 0, 0.22);
+  border-radius: 8px;
+  background: rgba(255, 199, 0, 0.08);
+  color: var(--color-text-muted);
+}
+
+.inline-confirm span {
+  flex: 1;
 }

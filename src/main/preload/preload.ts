@@ -4,6 +4,7 @@ import type { ApplicationStatusDto } from '../../shared/dto/application-status.d
 import type { OperationAcceptedDto, OperationProgressDto } from '../../shared/dto/operation-progress.dto';
 import type {
   PalworldConfigurationFileDto,
+  PalworldRestoreDefaultConfigurationRequestDto,
   PalworldSaveConfigurationRequestDto
 } from '../../shared/dto/palworld-configuration-file.dto';
 import type {
@@ -28,6 +29,7 @@ const ipcChannels = {
   configValidate: 'config:validate',
   configSave: 'config:save',
   configCreateDefault: 'config:create-default',
+  configRestoreDefault: 'config:restore-default',
   windowMinimize: 'window:minimize',
   windowToggleMaximize: 'window:toggle-maximize',
   windowClose: 'window:close'
@@ -53,6 +55,7 @@ export interface PalcmApi {
     getStatus: () => Promise<PalworldConfigurationStatusDto>;
     read: () => Promise<PalworldConfigurationFileDto>;
     save: (request: PalworldSaveConfigurationRequestDto) => Promise<OperationAcceptedDto>;
+    restoreDefault: (request: PalworldRestoreDefaultConfigurationRequestDto) => Promise<OperationAcceptedDto>;
     createDefault: (request: PalworldCreateDefaultConfigurationRequestDto) => Promise<OperationAcceptedDto>;
   };
   window: {
@@ -86,6 +89,8 @@ const api: PalcmApi = {
     read: () => ipcRenderer.invoke(ipcChannels.configRead) as Promise<PalworldConfigurationFileDto>,
     getStatus: () => ipcRenderer.invoke(ipcChannels.configValidate) as Promise<PalworldConfigurationStatusDto>,
     save: (request) => ipcRenderer.invoke(ipcChannels.configSave, request) as Promise<OperationAcceptedDto>,
+    restoreDefault: (request) =>
+      ipcRenderer.invoke(ipcChannels.configRestoreDefault, request) as Promise<OperationAcceptedDto>,
     createDefault: (request) =>
       ipcRenderer.invoke(ipcChannels.configCreateDefault, request) as Promise<OperationAcceptedDto>
   },

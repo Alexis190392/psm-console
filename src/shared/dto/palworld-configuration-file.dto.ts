@@ -8,3 +8,7 @@ export interface PalworldSaveConfigurationRequestDto {
   confirmed: boolean;
   content: string;
 }
+
+export interface PalworldRestoreDefaultConfigurationRequestDto {
+  confirmed: boolean;
+}
