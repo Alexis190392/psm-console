@@ -75,6 +75,7 @@ appRoot.innerHTML = `
           <span id="operation-message" class="operation-message">Sin operacion activa.</span>
         </div>
       </div>
+      <div id="content-view" class="content-view hidden"></div>
     </section>
   </main>
   <footer class="statusbar">
@@ -106,10 +107,15 @@ const confirmationSource = document.querySelector('#confirmation-source');
 const confirmationTarget = document.querySelector('#confirmation-target');
 const confirmActionButton = document.querySelector<HTMLButtonElement>('#confirm-action');
 const cancelActionButton = document.querySelector<HTMLButtonElement>('#cancel-action');
+const contentView = document.querySelector<HTMLDivElement>('#content-view');
+const startServerAction = document.querySelector<HTMLButtonElement>('#start-server-action');
 const navLinks = Array.from(document.querySelectorAll<HTMLAnchorElement>('.sidebar__link[data-nav]'));
 const consoleLines: string[] = [];
 const operationLogOffsets = new Map<string, number>();
 let pendingAction: 'steamcmd' | 'server' | 'config' | null = null;
+let activeView = 'home';
+let latestStatus: ApplicationStatus = ApplicationStatus.BOOTSTRAPPING;
+let latestActions: AllowedActionsDto | null = null;
 
 if (!palcmApi) {
   showIpcError('El preload seguro no expuso window.palcm. Revisar preload, sandbox y build.');
@@ -126,6 +132,19 @@ if (!palcmApi) {
   });
 
   exportConsoleButton?.addEventListener('click', exportConsole);
+
+  navLinks.forEach((link) => {
+    link.addEventListener('click', (event) => {
+      event.preventDefault();
+
+      if (link.getAttribute('aria-disabled') === 'true') {
+        return;
+      }
+
+      activeView = link.dataset['nav'] ?? 'home';
+      renderActiveView();
+    });
+  });
 }
 
 async function refreshState(): Promise<void> {
@@ -139,6 +158,8 @@ async function refreshState(): Promise<void> {
     const steamCmd = await palcmApi.steamCmd.getStatus();
     const server = await palcmApi.server.getInstallationStatus();
     const config = await palcmApi.config.getStatus();
+    latestStatus = status.status;
+    latestActions = actions;
 
     setText(statusLabel, status.status);
     setText(titlebarBadge, status.status);
@@ -152,27 +173,37 @@ async function refreshState(): Promise<void> {
     appendConsoleLine(`Servidor Palworld: ${server.status} - ${server.executablePath}`);
     appendConsoleLine(`Configuracion: ${config.status} - ${config.activePath}`);
     updateNavigation(status.status, actions);
+    updateStartServerButton(actions);
 
     if (actions.canInstallSteamCmd) {
+      showPreflight();
       showSteamCmdConfirmation(steamCmd.officialDownloadUrl, steamCmd.installDirectory);
       return;
     }
 
     if (actions.canInstallServer) {
+      showPreflight();
       showServerConfirmation(server.appId, server.installDirectory);
       return;
     }
 
     if (status.status === ApplicationStatus.CONFIGURATION_MISSING) {
+      showPreflight();
       showConfigConfirmation(config.templatePath, config.activePath);
       return;
     }
 
     hideConfirmation();
+    renderActiveView();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     showIpcError(`No se pudo consultar IPC seguro: ${message}`);
   }
+}
+
+function showPreflight(): void {
+  contentView?.classList.add('hidden');
+  document.querySelector('.console-shell')?.classList.remove('hidden');
 }
 
 async function runPendingAction(): Promise<void> {
@@ -417,8 +448,158 @@ function updateNavigation(status: ApplicationStatus, actions: AllowedActionsDto)
       (nav === 'network' && actions.canManageFirewall);
 
     link.classList.toggle('sidebar__link--locked', !enabled);
+    link.classList.toggle('sidebar__link--active', nav === activeView);
     link.setAttribute('aria-disabled', enabled ? 'false' : 'true');
   });
+}
+
+function updateStartServerButton(actions: AllowedActionsDto): void {
+  if (!startServerAction) {
+    return;
+  }
+
+  startServerAction.disabled = !actions.canStartServer;
+  startServerAction.textContent = actions.canStartServer ? 'Start Server' : 'Server bloqueado';
+}
+
+function renderActiveView(): void {
+  if (!latestActions) {
+    return;
+  }
+
+  hideConfirmation();
+  document.querySelector('.console-shell')?.classList.toggle('hidden', activeView !== 'logs');
+  contentView?.classList.toggle('hidden', activeView === 'logs');
+  navLinks.forEach((link) => {
+    link.classList.toggle('sidebar__link--active', link.dataset['nav'] === activeView);
+  });
+
+  if (activeView === 'home') {
+    renderHomeView();
+    return;
+  }
+
+  if (activeView === 'configuration') {
+    void renderConfigurationView();
+    return;
+  }
+
+  if (activeView === 'server') {
+    renderSimpleView('Servidor', 'El servidor esta instalado. Los controles de inicio, detencion y logs runtime se agregan en la siguiente fase.');
+    return;
+  }
+
+  if (activeView === 'network') {
+    renderSimpleView('Network & Firewall', 'Modulo pendiente. La app todavia no modifica firewall ni red desde esta pantalla.');
+    return;
+  }
+
+  if (activeView === 'backups') {
+    renderSimpleView('Backups', 'Modulo pendiente. La app ya reserva carpetas de backup y los guardados de configuracion crean copia previa.');
+  }
+}
+
+function renderHomeView(): void {
+  setContent(`
+    <div class="view-stack">
+      <section class="summary-grid">
+        <article class="summary-item">
+          <span>Estado</span>
+          <strong>${latestStatus}</strong>
+        </article>
+        <article class="summary-item">
+          <span>Configuracion</span>
+          <strong>${latestActions?.canEditConfiguration ? 'Disponible' : 'Bloqueada'}</strong>
+        </article>
+        <article class="summary-item">
+          <span>Servidor</span>
+          <strong>${latestActions?.canStartServer ? 'Listo para iniciar' : 'Pendiente'}</strong>
+        </article>
+      </section>
+      <p class="view-note">Usa el menu lateral para abrir configuracion o revisar logs. Las acciones pendientes apareceran dentro de esta misma pantalla.</p>
+    </div>
+  `);
+}
+
+async function renderConfigurationView(): Promise<void> {
+  if (!palcmApi) {
+    return;
+  }
+
+  try {
+    const file = await palcmApi.config.read();
+    setContent(`
+      <div class="view-stack">
+        <div class="view-header">
+          <div>
+            <span class="view-kicker">CONFIGURACION</span>
+            <h3>PalWorldSettings.ini</h3>
+            <p>${escapeHtml(file.path)}</p>
+          </div>
+          <button id="save-config" class="primary-button" type="button">Guardar</button>
+        </div>
+        <textarea id="config-editor" class="config-editor" spellcheck="false">${escapeHtml(file.content)}</textarea>
+      </div>
+    `);
+    document.querySelector<HTMLButtonElement>('#save-config')?.addEventListener('click', () => {
+      void saveConfiguration();
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    renderSimpleView('Configuracion', `No se pudo leer la configuracion activa. ${message}`);
+  }
+}
+
+async function saveConfiguration(): Promise<void> {
+  if (!palcmApi) {
+    return;
+  }
+
+  const editor = document.querySelector<HTMLTextAreaElement>('#config-editor');
+
+  if (!editor) {
+    return;
+  }
+
+  appendConsoleLine('Confirmado: guardar configuracion activa.');
+  activeView = 'logs';
+  renderActiveView();
+  const accepted = await palcmApi.config.save({
+    confirmed: true,
+    content: editor.value
+  });
+  await pollOperation(accepted.operationId);
+  activeView = 'configuration';
+  await refreshState();
+}
+
+function renderSimpleView(title: string, message: string): void {
+  setContent(`
+    <div class="view-stack">
+      <div class="view-header">
+        <div>
+          <span class="view-kicker">${escapeHtml(title.toUpperCase())}</span>
+          <h3>${escapeHtml(title)}</h3>
+          <p>${escapeHtml(message)}</p>
+        </div>
+      </div>
+    </div>
+  `);
+}
+
+function setContent(html: string): void {
+  if (contentView) {
+    contentView.innerHTML = html;
+  }
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
 }
 
 function exportConsole(): void {

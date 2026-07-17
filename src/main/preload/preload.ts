@@ -3,6 +3,10 @@ import type { AllowedActionsDto } from '../../shared/dto/allowed-actions.dto';
 import type { ApplicationStatusDto } from '../../shared/dto/application-status.dto';
 import type { OperationAcceptedDto, OperationProgressDto } from '../../shared/dto/operation-progress.dto';
 import type {
+  PalworldConfigurationFileDto,
+  PalworldSaveConfigurationRequestDto
+} from '../../shared/dto/palworld-configuration-file.dto';
+import type {
   PalworldConfigurationStatusDto,
   PalworldCreateDefaultConfigurationRequestDto
 } from '../../shared/dto/palworld-configuration-status.dto';
@@ -20,7 +24,9 @@ const ipcChannels = {
   steamCmdInstall: 'steamcmd:install',
   serverGetInstallationStatus: 'server:get-installation-status',
   serverInstall: 'server:install',
+  configRead: 'config:read',
   configValidate: 'config:validate',
+  configSave: 'config:save',
   configCreateDefault: 'config:create-default',
   windowMinimize: 'window:minimize',
   windowToggleMaximize: 'window:toggle-maximize',
@@ -45,6 +51,8 @@ export interface PalcmApi {
   };
   config: {
     getStatus: () => Promise<PalworldConfigurationStatusDto>;
+    read: () => Promise<PalworldConfigurationFileDto>;
+    save: (request: PalworldSaveConfigurationRequestDto) => Promise<OperationAcceptedDto>;
     createDefault: (request: PalworldCreateDefaultConfigurationRequestDto) => Promise<OperationAcceptedDto>;
   };
   window: {
@@ -75,7 +83,9 @@ const api: PalcmApi = {
       ipcRenderer.invoke(ipcChannels.serverInstall, request) as Promise<OperationAcceptedDto>
   },
   config: {
+    read: () => ipcRenderer.invoke(ipcChannels.configRead) as Promise<PalworldConfigurationFileDto>,
     getStatus: () => ipcRenderer.invoke(ipcChannels.configValidate) as Promise<PalworldConfigurationStatusDto>,
+    save: (request) => ipcRenderer.invoke(ipcChannels.configSave, request) as Promise<OperationAcceptedDto>,
     createDefault: (request) =>
       ipcRenderer.invoke(ipcChannels.configCreateDefault, request) as Promise<OperationAcceptedDto>
   },

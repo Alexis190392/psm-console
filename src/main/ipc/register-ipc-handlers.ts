@@ -6,6 +6,7 @@ import { PalworldConfigurationService } from '../../backend/palworld-configurati
 import { PalworldInstallationService } from '../../backend/palworld-installation/palworld-installation.service';
 import { SteamCmdService } from '../../backend/steamcmd/steamcmd.service';
 import { ipcChannels } from '../../shared/contracts/ipc-channels';
+import type { PalworldSaveConfigurationRequestDto } from '../../shared/dto/palworld-configuration-file.dto';
 import type { PalworldCreateDefaultConfigurationRequestDto } from '../../shared/dto/palworld-configuration-status.dto';
 import type { PalworldInstallRequestDto } from '../../shared/dto/palworld-installation-status.dto';
 import type { SteamCmdInstallRequestDto } from '../../shared/dto/steamcmd-status.dto';
@@ -43,6 +44,12 @@ export function registerIpcHandlers(
   );
 
   ipcMain.handle(ipcChannels.configValidate, () => palworldConfigurationService.getStatus());
+
+  ipcMain.handle(ipcChannels.configRead, () => palworldConfigurationService.readActive());
+
+  ipcMain.handle(ipcChannels.configSave, (_event, request: PalworldSaveConfigurationRequestDto) =>
+    palworldConfigurationService.saveActive(request)
+  );
 
   ipcMain.handle(ipcChannels.configCreateDefault, (_event, request: PalworldCreateDefaultConfigurationRequestDto) =>
     palworldConfigurationService.createDefault(request)

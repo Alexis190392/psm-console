@@ -59,6 +59,29 @@ describe('PalworldConfigurationService', () => {
     expect(existsSync(activePath)).toBe(true);
     expect(service.getStatus().status).toBe('READY');
   });
+
+  it('reads and saves the active configuration with a backup', async () => {
+    await mkdir(join(serverRoot, 'Pal', 'Saved', 'Config', 'WindowsServer'), { recursive: true });
+    await writeFile(templatePath, 'template');
+    await writeFile(activePath, 'before');
+    const operationManager = new OperationManagerService();
+    const service = new PalworldConfigurationService(portablePathService, operationManager, portableStateService);
+
+    await expect(service.readActive()).resolves.toMatchObject({
+      path: activePath,
+      content: 'before'
+    });
+
+    const accepted = service.saveActive({
+      confirmed: true,
+      content: 'after'
+    });
+    await waitForOperation(accepted.operationId, operationManager);
+
+    await expect(service.readActive()).resolves.toMatchObject({
+      content: 'after'
+    });
+  });
 });
 
 async function waitForOperation(operationId: string, operationManager: OperationManagerService): Promise<void> {

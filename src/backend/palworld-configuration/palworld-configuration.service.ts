@@ -1,10 +1,14 @@
 import { Injectable } from '@nestjs/common';
-import { copyFile, mkdir } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { OperationManagerService } from '../operations/operation-manager.service';
 import { PortablePathService } from '../portable-path/portable-path.service';
 import { PortableStateService } from '../portable-state/portable-state.service';
+import type {
+  PalworldConfigurationFileDto,
+  PalworldSaveConfigurationRequestDto
+} from '../../shared/dto/palworld-configuration-file.dto';
 import type { OperationAcceptedDto } from '../../shared/dto/operation-progress.dto';
 import type {
   PalworldConfigurationStatusDto,
@@ -60,6 +64,37 @@ export class PalworldConfigurationService {
     };
   }
 
+  async readActive(): Promise<PalworldConfigurationFileDto> {
+    const activePath = this.getStatus().activePath;
+
+    if (!existsSync(activePath)) {
+      throw new Error(`ACTIVE_CONFIGURATION_NOT_FOUND: ${activePath}`);
+    }
+
+    return {
+      path: activePath,
+      content: await readFile(activePath, 'utf8'),
+      updatedAt: new Date().toISOString()
+    };
+  }
+
+  saveActive(request: PalworldSaveConfigurationRequestDto): OperationAcceptedDto {
+    if (!request.confirmed) {
+      throw new Error('CONFIGURATION_SAVE_REQUIRES_CONFIRMATION');
+    }
+
+    const operation = this.operationManagerService.create(
+      'Guardado de configuracion',
+      'Preparando guardado seguro de PalWorldSettings.ini.'
+    );
+
+    void this.saveActiveAsync(operation.operationId, request.content);
+
+    return {
+      operationId: operation.operationId
+    };
+  }
+
   private async createDefaultAsync(operationId: string): Promise<void> {
     const templatePath = this.getTemplatePath();
     const activePath = this.getActivePath();
@@ -106,6 +141,62 @@ export class PalworldConfigurationService {
         status: 'FAILED',
         percent: 100,
         message: 'No se pudo crear la configuracion inicial.',
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  private async saveActiveAsync(operationId: string, content: string): Promise<void> {
+    const activePath = this.getStatus().activePath;
+
+    try {
+      if (!existsSync(activePath)) {
+        throw new Error(`ACTIVE_CONFIGURATION_NOT_FOUND: ${activePath}`);
+      }
+
+      const backupPath = join(
+        this.portablePathService.getPortableRoot(),
+        'backups',
+        'configuration',
+        `PalWorldSettings.${new Date().toISOString().replace(/[:.]/g, '-')}.ini`
+      );
+      const tempPath = `${activePath}.tmp`;
+
+      this.operationManagerService.update(operationId, {
+        status: 'RUNNING',
+        percent: 25,
+        message: 'Creando backup de configuracion actual.'
+      });
+      await mkdir(dirname(backupPath), { recursive: true });
+      await copyFile(activePath, backupPath);
+      this.operationManagerService.appendLog(operationId, `copy "${activePath}" "${backupPath}"`);
+
+      this.operationManagerService.update(operationId, {
+        status: 'RUNNING',
+        percent: 65,
+        message: 'Escribiendo configuracion temporal.'
+      });
+      await writeFile(tempPath, content, 'utf8');
+      this.operationManagerService.appendLog(operationId, `write "${tempPath}"`);
+
+      this.operationManagerService.update(operationId, {
+        status: 'RUNNING',
+        percent: 90,
+        message: 'Reemplazando configuracion activa.'
+      });
+      await copyFile(tempPath, activePath);
+      this.operationManagerService.appendLog(operationId, `replace "${activePath}"`);
+
+      this.operationManagerService.update(operationId, {
+        status: 'COMPLETED',
+        percent: 100,
+        message: 'Configuracion guardada correctamente.'
+      });
+    } catch (error) {
+      this.operationManagerService.update(operationId, {
+        status: 'FAILED',
+        percent: 100,
+        message: 'No se pudo guardar la configuracion.',
         error: error instanceof Error ? error.message : String(error)
       });
     }
