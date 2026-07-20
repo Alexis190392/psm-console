@@ -10,6 +10,7 @@ import {
   renderSummaryCard,
   type SummaryCardViewModel
 } from './components/summary-card';
+import { renderInlineConfirm } from './components/inline-confirm';
 import { bindWindowControls } from './components/window-controls';
 import {
   DEFAULT_SETTING_HELP,
@@ -1244,11 +1245,13 @@ function showRestoreDefaultConfirmation(): void {
 
   appFooter.classList.remove('hidden');
   appFooter.classList.remove('app-footer--confirm');
-  appFooter.innerHTML = `
-    <span class="app-footer__message">Se creara un backup y se reemplazara la configuracion activa por los valores default instalados.</span>
-    <button id="confirm-restore-default" class="primary-button primary-button--warning" type="button">Restaurar default</button>
-    <button id="cancel-restore-default" class="secondary-button" type="button">Cancelar</button>
-  `;
+  appFooter.innerHTML = renderInlineConfirm({
+    message: 'Se creara un backup y se reemplazara la configuracion activa por los valores default instalados.',
+    actions: [
+      { id: 'confirm-restore-default', label: 'Restaurar default', tone: 'warning' },
+      { id: 'cancel-restore-default', label: 'Cancelar', tone: 'secondary' }
+    ]
+  });
   document.querySelector<HTMLButtonElement>('#confirm-restore-default')?.addEventListener('click', () => {
     void restoreDefaultConfiguration();
   });
@@ -2453,11 +2456,13 @@ function showLeaveServerConfirmation(nextView: string): void {
 
   appFooter.classList.remove('hidden');
   appFooter.classList.add('app-footer--confirm');
-  appFooter.innerHTML = `
-    <span class="app-footer__message">Hay cambios sin guardar en la configuracion. Si sales ahora no se aplicaran al INI.</span>
-    <button id="stay-server-config" class="secondary-button" type="button">Seguir editando</button>
-    <button id="leave-server-config" class="primary-button primary-button--danger" type="button">Salir sin guardar</button>
-  `;
+  appFooter.innerHTML = renderInlineConfirm({
+    message: 'Hay cambios sin guardar en la configuracion. Si sales ahora no se aplicaran al INI.',
+    actions: [
+      { id: 'stay-server-config', label: 'Seguir editando', tone: 'secondary' },
+      { id: 'leave-server-config', label: 'Salir sin guardar', tone: 'danger' }
+    ]
+  });
 
   document.querySelector<HTMLButtonElement>('#stay-server-config')?.addEventListener('click', () => {
     appFooter.classList.remove('app-footer--confirm');
