@@ -30,6 +30,7 @@ import { cssEscape, escapeHtml, normalizeSearchText } from './utils/text';
 import { renderBackupsView as renderBackupsViewHtml } from './views/backups-view';
 import { renderGeneralView as renderGeneralViewHtml } from './views/general-view';
 import { renderPreflightSummaryView, renderSimpleView as renderSimpleViewHtml } from './views/status-views';
+import { NavigationState } from './state/navigation-state';
 
 const palcmLogoUrl = new URL('./assets/palcm-logo.png', import.meta.url).href;
 
@@ -176,7 +177,7 @@ let settingInfoDismissBound = false;
 let latestServerSettings: ParsedPalworldSettings | null = null;
 let configurationAutoCreateAttempted = false;
 let pendingAction: 'steamcmd' | 'server' | 'config' | null = null;
-let activeView = 'home';
+const navigationState = new NavigationState();
 let latestStatus: ApplicationStatus = ApplicationStatus.BOOTSTRAPPING;
 let latestActions: AllowedActionsDto | null = null;
 let latestSummary: {
@@ -235,12 +236,12 @@ if (!palcmApi) {
       }
 
       const nextView = link.dataset['nav'] ?? 'home';
-      if (activeView === 'server' && nextView !== 'server' && hasServerPendingChanges()) {
+      if (navigationState.is('server') && nextView !== 'server' && hasServerPendingChanges()) {
         showLeaveServerConfirmation(nextView);
         return;
       }
 
-      activeView = nextView;
+      navigationState.set(nextView);
       renderActiveView();
     });
   });
@@ -411,7 +412,7 @@ async function startPalworldServer(): Promise<void> {
   }
 
   appendConsoleLine('Confirmado: iniciar Palworld Dedicated Server.');
-  activeView = 'logs';
+  navigationState.set('logs');
   renderActiveView();
   updateStartServerButton({
     ...latestActions,
@@ -438,7 +439,7 @@ async function stopPalworldServer(): Promise<void> {
   }
 
   appendConsoleLine('Confirmado: detener Palworld Dedicated Server.');
-  activeView = 'logs';
+  navigationState.set('logs');
   renderActiveView();
   updateStartServerButton({
     ...latestActions,
@@ -689,7 +690,7 @@ function updateNavigation(status: ApplicationStatus): void {
       (nav === 'network' && serverAvailable);
 
     link.classList.toggle('sidebar__link--locked', !enabled);
-    link.classList.toggle('sidebar__link--active', nav === activeView);
+    link.classList.toggle('sidebar__link--active', nav === navigationState.current);
     link.setAttribute('aria-disabled', enabled ? 'false' : 'true');
   });
 }
@@ -781,35 +782,35 @@ function renderActiveView(): void {
     return;
   }
 
-  rootElement.dataset['view'] = activeView;
+  rootElement.dataset['view'] = navigationState.current;
   hideConfirmation();
   updateReadyChrome();
   updateFooterChrome();
   updateHeroChrome();
-  const isLogsView = activeView === 'logs';
+  const isLogsView = navigationState.is('logs');
   document.querySelector('.console-shell')?.classList.toggle('hidden', !isLogsView);
   document.querySelector('.console-tools')?.classList.toggle('hidden', !isLogsView);
-  contentView?.classList.toggle('hidden', activeView === 'logs');
+  contentView?.classList.toggle('hidden', navigationState.is('logs'));
   navLinks.forEach((link) => {
-    link.classList.toggle('sidebar__link--active', link.dataset['nav'] === activeView);
+    link.classList.toggle('sidebar__link--active', link.dataset['nav'] === navigationState.current);
   });
 
-  if (activeView === 'home') {
+  if (navigationState.is('home')) {
     void renderGeneralView();
     return;
   }
 
-  if (activeView === 'server') {
+  if (navigationState.is('server')) {
     void renderServerConfigurationView();
     return;
   }
 
-  if (activeView === 'network') {
+  if (navigationState.is('network')) {
     void renderFirewallView();
     return;
   }
 
-  if (activeView === 'backups') {
+  if (navigationState.is('backups')) {
     void renderBackupsView();
     return;
   }
@@ -945,7 +946,7 @@ async function hydrateGeneralLocalPreview(port: string | null): Promise<void> {
   }
   refreshStartButtonState();
 
-  if (activeView !== 'home' || !isOperationalStatus(latestStatus) || latestFirewallStatus) {
+  if (!navigationState.is('home') || !isOperationalStatus(latestStatus) || latestFirewallStatus) {
     return;
   }
 
@@ -970,7 +971,7 @@ async function hydrateGeneralNetworkSummary(port: string | null): Promise<void> 
 
   refreshStartButtonState();
 
-  if (activeView !== 'home' || !isOperationalStatus(latestStatus)) {
+  if (!navigationState.is('home') || !isOperationalStatus(latestStatus)) {
     return;
   }
 
@@ -1209,7 +1210,7 @@ async function saveConfiguration(parsed?: ParsedPalworldSettings): Promise<void>
   }
 
   appendConsoleLine('Confirmado: guardar configuracion activa.');
-  activeView = 'logs';
+  navigationState.set('logs');
   renderActiveView();
   const accepted = await palcmApi.config.save({
     confirmed: true,
@@ -1217,7 +1218,7 @@ async function saveConfiguration(parsed?: ParsedPalworldSettings): Promise<void>
   });
   await pollOperation(accepted.operationId);
   showToast('Configuracion guardada');
-  activeView = 'server';
+  navigationState.set('server');
   await refreshState();
 }
 
@@ -1227,12 +1228,12 @@ async function restoreDefaultConfiguration(): Promise<void> {
   }
 
   appendConsoleLine('Confirmado: restaurar configuracion default.');
-  activeView = 'logs';
+  navigationState.set('logs');
   renderActiveView();
   const accepted = await palcmApi.config.restoreDefault({ confirmed: true });
   await pollOperation(accepted.operationId);
   showToast('Configuracion default restaurada');
-  activeView = 'server';
+  navigationState.set('server');
   await refreshState();
 }
 
@@ -1311,7 +1312,7 @@ async function createBackup(kind: 'configuration' | 'world'): Promise<void> {
   }
 
   appendConsoleLine(kind === 'configuration' ? 'Confirmado: crear backup de configuracion.' : 'Confirmado: crear backup del mundo.');
-  activeView = 'logs';
+  navigationState.set('logs');
   renderActiveView();
 
   const accepted =
@@ -1321,12 +1322,12 @@ async function createBackup(kind: 'configuration' | 'world'): Promise<void> {
 
   await pollOperation(accepted.operationId);
   latestBackupSummary = null;
-  activeView = 'backups';
+  navigationState.set('backups');
   await refreshState();
 }
 
 function hideRestoreDefaultConfirmation(): void {
-  if (activeView === 'server') {
+  if (navigationState.is('server')) {
     void renderServerConfigurationView();
   }
 }
@@ -1338,18 +1339,18 @@ function renderSimpleView(title: string, message: string): void {
 }
 
 function updateReadyChrome(): void {
-  const shouldHidePreflightChrome = isOperationalStatus(latestStatus) && activeView !== 'logs';
+  const shouldHidePreflightChrome = isOperationalStatus(latestStatus) && !navigationState.is('logs');
   panelStatusHeader?.classList.toggle('hidden', shouldHidePreflightChrome);
   progressBar?.parentElement?.classList.toggle('hidden', shouldHidePreflightChrome);
 }
 
 function updateHeroChrome(): void {
-  const shouldHideHero = isOperationalStatus(latestStatus) && activeView !== 'home';
+  const shouldHideHero = isOperationalStatus(latestStatus) && !navigationState.is('home');
   document.querySelector('.hero')?.classList.toggle('hidden', shouldHideHero);
 }
 
 function updateFooterChrome(): void {
-  const shouldShowFooter = isOperationalStatus(latestStatus) && activeView === 'server';
+  const shouldShowFooter = isOperationalStatus(latestStatus) && navigationState.is('server');
   const shouldUseWideLayout = isOperationalStatus(latestStatus);
   rootElement.classList.toggle('app--footer-visible', shouldShowFooter);
   rootElement.classList.toggle('app--wide', shouldUseWideLayout);
@@ -1470,14 +1471,14 @@ async function renderFirewallView(forceRefresh = false): Promise<void> {
     const firewall = await getFirewallStatus(forceRefresh);
     clearFirewallLoadingTimers();
 
-    if (activeView !== 'network') {
+    if (!navigationState.is('network')) {
       return;
     }
 
     renderFirewallStatusView(firewall);
   } catch (error) {
     clearFirewallLoadingTimers();
-    if (activeView !== 'network') {
+    if (!navigationState.is('network')) {
       return;
     }
 
@@ -1890,14 +1891,14 @@ async function applyFirewallRules(): Promise<void> {
   }
 
   appendConsoleLine('Confirmado: configurar reglas de Firewall de Windows.');
-  activeView = 'logs';
+  navigationState.set('logs');
   renderActiveView();
   const accepted = await palcmApi.firewall.applyRules({ confirmed: true });
   await pollOperation(accepted.operationId);
   latestFirewallStatus = null;
   latestFirewallCheckedAt = null;
   showToast('Reglas de Firewall actualizadas');
-  activeView = 'network';
+  navigationState.set('network');
   await refreshState();
 }
 
@@ -1957,7 +1958,7 @@ function bindSummaryCards(): void {
         return;
       }
 
-      activeView = card.dataset['target'] ?? 'home';
+      navigationState.set(card.dataset['target']);
       renderActiveView();
     });
   });
@@ -2360,7 +2361,7 @@ function getServerDirtyState(parsed: ParsedPalworldSettings): {
 }
 
 function hasServerPendingChanges(parsed = latestServerSettings): boolean {
-  if (!parsed || activeView !== 'server') {
+  if (!parsed || !navigationState.is('server')) {
     return false;
   }
 
@@ -2445,7 +2446,7 @@ function discardServerChanges(parsed: ParsedPalworldSettings): void {
 
 function showLeaveServerConfirmation(nextView: string): void {
   if (!appFooter) {
-    activeView = nextView;
+    navigationState.set(nextView);
     renderActiveView();
     return;
   }
@@ -2468,7 +2469,7 @@ function showLeaveServerConfirmation(nextView: string): void {
   document.querySelector<HTMLButtonElement>('#leave-server-config')?.addEventListener('click', () => {
     appFooter.classList.remove('app-footer--confirm');
     latestServerSettings = null;
-    activeView = nextView;
+    navigationState.set(nextView);
     renderActiveView();
   });
 }
