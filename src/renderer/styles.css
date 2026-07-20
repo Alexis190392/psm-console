@@ -1,19 +1,4 @@
-:root {
-  --color-background: #0b0f13;
-  --color-surface: #101418;
-  --color-surface-panel: #151b23;
-  --color-surface-high: #262a2f;
-  --color-outline: #3b494c;
-  --color-text: #e0e3e8;
-  --color-text-muted: #bac9cc;
-  --color-primary: #00e5ff;
-  --color-primary-soft: #c3f5ff;
-  --color-danger: #ff5252;
-  --sidebar-width: 280px;
-  font-family: Inter, "Segoe UI", Arial, sans-serif;
-  color: var(--color-text);
-  background: var(--color-background);
-}
+@import "./design-system/tokens.css";
 
 * {
   box-sizing: border-box;
