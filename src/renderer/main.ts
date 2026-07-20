@@ -11,6 +11,15 @@ import {
   type PalworldSettingDefinition
 } from './config/palworld-settings-catalog';
 import { PALWORLD_SETTING_COPY } from './config/palworld-settings-copy';
+import {
+  formatSettingValue,
+  parsePalworldSettings,
+  serializePalworldSettings,
+  unquoteSettingValue,
+  type ParsedPalworldSetting,
+  type ParsedPalworldSettings
+} from './config/palworld-settings-parser';
+import { cssEscape, escapeHtml, normalizeSearchText } from './utils/text';
 
 const palcmLogoUrl = new URL('./assets/palcm-logo.png', import.meta.url).href;
 
@@ -2141,122 +2150,6 @@ async function readConfiguredPort(): Promise<string | null> {
   }
 }
 
-interface ParsedPalworldSetting {
-  key: string;
-  value: string;
-}
-
-interface ParsedPalworldSettings {
-  originalContent: string;
-  prefix: string;
-  suffix: string;
-  settings: ParsedPalworldSetting[];
-}
-
-function parsePalworldSettings(content: string): ParsedPalworldSettings {
-  const marker = 'OptionSettings=(';
-  const start = content.indexOf(marker);
-
-  if (start < 0) {
-    return {
-      originalContent: content,
-      prefix: content,
-      suffix: '',
-      settings: []
-    };
-  }
-
-  const valueStart = start + marker.length;
-  const valueEnd = findOptionSettingsEnd(content, valueStart);
-  const body = content.slice(valueStart, valueEnd);
-
-  return {
-    originalContent: content,
-    prefix: content.slice(0, valueStart),
-    suffix: content.slice(valueEnd),
-    settings: splitTopLevel(body).map((entry) => {
-      const separator = entry.indexOf('=');
-      return {
-        key: entry.slice(0, separator).trim(),
-        value: entry.slice(separator + 1).trim()
-      };
-    })
-  };
-}
-
-function findOptionSettingsEnd(content: string, valueStart: number): number {
-  let isQuoted = false;
-  let depth = 0;
-
-  for (let index = valueStart; index < content.length; index += 1) {
-    const char = content[index];
-
-    if (char === '"' && content[index - 1] !== '\\') {
-      isQuoted = !isQuoted;
-      continue;
-    }
-
-    if (!isQuoted && char === '(') {
-      depth += 1;
-      continue;
-    }
-
-    if (!isQuoted && char === ')' && depth > 0) {
-      depth -= 1;
-      continue;
-    }
-
-    if (!isQuoted && char === ')') {
-      return index;
-    }
-  }
-
-  return content.length;
-}
-
-function splitTopLevel(value: string): string[] {
-  const parts: string[] = [];
-  let current = '';
-  let depth = 0;
-  let isQuoted = false;
-
-  for (const char of value) {
-    if (char === '"') {
-      isQuoted = !isQuoted;
-    }
-
-    if (!isQuoted && char === '(') {
-      depth += 1;
-    }
-
-    if (!isQuoted && char === ')') {
-      depth -= 1;
-    }
-
-    if (!isQuoted && depth === 0 && char === ',') {
-      parts.push(current);
-      current = '';
-      continue;
-    }
-
-    current += char;
-  }
-
-  if (current.trim().length > 0) {
-    parts.push(current);
-  }
-
-  return parts;
-}
-
-function serializePalworldSettings(parsed: ParsedPalworldSettings, values: Map<string, string>): string {
-  const nextBody = parsed.settings
-    .map((setting) => `${setting.key}=${values.get(setting.key) ?? setting.value}`)
-    .join(',');
-
-  return `${parsed.prefix}${nextBody}${parsed.suffix}`;
-}
-
 function readSettingsFormValues(parsed: ParsedPalworldSettings): Map<string, string> {
   const values = new Map<string, string>();
 
@@ -2820,30 +2713,6 @@ function inferSettingKind(value: string): 'text' | 'number' | 'boolean' {
   return 'text';
 }
 
-function formatSettingValue(definition: PalworldSettingDefinition, value: string, originalValue: string): string {
-  if (definition.kind === 'text' && shouldQuoteTextValue(value, originalValue)) {
-    return `"${value.replaceAll('"', '\\"')}"`;
-  }
-
-  return value;
-}
-
-function shouldQuoteTextValue(value: string, originalValue: string): boolean {
-  if (value.startsWith('(') && value.endsWith(')')) {
-    return false;
-  }
-
-  return originalValue.startsWith('"') || value.length === 0 || /[\s:/\\]/.test(value);
-}
-
-function unquoteSettingValue(value: string): string {
-  if (value.startsWith('"') && value.endsWith('"')) {
-    return value.slice(1, -1).replaceAll('\\"', '"');
-  }
-
-  return value;
-}
-
 function splitSettingKey(key: string): string {
   const readable = key
     .replace(/^b(?=[A-Z])/, '')
@@ -2855,17 +2724,6 @@ function splitSettingKey(key: string): string {
     .filter(Boolean)
     .map((word) => SETTING_WORD_TRANSLATIONS[word.toLowerCase()] ?? word)
     .join(' ');
-}
-
-function normalizeSearchText(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase();
-}
-
-function cssEscape(value: string): string {
-  return value.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
 }
 
 function formatSelectOptionLabel(option: string): string {
@@ -2995,15 +2853,6 @@ function setContent(html: string): void {
   if (contentView) {
     contentView.innerHTML = html;
   }
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
 }
 
 function exportConsole(): void {

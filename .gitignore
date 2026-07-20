@@ -3,6 +3,8 @@ dist/
 release/
 ejecucionPruebas/
 .tmp-tests/
+.idea/
+yarn.lock
 *.log
 .env
 .env.*
