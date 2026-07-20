@@ -4,6 +4,11 @@ import type { AllowedActionsDto } from '../shared/dto/allowed-actions.dto';
 import type { BackupSummaryDto } from '../shared/dto/backup-status.dto';
 import type { FirewallPortCheckDto, FirewallStatusDto } from '../shared/dto/firewall-status.dto';
 import type { OperationProgressDto } from '../shared/dto/operation-progress.dto';
+import {
+  createSummaryCardState,
+  renderSummaryCard,
+  type SummaryCardViewModel
+} from './components/summary-card';
 import { bindWindowControls } from './components/window-controls';
 import {
   DEFAULT_SETTING_HELP,
@@ -817,7 +822,7 @@ async function renderGeneralView(): Promise<void> {
 
   const port = await readConfiguredPort();
   latestConfiguredPort = port;
-  const portState = port ? createHealthCardState('ok') : createHealthCardState('warning');
+  const portState = port ? createSummaryCardState('ok') : createSummaryCardState('warning');
   const isNetworkLoading = !latestFirewallStatus && !latestFirewallError;
   const localPlay = createLocalPlaySummary(latestFirewallStatus, port, isNetworkLoading, latestLocalAddresses);
   const publicPlay = createPublicPlaySummary(latestFirewallStatus, isNetworkLoading);
@@ -828,35 +833,35 @@ async function renderGeneralView(): Promise<void> {
   setContent(`
     <div class="view-stack">
       <section class="summary-grid summary-grid--ready">
-        ${renderHealthCard({
+        ${renderSummaryCard({
           title: 'SteamCMD',
           value: 'Instalado',
           detail: 'Cliente listo para actualizar y validar archivos.',
           target: 'logs',
-          ...createHealthCardState('ok')
+          ...createSummaryCardState('ok')
         })}
-        ${renderHealthCard({
+        ${renderSummaryCard({
           title: 'Servidor',
           value: 'Instalado',
           detail: latestSummary?.serverPath ?? 'PalServer.exe detectado.',
           target: 'server',
-          ...createHealthCardState('ok')
+          ...createSummaryCardState('ok')
         })}
-        ${renderHealthCard({
+        ${renderSummaryCard({
           title: 'Configuracion',
           value: 'Activa',
           detail: latestSummary?.configurationPath ?? 'PalWorldSettings.ini disponible.',
           target: 'server',
-          ...createHealthCardState('ok')
+          ...createSummaryCardState('ok')
         })}
-        ${renderHealthCard({
+        ${renderSummaryCard({
           title: 'Puerto',
           value: port ? `UDP ${port}` : 'Sin validar',
           detail: port ? 'Puerto leido desde la configuracion activa.' : 'No se encontro PublicPort en el INI activo.',
           target: 'network',
           ...portState
         })}
-        ${renderHealthCard({
+        ${renderSummaryCard({
           id: 'general-local-play-card',
           title: 'Juego local',
           value: localPlay.value,
@@ -865,7 +870,7 @@ async function renderGeneralView(): Promise<void> {
           target: 'network',
           ...localPlay.state
         })}
-        ${renderHealthCard({
+        ${renderSummaryCard({
           id: 'general-public-play-card',
           title: 'Juego publico',
           value: publicPlay.value,
@@ -874,7 +879,7 @@ async function renderGeneralView(): Promise<void> {
           target: 'network',
           ...publicPlay.state
         })}
-        ${renderHealthCard({
+        ${renderSummaryCard({
           title: 'Backups',
           value: backupState.value,
           detail: backupState.detail,
@@ -904,16 +909,12 @@ async function readBackupSummaryForGeneral(): Promise<BackupSummaryDto | null> {
   }
 }
 
-function createBackupSummaryCard(summary: BackupSummaryDto | null): {
-  value: string;
-  detail: string;
-  state: ReturnType<typeof createHealthCardState>;
-} {
+function createBackupSummaryCard(summary: BackupSummaryDto | null): SummaryCardViewModel {
   if (!summary) {
     return {
       value: 'Pendiente',
       detail: 'Abre Backups para crear el primer respaldo.',
-      state: createHealthCardState('configuration')
+      state: createSummaryCardState('configuration')
     };
   }
 
@@ -923,14 +924,14 @@ function createBackupSummaryCard(summary: BackupSummaryDto | null): {
     return {
       value: 'Sin backups',
       detail: 'Crea un backup antes de cambios grandes o pruebas con mundos reales.',
-      state: createHealthCardState('warning')
+      state: createSummaryCardState('warning')
     };
   }
 
   return {
     value: `${String(total)} disponibles`,
     detail: `${String(summary.configurationBackups.length)} de configuracion, ${String(summary.worldBackups.length)} del mundo.`,
-    state: createHealthCardState('ok')
+    state: createSummaryCardState('ok')
   };
 }
 
@@ -949,7 +950,7 @@ async function hydrateGeneralLocalPreview(port: string | null): Promise<void> {
   const localPlay = createLocalPlaySummary(null, port, true, latestLocalAddresses);
   replaceSummaryCard(
     'general-local-play-card',
-    renderHealthCard({
+    renderSummaryCard({
       id: 'general-local-play-card',
       title: 'Juego local',
       value: localPlay.value,
@@ -975,7 +976,7 @@ async function hydrateGeneralNetworkSummary(port: string | null): Promise<void> 
   const publicPlay = createPublicPlaySummary(firewall, false);
   replaceSummaryCard(
     'general-local-play-card',
-    renderHealthCard({
+    renderSummaryCard({
       id: 'general-local-play-card',
       title: 'Juego local',
       value: localPlay.value,
@@ -987,7 +988,7 @@ async function hydrateGeneralNetworkSummary(port: string | null): Promise<void> 
   );
   replaceSummaryCard(
     'general-public-play-card',
-    renderHealthCard({
+    renderSummaryCard({
       id: 'general-public-play-card',
       title: 'Juego publico',
       value: publicPlay.value,
@@ -1027,12 +1028,7 @@ function createLocalPlaySummary(
   port: string | null,
   isLoading: boolean,
   localAddresses: string[] = []
-): {
-  value: string;
-  detail: string;
-  state: ReturnType<typeof createHealthCardState>;
-  copyValue?: string;
-} {
+): SummaryCardViewModel {
   if (isLoading) {
     const localIp = localAddresses[0];
 
@@ -1040,7 +1036,7 @@ function createLocalPlaySummary(
       return {
         value: `${localIp}:${port}`,
         detail: 'IP LAN detectada. Click para copiar.',
-        state: createHealthCardState('ok'),
+        state: createSummaryCardState('ok'),
         copyValue: `${localIp}:${port}`
       };
     }
@@ -1048,7 +1044,7 @@ function createLocalPlaySummary(
     return {
       value: 'Analizando',
       detail: 'Verificando puerto e IP local.',
-      state: createHealthCardState('loading')
+      state: createSummaryCardState('loading')
     };
   }
 
@@ -1056,7 +1052,7 @@ function createLocalPlaySummary(
     return {
       value: 'Sin puerto',
       detail: 'Falta leer PublicPort para probar desde la red local.',
-      state: createHealthCardState('warning')
+      state: createSummaryCardState('warning')
     };
   }
 
@@ -1064,7 +1060,7 @@ function createLocalPlaySummary(
     return {
       value: 'Pendiente',
       detail: 'Falta completar la verificacion local de Windows.',
-      state: createHealthCardState('configuration')
+      state: createSummaryCardState('configuration')
     };
   }
 
@@ -1074,7 +1070,7 @@ function createLocalPlaySummary(
     return {
       value: localIp ? `${localIp}:${port}` : `UDP ${port}`,
       detail: 'Listo para probar desde otra PC de la misma red.',
-      state: createHealthCardState('ok'),
+      state: createSummaryCardState('ok'),
       copyValue: localIp ? `${localIp}:${port}` : undefined
     };
   }
@@ -1083,28 +1079,23 @@ function createLocalPlaySummary(
     return {
       value: 'Revisar firewall',
       detail: 'Windows todavia necesita reglas locales para aceptar jugadores en LAN.',
-      state: createHealthCardState('warning')
+      state: createSummaryCardState('warning')
     };
   }
 
   return {
     value: 'No confirmado',
     detail: 'No se pudo validar completamente el firewall local de Windows.',
-    state: createHealthCardState('optional')
+    state: createSummaryCardState('optional')
   };
 }
 
-function createPublicPlaySummary(firewall: FirewallStatusDto | null, isLoading: boolean): {
-  value: string;
-  detail: string;
-  state: ReturnType<typeof createHealthCardState>;
-  copyValue?: string;
-} {
+function createPublicPlaySummary(firewall: FirewallStatusDto | null, isLoading: boolean): SummaryCardViewModel {
   if (isLoading) {
     return {
       value: 'Analizando',
       detail: 'Consultando IP publica y separando router, NAT y CGNAT.',
-      state: createHealthCardState('loading')
+      state: createSummaryCardState('loading')
     };
   }
 
@@ -1112,7 +1103,7 @@ function createPublicPlaySummary(firewall: FirewallStatusDto | null, isLoading: 
     return {
       value: latestFirewallError ? 'Error' : 'Pendiente',
       detail: 'Abre Red y Firewall para diagnosticar IP publica, router y CGNAT.',
-      state: latestFirewallError ? createHealthCardState('error') : createHealthCardState('configuration')
+      state: latestFirewallError ? createSummaryCardState('error') : createSummaryCardState('configuration')
     };
   }
 
@@ -1122,7 +1113,7 @@ function createPublicPlaySummary(firewall: FirewallStatusDto | null, isLoading: 
     return {
       value: 'No directo',
       detail: 'Probable CGNAT. Para acceso publico directo haria falta IP publica real o alternativa externa.',
-      state: createHealthCardState('warning')
+      state: createSummaryCardState('warning')
     };
   }
 
@@ -1133,7 +1124,7 @@ function createPublicPlaySummary(firewall: FirewallStatusDto | null, isLoading: 
     return {
       value: copyValue ?? network.publicIp ?? 'Posible',
       detail: 'Sin indicios fuertes de CGNAT; falta validar router y puerto desde otra red.',
-      state: createHealthCardState('ok'),
+      state: createSummaryCardState('ok'),
       copyValue
     };
   }
@@ -1142,14 +1133,14 @@ function createPublicPlaySummary(firewall: FirewallStatusDto | null, isLoading: 
     return {
       value: 'Requiere prueba',
       detail: 'Compara la WAN del router con la IP publica. Si difieren, no hay acceso directo por IPv4.',
-      state: createHealthCardState('warning')
+      state: createSummaryCardState('warning')
     };
   }
 
   return {
     value: 'Sin Internet',
     detail: 'No se pudo consultar la IP publica para evaluar acceso externo.',
-    state: createHealthCardState('optional')
+    state: createSummaryCardState('optional')
   };
 }
 
@@ -1677,9 +1668,9 @@ function renderFirewallSection(title: string, message: string, ports: FirewallPo
 
 function renderNetworkStateCard(
   title: string,
-  summary: { value: string; detail: string; state: ReturnType<typeof createHealthCardState>; copyValue?: string }
+  summary: SummaryCardViewModel
 ): string {
-  return renderHealthCard({
+  return renderSummaryCard({
     title,
     value: summary.value,
     detail: summary.detail,
@@ -1695,12 +1686,7 @@ function getPublicPortFromFirewall(firewall: FirewallStatusDto): string | null {
   return publicPort ? String(publicPort.port) : null;
 }
 
-function createWindowsLocalSummary(firewall: FirewallStatusDto): {
-  value: string;
-  detail: string;
-  state: ReturnType<typeof createHealthCardState>;
-  copyValue?: string;
-} {
+function createWindowsLocalSummary(firewall: FirewallStatusDto): SummaryCardViewModel {
   if (firewall.local.state === 'READY') {
     const port = getPublicPortFromFirewall(firewall);
     const localIp = firewall.external.network.localIpv4[0];
@@ -1709,7 +1695,7 @@ function createWindowsLocalSummary(firewall: FirewallStatusDto): {
     return {
       value: copyValue ?? 'Listo',
       detail: copyValue ? 'Click para copiar la direccion LAN.' : 'Windows permite los puertos locales activos para PalServer.',
-      state: createHealthCardState('ok'),
+      state: createSummaryCardState('ok'),
       copyValue
     };
   }
@@ -1718,7 +1704,7 @@ function createWindowsLocalSummary(firewall: FirewallStatusDto): {
     return {
       value: 'Configurar',
       detail: 'Faltan reglas de entrada en Windows para jugar desde LAN.',
-      state: createHealthCardState('configuration')
+      state: createSummaryCardState('configuration')
     };
   }
 
@@ -1726,30 +1712,25 @@ function createWindowsLocalSummary(firewall: FirewallStatusDto): {
     return {
       value: 'Error',
       detail: 'No se pudo consultar o preparar el estado local de Windows.',
-      state: createHealthCardState('error')
+      state: createSummaryCardState('error')
     };
   }
 
   return {
     value: 'No confirmado',
     detail: 'La verificacion local no esta disponible en este entorno.',
-    state: createHealthCardState('optional')
+    state: createSummaryCardState('optional')
   };
 }
 
-function createExternalAccessSummary(firewall: FirewallStatusDto): {
-  value: string;
-  detail: string;
-  state: ReturnType<typeof createHealthCardState>;
-  copyValue?: string;
-} {
+function createExternalAccessSummary(firewall: FirewallStatusDto): SummaryCardViewModel {
   const network = firewall.external.network;
 
   if (network.cgnatStatus === 'LIKELY') {
     return {
       value: 'Bloqueado directo',
       detail: 'Probable CGNAT o NAT del ISP. El puerto publico no sera directo sin alternativa externa.',
-      state: createHealthCardState('warning')
+      state: createSummaryCardState('warning')
     };
   }
 
@@ -1760,7 +1741,7 @@ function createExternalAccessSummary(firewall: FirewallStatusDto): {
     return {
       value: copyValue ?? 'Posible',
       detail: copyValue ? 'Click para copiar la direccion publica.' : 'Sin indicios fuertes de CGNAT; falta probar el puerto desde otra red.',
-      state: createHealthCardState('ok'),
+      state: createSummaryCardState('ok'),
       copyValue
     };
   }
@@ -1769,14 +1750,14 @@ function createExternalAccessSummary(firewall: FirewallStatusDto): {
     return {
       value: 'Configurar router',
       detail: 'Compara WAN del router con IP publica y crea port forwarding si coinciden.',
-      state: createHealthCardState('configuration')
+      state: createSummaryCardState('configuration')
     };
   }
 
   return {
     value: 'No verificado',
     detail: 'No se pudo consultar la IP publica para evaluar acceso externo.',
-    state: createHealthCardState('error')
+    state: createSummaryCardState('error')
   };
 }
 
@@ -1969,18 +1950,18 @@ function mapFirewallState(state: FirewallStatusDto['local']['state']): {
   label: string;
 } {
   if (state === 'READY') {
-    return createHealthCardState('ok');
+    return createSummaryCardState('ok');
   }
 
   if (state === 'MISSING' || state === 'ERROR') {
-    return createHealthCardState('error');
+    return createSummaryCardState('error');
   }
 
   if (state === 'UNKNOWN') {
-    return createHealthCardState('warning');
+    return createSummaryCardState('warning');
   }
 
-  return createHealthCardState('optional');
+  return createSummaryCardState('optional');
 }
 
 function showFirewallConfirmation(): void {
@@ -2008,32 +1989,6 @@ async function applyFirewallRules(): Promise<void> {
   await refreshState();
 }
 
-function renderHealthCard(details: {
-  id?: string;
-  title: string;
-  value: string;
-  detail: string;
-  target: string;
-  copyValue?: string;
-  icon: string;
-  tone: string;
-  label: string;
-}): string {
-  const idAttribute = details.id ? ` id="${escapeHtml(details.id)}"` : '';
-  const copyAttribute = details.copyValue ? ` data-copy-value="${escapeHtml(details.copyValue)}"` : '';
-
-  return `
-    <button${idAttribute} class="summary-card summary-card--${details.tone}" data-target="${details.target}"${copyAttribute} type="button">
-      <span class="summary-card__body">
-        <span class="summary-card__title">${escapeHtml(details.title)}</span>
-        <strong>${escapeHtml(details.value)}</strong>
-        <small>${escapeHtml(details.detail)}</small>
-      </span>
-      <span class="summary-card__icon" aria-label="${escapeHtml(details.label)}">${details.icon}</span>
-    </button>
-  `;
-}
-
 function replaceSummaryCard(id: string, html: string): void {
   const template = document.createElement('template');
   template.innerHTML = html.trim();
@@ -2043,34 +1998,6 @@ function replaceSummaryCard(id: string, html: string): void {
   if (currentCard && nextCard) {
     currentCard.replaceWith(nextCard);
   }
-}
-
-function createHealthCardState(state: 'ok' | 'error' | 'warning' | 'optional' | 'loading' | 'configuration'): {
-  icon: string;
-  tone: string;
-  label: string;
-} {
-  if (state === 'ok') {
-    return { icon: '&#10003;', tone: 'ok', label: 'Correcto' };
-  }
-
-  if (state === 'error') {
-    return { icon: '&times;', tone: 'error', label: 'Incorrecto' };
-  }
-
-  if (state === 'warning') {
-    return { icon: '!', tone: 'warning', label: 'Revisar' };
-  }
-
-  if (state === 'loading') {
-    return { icon: '', tone: 'loading', label: 'Analizando' };
-  }
-
-  if (state === 'configuration') {
-    return { icon: '&#9881;!', tone: 'configuration', label: 'Requiere configuracion' };
-  }
-
-  return { icon: '&#9881;', tone: 'optional', label: 'Configuracion opcional' };
 }
 
 function renderConfigurationPresets(): string {
