@@ -24,8 +24,9 @@ import {
   type ParsedPalworldSetting,
   type ParsedPalworldSettings
 } from './config/palworld-settings-parser';
-import { formatBytes, formatDateTime, formatLastVerification } from './utils/format';
+import { formatLastVerification } from './utils/format';
 import { cssEscape, escapeHtml, normalizeSearchText } from './utils/text';
+import { renderBackupsView as renderBackupsViewHtml } from './views/backups-view';
 
 const palcmLogoUrl = new URL('./assets/palcm-logo.png', import.meta.url).href;
 
@@ -1283,40 +1284,7 @@ async function renderBackupsView(): Promise<void> {
     latestBackupSummary = await palcmApi.backup.getSummary();
     const summary = latestBackupSummary;
 
-    setContent(`
-      <div class="view-stack view-stack--scroll">
-        <div class="view-header">
-          <div>
-            <span class="view-kicker">BACKUPS</span>
-            <h3>Backups del servidor</h3>
-            <p>${escapeHtml(summary.message)}</p>
-          </div>
-          <div class="view-actions">
-            <button id="create-config-backup" class="secondary-button" type="button">Backup INI</button>
-            <button id="create-world-backup" class="primary-button" type="button">Backup mundo</button>
-          </div>
-        </div>
-        <section class="backup-actions">
-          <article class="backup-source-card">
-            <span>Configuracion activa</span>
-            <strong>${escapeHtml(summary.configurationSourcePath)}</strong>
-          </article>
-          <article class="backup-source-card">
-            <span>Partida del servidor</span>
-            <strong>${escapeHtml(summary.worldSourcePath)}</strong>
-          </article>
-        </section>
-        <section class="backup-layout">
-          ${renderBackupList('Configuracion', summary.configurationBackups)}
-          ${renderBackupList('Mundo', summary.worldBackups)}
-        </section>
-        <div id="backup-confirmation" class="inline-confirm hidden">
-          <span id="backup-confirmation-message">La accion requiere confirmacion.</span>
-          <button id="confirm-backup" class="primary-button" type="button">Confirmar</button>
-          <button id="cancel-backup" class="secondary-button" type="button">Cancelar</button>
-        </div>
-      </div>
-    `);
+    setContent(renderBackupsViewHtml(summary));
     document.querySelector<HTMLButtonElement>('#create-config-backup')?.addEventListener('click', () => {
       showBackupConfirmation('configuration');
     });
@@ -1328,36 +1296,6 @@ async function renderBackupsView(): Promise<void> {
     const message = error instanceof Error ? error.message : String(error);
     renderSimpleView('Backups', `No se pudo leer el estado de backups. ${message}`);
   }
-}
-
-function renderBackupList(title: string, backups: BackupSummaryDto['configurationBackups']): string {
-  return `
-    <section class="backup-list">
-      <div class="backup-list__header">
-        <h4>${escapeHtml(title)}</h4>
-        <span>${String(backups.length)} backups</span>
-      </div>
-      <div class="backup-list__items">
-        ${
-          backups.length > 0
-            ? backups.map((backup) => renderBackupItem(backup)).join('')
-            : '<p class="backup-empty">Todavia no hay backups de este tipo.</p>'
-        }
-      </div>
-    </section>
-  `;
-}
-
-function renderBackupItem(backup: BackupSummaryDto['configurationBackups'][number]): string {
-  return `
-    <article class="backup-item">
-      <span>
-        <strong>${escapeHtml(backup.name)}</strong>
-        <small>${escapeHtml(formatDateTime(backup.createdAt))}</small>
-      </span>
-      <span class="backup-item__meta">${escapeHtml(formatBytes(backup.sizeBytes))}</span>
-    </article>
-  `;
 }
 
 function showBackupConfirmation(kind: 'configuration' | 'world'): void {
