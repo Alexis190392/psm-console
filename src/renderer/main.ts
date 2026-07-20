@@ -98,6 +98,7 @@ rootElement.innerHTML = `
     </section>
   </main>
   <footer id="app-footer" class="app-footer hidden"></footer>
+  <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
 `;
 
 const palcmApi = window.palcm;
@@ -128,6 +129,7 @@ const confirmActionButton = document.querySelector<HTMLButtonElement>('#confirm-
 const cancelActionButton = document.querySelector<HTMLButtonElement>('#cancel-action');
 const contentView = document.querySelector<HTMLDivElement>('#content-view');
 const appFooter = document.querySelector<HTMLElement>('#app-footer');
+const toastRegion = document.querySelector<HTMLElement>('#toast-region');
 const startServerAction = document.querySelector<HTMLButtonElement>('#start-server-action');
 const navLinks = Array.from(document.querySelectorAll<HTMLAnchorElement>('.sidebar__link[data-nav]'));
 const consoleLines: string[] = [];
@@ -137,6 +139,7 @@ let latestFirewallStatus: FirewallStatusDto | null = null;
 let firewallStatusRequest: Promise<FirewallStatusDto> | null = null;
 let latestFirewallError: string | null = null;
 let firewallRequestStartedAt = 0;
+let latestFirewallCheckedAt: Date | null = null;
 let latestLocalAddresses: string[] = [];
 let latestConfiguredPort: string | null = null;
 let latestBackupSummary: BackupSummaryDto | null = null;
@@ -769,6 +772,7 @@ async function renderGeneralView(): Promise<void> {
   const publicPlay = createPublicPlaySummary(latestFirewallStatus, isNetworkLoading);
   const backupSummary = await readBackupSummaryForGeneral();
   const backupState = createBackupSummaryCard(backupSummary);
+  const networkFreshness = formatLastVerification(latestFirewallCheckedAt);
 
   setContent(`
     <div class="view-stack">
@@ -827,6 +831,7 @@ async function renderGeneralView(): Promise<void> {
           ...backupState.state
         })}
       </section>
+      <p class="view-note">Red y firewall: ${escapeHtml(networkFreshness)}.</p>
     </div>
   `);
   bindSummaryCards();
@@ -1184,6 +1189,7 @@ async function saveConfiguration(parsed?: ParsedPalworldSettings): Promise<void>
     content
   });
   await pollOperation(accepted.operationId);
+  showToast('Configuracion guardada');
   activeView = 'server';
   await refreshState();
 }
@@ -1198,6 +1204,7 @@ async function restoreDefaultConfiguration(): Promise<void> {
   renderActiveView();
   const accepted = await palcmApi.config.restoreDefault({ confirmed: true });
   await pollOperation(accepted.operationId);
+  showToast('Configuracion default restaurada');
   activeView = 'server';
   await refreshState();
 }
@@ -1449,6 +1456,7 @@ async function getFirewallStatus(forceRefresh = false): Promise<FirewallStatusDt
       latestFirewallStatus = status;
       latestLocalAddresses = status.external.network.localIpv4;
       latestFirewallError = null;
+      latestFirewallCheckedAt = new Date();
       return status;
     })
     .catch((error: unknown) => {
@@ -1531,7 +1539,7 @@ function renderFirewallStatusView(firewall: FirewallStatusDto): void {
           <div>
             <span class="view-kicker">NETWORK & FIREWALL</span>
             <h3>Firewall y acceso externo</h3>
-            <p>Puertos leidos desde la configuracion activa del servidor.</p>
+            <p>Puertos leidos desde la configuracion activa del servidor. ${escapeHtml(formatLastVerification(latestFirewallCheckedAt))}.</p>
           </div>
           <div class="view-actions">
             <button id="refresh-firewall" class="secondary-button" type="button">Actualizar</button>
@@ -1943,6 +1951,8 @@ async function applyFirewallRules(): Promise<void> {
   const accepted = await palcmApi.firewall.applyRules({ confirmed: true });
   await pollOperation(accepted.operationId);
   latestFirewallStatus = null;
+  latestFirewallCheckedAt = null;
+  showToast('Reglas de Firewall actualizadas');
   activeView = 'network';
   await refreshState();
 }
@@ -2067,11 +2077,13 @@ async function copyToClipboard(value: string, element: HTMLElement): Promise<voi
   try {
     await navigator.clipboard.writeText(value);
     element.classList.add('summary-card--copied');
+    showToast(`Copiado: ${value}`);
     window.setTimeout(() => {
       element.classList.remove('summary-card--copied');
     }, 1400);
   } catch (error) {
     appendConsoleLine(`No se pudo copiar al portapapeles. Valor: ${value}. ${error instanceof Error ? error.message : String(error)}`);
+    showToast('No se pudo copiar al portapapeles', 'error');
   }
 }
 
@@ -2528,6 +2540,7 @@ function applyConfigurationPreset(
   });
 
   appendConsoleLine(`Perfil aplicado en vista: ${preset.label}. Guarda para escribirlo en el INI.`);
+  showToast(`Perfil aplicado: ${preset.label}`);
   updateAdvancedIniPreview(parsed);
 }
 
@@ -2653,6 +2666,7 @@ function discardServerChanges(parsed: ParsedPalworldSettings): void {
 
   closeSettingInfoPanels();
   updateServerDirtyState(parsed);
+  showToast('Cambios descartados');
 }
 
 function showLeaveServerConfirmation(nextView: string): void {
@@ -2706,6 +2720,36 @@ function formatDateTime(value: string): string {
     dateStyle: 'short',
     timeStyle: 'short'
   }).format(new Date(value));
+}
+
+function formatLastVerification(value: Date | null): string {
+  if (!value) {
+    return 'sin verificacion reciente';
+  }
+
+  return `ultima verificacion ${new Intl.DateTimeFormat('es-AR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  }).format(value)}`;
+}
+
+function showToast(message: string, tone: 'info' | 'error' = 'info'): void {
+  if (!toastRegion) {
+    return;
+  }
+
+  const toast = document.createElement('div');
+  toast.className = `toast toast--${tone}`;
+  toast.textContent = message;
+  toastRegion.append(toast);
+
+  window.setTimeout(() => {
+    toast.classList.add('toast--leaving');
+    window.setTimeout(() => {
+      toast.remove();
+    }, 180);
+  }, 2400);
 }
 
 function getSettingDefinition(key: string, value: string): PalworldSettingDefinition {
