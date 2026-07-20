@@ -28,6 +28,8 @@ import {
 import { formatLastVerification } from './utils/format';
 import { cssEscape, escapeHtml, normalizeSearchText } from './utils/text';
 import { renderBackupsView as renderBackupsViewHtml } from './views/backups-view';
+import { renderGeneralView as renderGeneralViewHtml } from './views/general-view';
+import { renderPreflightSummaryView, renderSimpleView as renderSimpleViewHtml } from './views/status-views';
 
 const palcmLogoUrl = new URL('./assets/palcm-logo.png', import.meta.url).href;
 
@@ -832,38 +834,38 @@ async function renderGeneralView(): Promise<void> {
   const backupState = createBackupSummaryCard(backupSummary);
   const networkFreshness = formatLastVerification(latestFirewallCheckedAt);
 
-  setContent(`
-    <div class="view-stack">
-      <section class="summary-grid summary-grid--ready">
-        ${renderSummaryCard({
+  setContent(renderGeneralViewHtml({
+    networkFreshness,
+    cards: [
+      {
           title: 'SteamCMD',
           value: 'Instalado',
           detail: 'Cliente listo para actualizar y validar archivos.',
           target: 'logs',
           ...createSummaryCardState('ok')
-        })}
-        ${renderSummaryCard({
+      },
+      {
           title: 'Servidor',
           value: 'Instalado',
           detail: latestSummary?.serverPath ?? 'PalServer.exe detectado.',
           target: 'server',
           ...createSummaryCardState('ok')
-        })}
-        ${renderSummaryCard({
+      },
+      {
           title: 'Configuracion',
           value: 'Activa',
           detail: latestSummary?.configurationPath ?? 'PalWorldSettings.ini disponible.',
           target: 'server',
           ...createSummaryCardState('ok')
-        })}
-        ${renderSummaryCard({
+      },
+      {
           title: 'Puerto',
           value: port ? `UDP ${port}` : 'Sin validar',
           detail: port ? 'Puerto leido desde la configuracion activa.' : 'No se encontro PublicPort en el INI activo.',
           target: 'network',
           ...portState
-        })}
-        ${renderSummaryCard({
+      },
+      {
           id: 'general-local-play-card',
           title: 'Juego local',
           value: localPlay.value,
@@ -871,8 +873,8 @@ async function renderGeneralView(): Promise<void> {
           copyValue: localPlay.copyValue,
           target: 'network',
           ...localPlay.state
-        })}
-        ${renderSummaryCard({
+      },
+      {
           id: 'general-public-play-card',
           title: 'Juego publico',
           value: publicPlay.value,
@@ -880,18 +882,16 @@ async function renderGeneralView(): Promise<void> {
           copyValue: publicPlay.copyValue,
           target: 'network',
           ...publicPlay.state
-        })}
-        ${renderSummaryCard({
+      },
+      {
           title: 'Backups',
           value: backupState.value,
           detail: backupState.detail,
           target: 'backups',
           ...backupState.state
-        })}
-      </section>
-      <p class="view-note">Red y firewall: ${escapeHtml(networkFreshness)}.</p>
-    </div>
-  `);
+      }
+    ]
+  }));
   bindSummaryCards();
   void hydrateGeneralLocalPreview(port);
   void hydrateGeneralNetworkSummary(port);
@@ -1149,24 +1149,7 @@ function createPublicPlaySummary(firewall: FirewallStatusDto | null, isLoading: 
 function renderPreflightSummary(): void {
   panelStatusHeader?.classList.remove('hidden');
   progressBar?.parentElement?.classList.remove('hidden');
-  setContent(`
-    <div class="view-stack">
-      <section class="summary-grid">
-        <article class="summary-item">
-          <span>Estado</span>
-          <strong>${latestStatus}</strong>
-        </article>
-        <article class="summary-item">
-          <span>Configuracion</span>
-          <strong>${latestActions?.canEditConfiguration ? 'Disponible' : 'Bloqueada'}</strong>
-        </article>
-        <article class="summary-item">
-          <span>Servidor</span>
-          <strong>${latestActions?.canStartServer ? 'Listo para iniciar' : 'Pendiente'}</strong>
-        </article>
-      </section>
-    </div>
-  `);
+  setContent(renderPreflightSummaryView(latestStatus, latestActions));
 }
 
 async function renderServerConfigurationView(): Promise<void> {
@@ -1351,17 +1334,7 @@ function hideRestoreDefaultConfirmation(): void {
 function renderSimpleView(title: string, message: string): void {
   panelStatusHeader?.classList.remove('hidden');
   progressBar?.parentElement?.classList.remove('hidden');
-  setContent(`
-    <div class="view-stack">
-      <div class="view-header">
-        <div>
-          <span class="view-kicker">${escapeHtml(title.toUpperCase())}</span>
-          <h3>${escapeHtml(title)}</h3>
-          <p>${escapeHtml(message)}</p>
-        </div>
-      </div>
-    </div>
-  `);
+  setContent(renderSimpleViewHtml(title, message));
 }
 
 function updateReadyChrome(): void {
