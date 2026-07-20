@@ -235,6 +235,18 @@ button {
   opacity: 0.55;
 }
 
+.primary-button--warning {
+  border-color: rgba(255, 204, 84, 0.42);
+  background: #ffcc54;
+  color: #2a2100;
+}
+
+.primary-button--danger {
+  border-color: rgba(255, 82, 82, 0.45);
+  background: #ff6b63;
+  color: #290806;
+}
+
 .secondary-button {
   min-width: 130px;
   padding: 12px 18px;
@@ -253,6 +265,17 @@ button {
 .secondary-button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+.secondary-button--warning {
+  border-color: rgba(255, 204, 84, 0.32);
+  background: rgba(255, 204, 84, 0.08);
+  color: #ffe2a0;
+}
+
+.secondary-button--warning:hover {
+  border-color: rgba(255, 204, 84, 0.5);
+  background: rgba(255, 204, 84, 0.13);
 }
 
 .workspace {

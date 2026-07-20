@@ -1218,7 +1218,7 @@ function showRestoreDefaultConfirmation(): void {
   appFooter.classList.remove('app-footer--confirm');
   appFooter.innerHTML = `
     <span class="app-footer__message">Se creara un backup y se reemplazara la configuracion activa por los valores default instalados.</span>
-    <button id="confirm-restore-default" class="primary-button" type="button">Confirmar</button>
+    <button id="confirm-restore-default" class="primary-button primary-button--warning" type="button">Restaurar default</button>
     <button id="cancel-restore-default" class="secondary-button" type="button">Cancelar</button>
   `;
   document.querySelector<HTMLButtonElement>('#confirm-restore-default')?.addEventListener('click', () => {
@@ -1414,7 +1414,7 @@ function renderServerFooter(parsed: ParsedPalworldSettings): void {
   appFooter.classList.remove('hidden');
   appFooter.innerHTML = `
     <span id="server-footer-message" class="app-footer__message">Sin cambios pendientes.</span>
-    <button id="restore-default-config" class="secondary-button" type="button">Volver a default</button>
+    <button id="restore-default-config" class="secondary-button secondary-button--warning" type="button">Volver a default</button>
     <button id="discard-config" class="secondary-button" type="button" disabled>Descartar cambios</button>
     <button id="save-config" class="primary-button" type="button">Guardar</button>
   `;
@@ -1543,7 +1543,7 @@ function renderFirewallStatusView(firewall: FirewallStatusDto): void {
           </div>
           <div class="view-actions">
             <button id="refresh-firewall" class="secondary-button" type="button">Actualizar</button>
-            <button id="apply-firewall" class="primary-button" type="button" ${firewall.local.state === 'READY' ? 'disabled' : ''}>
+            <button id="apply-firewall" class="primary-button primary-button--warning" type="button" ${firewall.local.state === 'READY' ? 'disabled' : ''}>
               Configurar Windows
             </button>
           </div>
@@ -1559,7 +1559,7 @@ function renderFirewallStatusView(firewall: FirewallStatusDto): void {
         </section>
         <div id="firewall-confirmation" class="inline-confirm hidden">
           <span>Se crearan reglas de entrada en el Firewall de Windows para los puertos activos. Windows puede pedir permisos de administrador.</span>
-          <button id="confirm-firewall" class="primary-button" type="button">Confirmar</button>
+          <button id="confirm-firewall" class="primary-button primary-button--warning" type="button">Configurar</button>
           <button id="cancel-firewall" class="secondary-button" type="button">Cancelar</button>
         </div>
       </div>
@@ -2681,7 +2681,7 @@ function showLeaveServerConfirmation(nextView: string): void {
   appFooter.innerHTML = `
     <span class="app-footer__message">Hay cambios sin guardar en la configuracion. Si sales ahora no se aplicaran al INI.</span>
     <button id="stay-server-config" class="secondary-button" type="button">Seguir editando</button>
-    <button id="leave-server-config" class="primary-button" type="button">Salir sin guardar</button>
+    <button id="leave-server-config" class="primary-button primary-button--danger" type="button">Salir sin guardar</button>
   `;
 
   document.querySelector<HTMLButtonElement>('#stay-server-config')?.addEventListener('click', () => {
