@@ -117,6 +117,16 @@ npm.cmd run dist
 
 Ese `.exe` es el artefacto portable. Al ejecutarse empaquetado, la aplicacion debe resolver su raiz portable desde la ubicacion real del ejecutable con `app.getPath('exe')` y `path.dirname(...)`; no se debe hardcodear la ruta de desarrollo `D:\MyAPIS\PalCM`.
 
+## Versionado
+
+PalCM usa versionado `x.y.z`:
+
+- `x`: version final productiva. Se mantiene en `0` hasta que el creador indique que corresponde publicar estable.
+- `y`: ciclo de prueba con funcionalidades nuevas.
+- `z`: fixes, ajustes chicos, refactors internos o mejoras de UX/UI dentro del ciclo actual.
+
+La version visible de la app se centraliza en `src/shared/constants/app-info.ts` y la version del artefacto se define en `package.json`. Al cambiar una, cambiar ambas. Mas detalle en `docs/decisions/versioning.md`.
+
 ## SteamCMD en desarrollo
 
 En `start:dev`, SteamCMD se instala dentro de:

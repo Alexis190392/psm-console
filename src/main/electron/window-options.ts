@@ -1,6 +1,7 @@
 import { app, type BrowserWindowConstructorOptions } from 'electron';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { APP_INFO } from '../../shared/constants/app-info';
 
 export interface MainWindowSize {
   width: number;
@@ -27,7 +28,7 @@ export function createMainWindowOptions(size: MainWindowSize = { width: 1440, he
     minHeight: 700,
     center: true,
     movable: true,
-    title: 'PSM Console by >GR477<',
+    title: APP_INFO.displayName,
     titleBarStyle: 'hidden',
     ...(icon ? { icon } : {}),
     backgroundColor: '#0b0f13',

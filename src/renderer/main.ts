@@ -1,4 +1,5 @@
 import './styles.css';
+import { APP_INFO, APP_VERSION_LABEL } from '../shared/constants/app-info';
 import { ApplicationStatus } from '../shared/enums/application-status';
 import type { AllowedActionsDto } from '../shared/dto/allowed-actions.dto';
 import type { BackupSummaryDto } from '../shared/dto/backup-status.dto';
@@ -42,7 +43,7 @@ rootElement.innerHTML = `
   <header class="titlebar">
     <div class="titlebar__brand">
       <img class="titlebar__logo" src="${palcmLogoUrl}" alt="" />
-      <span>PSM Console by &gt;GR477&lt;</span>
+      <span>${escapeHtml(APP_INFO.displayName)}</span>
     </div>
     <div class="titlebar__spacer"></div>
     <button id="window-minimize" class="window-button" aria-label="Minimizar"><span aria-hidden="true">&minus;</span></button>
@@ -53,9 +54,9 @@ rootElement.innerHTML = `
     <section class="sidebar__identity">
       <img class="sidebar__logo" src="${palcmLogoUrl}" alt="" />
       <div>
-        <h1>PSM Console</h1>
-        <p>v0.1.0 Dev</p>
-        <p class="sidebar__credit">by <strong>&gt;GR477&lt;</strong></p>
+        <h1>${escapeHtml(APP_INFO.shortName)}</h1>
+        <p>${escapeHtml(APP_VERSION_LABEL)}</p>
+        <p class="sidebar__credit">by <strong>${escapeHtml(APP_INFO.authorAlias)}</strong></p>
       </div>
     </section>
     <nav class="sidebar__nav" aria-label="Navegacion principal">
