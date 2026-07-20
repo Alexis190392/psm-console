@@ -205,8 +205,74 @@ button {
   opacity: 0.45;
 }
 
+.sidebar-status {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  margin: auto 24px 12px;
+  padding: 12px;
+  border: 1px solid rgba(186, 201, 204, 0.12);
+  border-radius: 8px;
+  background: rgba(11, 15, 19, 0.34);
+}
+
+.sidebar-status__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(186, 201, 204, 0.5);
+  box-shadow: 0 0 0 4px rgba(186, 201, 204, 0.08);
+}
+
+.sidebar-status strong,
+.sidebar-status small {
+  display: block;
+  min-width: 0;
+}
+
+.sidebar-status strong {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.sidebar-status small {
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--color-primary-soft);
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-status--ready .sidebar-status__dot {
+  background: var(--color-primary);
+  box-shadow: 0 0 0 4px rgba(0, 229, 255, 0.12);
+}
+
+.sidebar-status--running .sidebar-status__dot,
+.sidebar-status--starting .sidebar-status__dot {
+  background: #44f0a4;
+  box-shadow: 0 0 0 4px rgba(68, 240, 164, 0.12);
+}
+
+.sidebar-status--starting .sidebar-status__dot {
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.sidebar-status--error .sidebar-status__dot {
+  background: #ff6b63;
+  box-shadow: 0 0 0 4px rgba(255, 107, 99, 0.12);
+}
+
+.sidebar-status--blocked .sidebar-status__dot {
+  background: #ffcc54;
+  box-shadow: 0 0 0 4px rgba(255, 204, 84, 0.12);
+}
+
 .primary-action {
-  margin: auto 24px 24px;
+  margin: 0 24px 24px;
   padding: 14px 20px;
   border: 1px solid rgba(0, 229, 255, 0.25);
   border-radius: 10px;

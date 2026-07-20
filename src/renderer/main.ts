@@ -49,6 +49,13 @@ rootElement.innerHTML = `
       <a class="sidebar__link sidebar__link--locked" data-nav="backups" href="#">Backups</a>
       <a class="sidebar__link sidebar__link--locked" data-nav="logs" href="#">Logs</a>
     </nav>
+    <section id="sidebar-runtime-status" class="sidebar-status sidebar-status--blocked" aria-live="polite">
+      <span class="sidebar-status__dot" aria-hidden="true"></span>
+      <span>
+        <strong>Servidor</strong>
+        <small>Bloqueado</small>
+      </span>
+    </section>
     <button id="start-server-action" class="primary-action" type="button" disabled>Iniciar servidor</button>
   </aside>
   <main class="workspace">
@@ -130,6 +137,7 @@ const cancelActionButton = document.querySelector<HTMLButtonElement>('#cancel-ac
 const contentView = document.querySelector<HTMLDivElement>('#content-view');
 const appFooter = document.querySelector<HTMLElement>('#app-footer');
 const toastRegion = document.querySelector<HTMLElement>('#toast-region');
+const sidebarRuntimeStatus = document.querySelector<HTMLElement>('#sidebar-runtime-status');
 const startServerAction = document.querySelector<HTMLButtonElement>('#start-server-action');
 const navLinks = Array.from(document.querySelectorAll<HTMLAnchorElement>('.sidebar__link[data-nav]'));
 const consoleLines: string[] = [];
@@ -675,18 +683,51 @@ function updateStartServerButton(actions: AllowedActionsDto): void {
   if (latestStatus === ApplicationStatus.SERVER_STARTING) {
     startServerAction.disabled = true;
     startServerAction.textContent = 'Iniciando servidor';
+    updateSidebarRuntimeStatus('starting', 'Iniciando');
     return;
   }
 
   if (latestStatus === ApplicationStatus.SERVER_RUNNING) {
     startServerAction.disabled = !actions.canStopServer;
     startServerAction.textContent = actions.canStopServer ? 'Detener servidor' : 'Servidor activo';
+    updateSidebarRuntimeStatus('running', 'Ejecutandose');
+    return;
+  }
+
+  if (latestStatus === ApplicationStatus.ERROR) {
+    startServerAction.disabled = true;
+    startServerAction.textContent = 'Servidor bloqueado';
+    updateSidebarRuntimeStatus('error', 'Revisar logs');
     return;
   }
 
   const canStart = actions.canStartServer && isLanReadyForServerStart();
   startServerAction.disabled = !canStart;
   startServerAction.textContent = canStart ? 'Iniciar servidor' : 'Servidor bloqueado';
+  updateSidebarRuntimeStatus(canStart ? 'ready' : 'blocked', canStart ? 'Listo para iniciar' : 'Bloqueado');
+}
+
+function updateSidebarRuntimeStatus(
+  tone: 'ready' | 'blocked' | 'starting' | 'running' | 'error',
+  label: string
+): void {
+  if (!sidebarRuntimeStatus) {
+    return;
+  }
+
+  sidebarRuntimeStatus.classList.remove(
+    'sidebar-status--ready',
+    'sidebar-status--blocked',
+    'sidebar-status--starting',
+    'sidebar-status--running',
+    'sidebar-status--error'
+  );
+  sidebarRuntimeStatus.classList.add(`sidebar-status--${tone}`);
+
+  const labelElement = sidebarRuntimeStatus.querySelector('small');
+  if (labelElement) {
+    labelElement.textContent = label;
+  }
 }
 
 function refreshStartButtonState(): void {
