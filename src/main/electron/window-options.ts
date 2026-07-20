@@ -1,14 +1,35 @@
-import type { BrowserWindowConstructorOptions } from 'electron';
+import { app, type BrowserWindowConstructorOptions } from 'electron';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-export function createMainWindowOptions(): BrowserWindowConstructorOptions {
+export interface MainWindowSize {
+  width: number;
+  height: number;
+}
+
+function resolveWindowIcon(): string | undefined {
+  const electronApp = app as { isPackaged?: boolean } | undefined;
+  const resourcesPath = typeof process.resourcesPath === 'string' ? process.resourcesPath : process.cwd();
+  const candidates = electronApp?.isPackaged
+    ? [join(resourcesPath, 'palcm-logo.ico')]
+    : [join(process.cwd(), 'build', 'palcm-logo.ico')];
+
+  return candidates.find((candidate) => existsSync(candidate));
+}
+
+export function createMainWindowOptions(size: MainWindowSize = { width: 1440, height: 900 }): BrowserWindowConstructorOptions {
+  const icon = resolveWindowIcon();
+
   return {
-    width: 1440,
-    height: 900,
+    width: size.width,
+    height: size.height,
     minWidth: 1100,
     minHeight: 700,
-    title: 'Palworld Server Manager',
+    center: true,
+    movable: true,
+    title: 'PSM Console by >GR477<',
     titleBarStyle: 'hidden',
+    ...(icon ? { icon } : {}),
     backgroundColor: '#0b0f13',
     webPreferences: {
       preload: join(__dirname, '..', 'preload', 'preload.js'),

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ApplicationStateService } from '../src/backend/application-state/application-state.service';
 import type { PalworldConfigurationService } from '../src/backend/palworld-configuration/palworld-configuration.service';
 import type { PalworldInstallationService } from '../src/backend/palworld-installation/palworld-installation.service';
+import type { PalworldProcessService } from '../src/backend/palworld-process/palworld-process.service';
 import { PortablePathService } from '../src/backend/portable-path/portable-path.service';
 import { ApplicationStatus } from '../src/shared/enums/application-status';
 import type { SteamCmdService } from '../src/backend/steamcmd/steamcmd.service';
@@ -12,7 +13,8 @@ describe('ApplicationStateService', () => {
       new PortablePathService(),
       createSteamCmdServiceStub('MISSING'),
       createPalworldInstallationServiceStub('MISSING'),
-      createPalworldConfigurationServiceStub('MISSING')
+      createPalworldConfigurationServiceStub('MISSING'),
+      createPalworldProcessServiceStub('STOPPED')
     );
 
     expect(service.getStatus().status).toBe(ApplicationStatus.STEAMCMD_MISSING);
@@ -27,7 +29,8 @@ describe('ApplicationStateService', () => {
       new PortablePathService(),
       createSteamCmdServiceStub('READY'),
       createPalworldInstallationServiceStub('MISSING'),
-      createPalworldConfigurationServiceStub('MISSING')
+      createPalworldConfigurationServiceStub('MISSING'),
+      createPalworldProcessServiceStub('STOPPED')
     );
 
     expect(service.getStatus().status).toBe(ApplicationStatus.SERVER_MISSING);
@@ -42,7 +45,8 @@ describe('ApplicationStateService', () => {
       new PortablePathService(),
       createSteamCmdServiceStub('READY'),
       createPalworldInstallationServiceStub('READY'),
-      createPalworldConfigurationServiceStub('MISSING')
+      createPalworldConfigurationServiceStub('MISSING'),
+      createPalworldProcessServiceStub('STOPPED')
     );
 
     expect(service.getStatus().status).toBe(ApplicationStatus.CONFIGURATION_MISSING);
@@ -57,10 +61,27 @@ describe('ApplicationStateService', () => {
       new PortablePathService(),
       createSteamCmdServiceStub('READY'),
       createPalworldInstallationServiceStub('READY'),
-      createPalworldConfigurationServiceStub('READY')
+      createPalworldConfigurationServiceStub('READY'),
+      createPalworldProcessServiceStub('STOPPED')
     );
 
     expect(service.getStatus().status).toBe(ApplicationStatus.READY);
+  });
+
+  it('moves to server running when the Palworld process is active', () => {
+    const service = new ApplicationStateService(
+      new PortablePathService(),
+      createSteamCmdServiceStub('READY'),
+      createPalworldInstallationServiceStub('READY'),
+      createPalworldConfigurationServiceStub('READY'),
+      createPalworldProcessServiceStub('RUNNING')
+    );
+
+    expect(service.getStatus().status).toBe(ApplicationStatus.SERVER_RUNNING);
+    expect(service.getAllowedActions()).toMatchObject({
+      canStartServer: false,
+      canStopServer: true
+    });
   });
 });
 
@@ -97,4 +118,16 @@ function createPalworldConfigurationServiceStub(status: 'MISSING' | 'READY'): Pa
       message: status
     })
   } as PalworldConfigurationService;
+}
+
+function createPalworldProcessServiceStub(state: 'STOPPED' | 'RUNNING'): PalworldProcessService {
+  return {
+    getRuntimeStatus: () => ({
+      state,
+      executablePath: 'C:\\portable\\server\\palworld\\PalServer.exe',
+      updatedAt: new Date().toISOString(),
+      message: state,
+      logs: []
+    })
+  } as unknown as PalworldProcessService;
 }

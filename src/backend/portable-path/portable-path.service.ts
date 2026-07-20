@@ -20,6 +20,16 @@ export class PortablePathService {
   ) {}
 
   getPortableRoot(): string {
+    const portableExecutableDirectory = process.env['PORTABLE_EXECUTABLE_DIR'];
+    if (portableExecutableDirectory) {
+      return portableExecutableDirectory;
+    }
+
+    const electronExecutablePath = process.env['PALCM_ELECTRON_EXE_PATH'];
+    if (process.env['PALCM_ELECTRON_IS_PACKAGED'] === 'true' && electronExecutablePath) {
+      return dirname(electronExecutablePath);
+    }
+
     if (this.appPathProvider?.isPackaged === true) {
       return dirname(this.appPathProvider.getPath('exe'));
     }

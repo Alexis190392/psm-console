@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { OperationManagerService } from '../operations/operation-manager.service';
 import { PortablePathService } from '../portable-path/portable-path.service';
@@ -32,7 +32,7 @@ export class PalworldConfigurationService {
         ? state.configuration?.templatePath ?? this.getTemplatePath()
         : this.getTemplatePath();
     const activePath = persistedActivePath && existsSync(persistedActivePath) ? persistedActivePath : this.getActivePath();
-    const isReady = existsSync(activePath);
+    const isReady = this.isUsableConfigurationFile(activePath);
 
     if (isReady) {
       this.portableStateService.rememberConfiguration(templatePath, activePath);
@@ -44,7 +44,9 @@ export class PalworldConfigurationService {
       activePath,
       message: isReady
         ? 'La configuracion activa existe.'
-        : 'Falta crear la configuracion activa desde la plantilla instalada.'
+        : existsSync(activePath)
+          ? 'La configuracion activa existe, pero esta vacia o no contiene OptionSettings valido.'
+          : 'Falta crear la configuracion activa desde la plantilla instalada.'
     };
   }
 
@@ -72,9 +74,14 @@ export class PalworldConfigurationService {
       throw new Error(`ACTIVE_CONFIGURATION_NOT_FOUND: ${activePath}`);
     }
 
+    const content = await readFile(activePath, 'utf8');
+    if (!this.isUsableConfigurationContent(content)) {
+      throw new Error(`ACTIVE_CONFIGURATION_INVALID: ${activePath}`);
+    }
+
     return {
       path: activePath,
-      content: await readFile(activePath, 'utf8'),
+      content,
       updatedAt: new Date().toISOString()
     };
   }
@@ -122,7 +129,9 @@ export class PalworldConfigurationService {
         throw new Error(`DEFAULT_CONFIGURATION_TEMPLATE_NOT_FOUND: ${templatePath}`);
       }
 
-      if (existsSync(activePath)) {
+      await this.assertUsableConfigurationFile(templatePath, 'DEFAULT_CONFIGURATION_TEMPLATE_INVALID');
+
+      if (this.isUsableConfigurationFile(activePath)) {
         this.portableStateService.rememberConfiguration(templatePath, activePath);
         this.operationManagerService.update(operationId, {
           status: 'COMPLETED',
@@ -130,6 +139,18 @@ export class PalworldConfigurationService {
           message: 'La configuracion activa ya existia.'
         });
         return;
+      }
+
+      if (existsSync(activePath)) {
+        const backupPath = join(
+          this.portablePathService.getPortableRoot(),
+          'backups',
+          'configuration',
+          `PalWorldSettings.invalid.${new Date().toISOString().replace(/[:.]/g, '-')}.ini`
+        );
+        await mkdir(dirname(backupPath), { recursive: true });
+        await copyFile(activePath, backupPath);
+        this.operationManagerService.appendLog(operationId, `backup invalid "${activePath}" "${backupPath}"`);
       }
 
       this.operationManagerService.update(operationId, {
@@ -170,6 +191,10 @@ export class PalworldConfigurationService {
     try {
       if (!existsSync(activePath)) {
         throw new Error(`ACTIVE_CONFIGURATION_NOT_FOUND: ${activePath}`);
+      }
+
+      if (!this.isUsableConfigurationContent(content)) {
+        throw new Error('CONFIGURATION_CONTENT_INVALID: falta OptionSettings valido.');
       }
 
       const backupPath = join(
@@ -229,6 +254,8 @@ export class PalworldConfigurationService {
         throw new Error(`DEFAULT_CONFIGURATION_TEMPLATE_NOT_FOUND: ${templatePath}`);
       }
 
+      await this.assertUsableConfigurationFile(templatePath, 'DEFAULT_CONFIGURATION_TEMPLATE_INVALID');
+
       if (!existsSync(activePath)) {
         throw new Error(`ACTIVE_CONFIGURATION_NOT_FOUND: ${activePath}`);
       }
@@ -285,5 +312,29 @@ export class PalworldConfigurationService {
       'WindowsServer',
       'PalWorldSettings.ini'
     );
+  }
+
+  private isUsableConfigurationFile(path: string): boolean {
+    if (!existsSync(path)) {
+      return false;
+    }
+
+    try {
+      return this.isUsableConfigurationContent(readFileSync(path, 'utf8'));
+    } catch {
+      return false;
+    }
+  }
+
+  private async assertUsableConfigurationFile(path: string, code: string): Promise<void> {
+    const content = await readFile(path, 'utf8');
+    if (!this.isUsableConfigurationContent(content)) {
+      throw new Error(`${code}: ${path}`);
+    }
+  }
+
+  private isUsableConfigurationContent(content: string): boolean {
+    const match = content.match(/OptionSettings=\(([\s\S]*)\)/);
+    return Boolean(match?.[1]?.includes('='));
   }
 }

@@ -1,11 +1,17 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, screen } from 'electron';
 import { join } from 'node:path';
 import { createNestContext } from '../bootstrap/nest-bootstrap';
 import { registerIpcHandlers } from '../ipc/register-ipc-handlers';
 import { createMainWindowOptions } from './window-options';
 
 async function createMainWindow(): Promise<BrowserWindow> {
-  const window = new BrowserWindow(createMainWindowOptions());
+  const { workAreaSize } = screen.getPrimaryDisplay();
+  const window = new BrowserWindow(
+    createMainWindowOptions({
+      width: Math.max(1100, Math.min(1440, workAreaSize.width)),
+      height: Math.max(700, Math.min(900, workAreaSize.height))
+    })
+  );
 
   if (app.isPackaged) {
     await window.loadFile(join(__dirname, '..', '..', 'renderer', 'index.html'));
@@ -17,6 +23,9 @@ async function createMainWindow(): Promise<BrowserWindow> {
 }
 
 async function bootstrap(): Promise<void> {
+  process.env['PALCM_ELECTRON_IS_PACKAGED'] = app.isPackaged ? 'true' : 'false';
+  process.env['PALCM_ELECTRON_EXE_PATH'] = app.getPath('exe');
+
   const nestContext = await createNestContext();
   registerIpcHandlers(ipcMain, nestContext);
 

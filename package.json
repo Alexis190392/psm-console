@@ -2,7 +2,9 @@
   "name": "palcm",
   "version": "0.1.0",
   "private": true,
-  "description": "Palworld Portable Server Manager",
+  "description": "PSM Console by >GR477< - Palworld Server Manager",
+  "author": "Alexis Joel Dávila (>GR477<)",
+  "copyright": "Copyright © 2026 Alexis Joel Dávila (>GR477<)",
   "main": "dist/main/electron/main.js",
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
@@ -41,16 +43,23 @@
   },
   "build": {
     "appId": "com.palcm.servermanager",
-    "productName": "Palworld Server Manager",
+    "productName": "PSM Console by GR477",
     "asar": true,
     "files": [
       "dist/**",
       "package.json"
     ],
+    "extraResources": [
+      {
+        "from": "build/palcm-logo.ico",
+        "to": "palcm-logo.ico"
+      }
+    ],
     "directories": {
       "output": "release"
     },
     "win": {
+      "icon": "build/palcm-logo.ico",
       "target": [
         "nsis",
         "portable"

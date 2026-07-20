@@ -103,6 +103,8 @@ El nombre final lo define `electron-builder` usando `productName` y `version`, p
 release/PalCM-Portable-0.1.0.exe
 ```
 
+La marca visible de la app es `PSM Console by >GR477<`. Para evitar caracteres invalidos en rutas de Windows, el `productName` de empaquetado usa `PSM Console by GR477`.
+
 Otros comandos de empaquetado:
 
 ```powershell

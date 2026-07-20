@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { OperationManagerService } from '../src/backend/operations/operation-manager.service';
@@ -49,7 +49,7 @@ describe('PalworldConfigurationService', () => {
 
   it('creates the active configuration from the installed template', async () => {
     await mkdir(serverRoot, { recursive: true });
-    await writeFile(templatePath, '[/Script/Pal.PalGameWorldSettings]\nOptionSettings=()');
+    await writeFile(templatePath, '[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(Difficulty=None)');
     const operationManager = new OperationManagerService();
     const service = new PalworldConfigurationService(portablePathService, operationManager, portableStateService);
 
@@ -60,33 +60,63 @@ describe('PalworldConfigurationService', () => {
     expect(service.getStatus().status).toBe('READY');
   });
 
+  it('reports missing when the active configuration exists but has no usable OptionSettings', async () => {
+    await mkdir(join(serverRoot, 'Pal', 'Saved', 'Config', 'WindowsServer'), { recursive: true });
+    await writeFile(templatePath, '[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(Difficulty=None)');
+    await writeFile(activePath, '\r\n');
+    const service = new PalworldConfigurationService(
+      portablePathService,
+      new OperationManagerService(),
+      portableStateService
+    );
+
+    expect(service.getStatus()).toMatchObject({
+      status: 'MISSING',
+      activePath
+    });
+  });
+
+  it('replaces an invalid active configuration from the installed template after confirmation', async () => {
+    await mkdir(join(serverRoot, 'Pal', 'Saved', 'Config', 'WindowsServer'), { recursive: true });
+    await writeFile(templatePath, '[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(Difficulty=None)');
+    await writeFile(activePath, '\r\n');
+    const operationManager = new OperationManagerService();
+    const service = new PalworldConfigurationService(portablePathService, operationManager, portableStateService);
+
+    const accepted = service.createDefault({ confirmed: true });
+    await waitForOperation(accepted.operationId, operationManager);
+
+    await expect(readFile(activePath, 'utf8')).resolves.toContain('OptionSettings=(Difficulty=None)');
+    expect(service.getStatus().status).toBe('READY');
+  });
+
   it('reads and saves the active configuration with a backup', async () => {
     await mkdir(join(serverRoot, 'Pal', 'Saved', 'Config', 'WindowsServer'), { recursive: true });
-    await writeFile(templatePath, 'template');
-    await writeFile(activePath, 'before');
+    await writeFile(templatePath, '[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(Difficulty=None)');
+    await writeFile(activePath, '[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(Difficulty=None)');
     const operationManager = new OperationManagerService();
     const service = new PalworldConfigurationService(portablePathService, operationManager, portableStateService);
 
     await expect(service.readActive()).resolves.toMatchObject({
       path: activePath,
-      content: 'before'
+      content: '[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(Difficulty=None)'
     });
 
     const accepted = service.saveActive({
       confirmed: true,
-      content: 'after'
+      content: '[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(Difficulty=Normal)'
     });
     await waitForOperation(accepted.operationId, operationManager);
 
     await expect(service.readActive()).resolves.toMatchObject({
-      content: 'after'
+      content: '[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(Difficulty=Normal)'
     });
   });
 
   it('restores the active configuration from the default template', async () => {
     await mkdir(join(serverRoot, 'Pal', 'Saved', 'Config', 'WindowsServer'), { recursive: true });
-    await writeFile(templatePath, 'default-content');
-    await writeFile(activePath, 'custom-content');
+    await writeFile(templatePath, '[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(Difficulty=None)');
+    await writeFile(activePath, '[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(Difficulty=Hard)');
     const operationManager = new OperationManagerService();
     const service = new PalworldConfigurationService(portablePathService, operationManager, portableStateService);
 
@@ -94,7 +124,7 @@ describe('PalworldConfigurationService', () => {
     await waitForOperation(accepted.operationId, operationManager);
 
     await expect(service.readActive()).resolves.toMatchObject({
-      content: 'default-content'
+      content: '[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(Difficulty=None)'
     });
   });
 });

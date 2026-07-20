@@ -13,6 +13,8 @@ export const confirmationRequiredActions = [
   'firewall:update-rule',
   'firewall:remove-rule',
   'backup:create',
+  'backup:create-configuration',
+  'backup:create-world',
   'backup:restore',
   'backup:delete'
 ] as const;

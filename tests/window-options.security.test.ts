@@ -17,4 +17,16 @@ describe('Electron window security options', () => {
 
     expect(options.webPreferences?.preload).toContain('preload.js');
   });
+
+  it('keeps the approved minimum size and accepts display-aware initial size', () => {
+    const options = createMainWindowOptions({ width: 1200, height: 800 });
+
+    expect(options).toMatchObject({
+      width: 1200,
+      height: 800,
+      minWidth: 1100,
+      minHeight: 700,
+      movable: true
+    });
+  });
 });

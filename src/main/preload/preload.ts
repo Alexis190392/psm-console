@@ -1,7 +1,9 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { AllowedActionsDto } from '../../shared/dto/allowed-actions.dto';
 import type { ApplicationStatusDto } from '../../shared/dto/application-status.dto';
+import type { BackupCreateRequestDto, BackupSummaryDto } from '../../shared/dto/backup-status.dto';
 import type { OperationAcceptedDto, OperationProgressDto } from '../../shared/dto/operation-progress.dto';
+import type { FirewallApplyRulesRequestDto, FirewallStatusDto } from '../../shared/dto/firewall-status.dto';
 import type {
   PalworldConfigurationFileDto,
   PalworldRestoreDefaultConfigurationRequestDto,
@@ -15,6 +17,11 @@ import type {
   PalworldInstallationStatusDto,
   PalworldInstallRequestDto
 } from '../../shared/dto/palworld-installation-status.dto';
+import type {
+  PalworldRuntimeStatusDto,
+  PalworldStartRequestDto,
+  PalworldStopRequestDto
+} from '../../shared/dto/palworld-runtime-status.dto';
 import type { SteamCmdInstallRequestDto, SteamCmdStatusDto } from '../../shared/dto/steamcmd-status.dto';
 
 const ipcChannels = {
@@ -25,11 +32,20 @@ const ipcChannels = {
   steamCmdInstall: 'steamcmd:install',
   serverGetInstallationStatus: 'server:get-installation-status',
   serverInstall: 'server:install',
+  serverStart: 'server:start',
+  serverStop: 'server:stop',
+  serverGetRuntimeStatus: 'server:get-runtime-status',
   configRead: 'config:read',
   configValidate: 'config:validate',
   configSave: 'config:save',
   configCreateDefault: 'config:create-default',
   configRestoreDefault: 'config:restore-default',
+  firewallGetStatus: 'firewall:get-status',
+  firewallCreateRule: 'firewall:create-rule',
+  networkGetLocalAddresses: 'network:get-local-addresses',
+  backupGetSummary: 'backup:get-summary',
+  backupCreateConfiguration: 'backup:create-configuration',
+  backupCreateWorld: 'backup:create-world',
   windowMinimize: 'window:minimize',
   windowToggleMaximize: 'window:toggle-maximize',
   windowClose: 'window:close'
@@ -50,6 +66,9 @@ export interface PalcmApi {
   server: {
     getInstallationStatus: () => Promise<PalworldInstallationStatusDto>;
     install: (request: PalworldInstallRequestDto) => Promise<OperationAcceptedDto>;
+    start: (request: PalworldStartRequestDto) => Promise<OperationAcceptedDto>;
+    stop: (request: PalworldStopRequestDto) => Promise<OperationAcceptedDto>;
+    getRuntimeStatus: () => Promise<PalworldRuntimeStatusDto>;
   };
   config: {
     getStatus: () => Promise<PalworldConfigurationStatusDto>;
@@ -57,6 +76,18 @@ export interface PalcmApi {
     save: (request: PalworldSaveConfigurationRequestDto) => Promise<OperationAcceptedDto>;
     restoreDefault: (request: PalworldRestoreDefaultConfigurationRequestDto) => Promise<OperationAcceptedDto>;
     createDefault: (request: PalworldCreateDefaultConfigurationRequestDto) => Promise<OperationAcceptedDto>;
+  };
+  firewall: {
+    getStatus: () => Promise<FirewallStatusDto>;
+    applyRules: (request: FirewallApplyRulesRequestDto) => Promise<OperationAcceptedDto>;
+  };
+  network: {
+    getLocalAddresses: () => Promise<string[]>;
+  };
+  backup: {
+    getSummary: () => Promise<BackupSummaryDto>;
+    createConfiguration: (request: BackupCreateRequestDto) => Promise<OperationAcceptedDto>;
+    createWorld: (request: BackupCreateRequestDto) => Promise<OperationAcceptedDto>;
   };
   window: {
     minimize: () => Promise<void>;
@@ -83,7 +114,13 @@ const api: PalcmApi = {
     getInstallationStatus: () =>
       ipcRenderer.invoke(ipcChannels.serverGetInstallationStatus) as Promise<PalworldInstallationStatusDto>,
     install: (request) =>
-      ipcRenderer.invoke(ipcChannels.serverInstall, request) as Promise<OperationAcceptedDto>
+      ipcRenderer.invoke(ipcChannels.serverInstall, request) as Promise<OperationAcceptedDto>,
+    start: (request) =>
+      ipcRenderer.invoke(ipcChannels.serverStart, request) as Promise<OperationAcceptedDto>,
+    stop: (request) =>
+      ipcRenderer.invoke(ipcChannels.serverStop, request) as Promise<OperationAcceptedDto>,
+    getRuntimeStatus: () =>
+      ipcRenderer.invoke(ipcChannels.serverGetRuntimeStatus) as Promise<PalworldRuntimeStatusDto>
   },
   config: {
     read: () => ipcRenderer.invoke(ipcChannels.configRead) as Promise<PalworldConfigurationFileDto>,
@@ -93,6 +130,21 @@ const api: PalcmApi = {
       ipcRenderer.invoke(ipcChannels.configRestoreDefault, request) as Promise<OperationAcceptedDto>,
     createDefault: (request) =>
       ipcRenderer.invoke(ipcChannels.configCreateDefault, request) as Promise<OperationAcceptedDto>
+  },
+  firewall: {
+    getStatus: () => ipcRenderer.invoke(ipcChannels.firewallGetStatus) as Promise<FirewallStatusDto>,
+    applyRules: (request) =>
+      ipcRenderer.invoke(ipcChannels.firewallCreateRule, request) as Promise<OperationAcceptedDto>
+  },
+  network: {
+    getLocalAddresses: () => ipcRenderer.invoke(ipcChannels.networkGetLocalAddresses) as Promise<string[]>
+  },
+  backup: {
+    getSummary: () => ipcRenderer.invoke(ipcChannels.backupGetSummary) as Promise<BackupSummaryDto>,
+    createConfiguration: (request) =>
+      ipcRenderer.invoke(ipcChannels.backupCreateConfiguration, request) as Promise<OperationAcceptedDto>,
+    createWorld: (request) =>
+      ipcRenderer.invoke(ipcChannels.backupCreateWorld, request) as Promise<OperationAcceptedDto>
   },
   window: {
     minimize: () => ipcRenderer.invoke(ipcChannels.windowMinimize) as Promise<void>,

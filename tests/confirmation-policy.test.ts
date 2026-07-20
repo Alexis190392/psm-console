@@ -6,6 +6,8 @@ describe('confirmation policy', () => {
     expect(requiresUserConfirmation('steamcmd:install')).toBe(true);
     expect(requiresUserConfirmation('server:install')).toBe(true);
     expect(requiresUserConfirmation('firewall:create-rule')).toBe(true);
+    expect(requiresUserConfirmation('backup:create-configuration')).toBe(true);
+    expect(requiresUserConfirmation('backup:create-world')).toBe(true);
     expect(requiresUserConfirmation('backup:restore')).toBe(true);
   });
 
