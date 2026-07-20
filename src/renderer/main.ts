@@ -14,6 +14,7 @@ import { renderInlineConfirm } from './components/inline-confirm';
 import { bindWindowControls } from './components/window-controls';
 import { type PalworldSettingDefinition } from './config/palworld-settings-catalog';
 import { CONFIGURATION_PRESETS } from './config/configuration-presets';
+import { hasConfigurationChangedExternally } from './config/configuration-change-guard';
 import { formatSelectOptionLabel, getSettingDefinition } from './config/setting-definition-resolver';
 import {
   formatSettingValue,
@@ -1207,6 +1208,10 @@ async function saveConfiguration(parsed?: ParsedPalworldSettings): Promise<void>
     return;
   }
 
+  if (parsed && !(await canSaveCurrentConfiguration(parsed))) {
+    return;
+  }
+
   appendConsoleLine('Confirmado: guardar configuracion activa.');
   navigationState.set('logs');
   renderActiveView();
@@ -1218,6 +1223,32 @@ async function saveConfiguration(parsed?: ParsedPalworldSettings): Promise<void>
   showToast('Configuracion guardada');
   navigationState.set('server');
   await refreshState();
+}
+
+async function canSaveCurrentConfiguration(parsed: ParsedPalworldSettings): Promise<boolean> {
+  if (!palcmApi) {
+    return false;
+  }
+
+  try {
+    const current = await palcmApi.config.read();
+
+    if (!hasConfigurationChangedExternally(parsed.originalContent, current.content)) {
+      return true;
+    }
+
+    const message = 'El INI activo cambio fuera de la app. Recarga la pestaña Servidor antes de guardar para no pisar cambios externos.';
+    appendConsoleLine(message);
+    showToast('El INI cambio fuera de la app. Recarga antes de guardar.', 'error');
+    setText(document.querySelector('#server-footer-message'), message);
+    return false;
+  } catch (error) {
+    const message = `No se pudo verificar si el INI cambio por fuera. Guardado cancelado. ${error instanceof Error ? error.message : String(error)}`;
+    appendConsoleLine(message);
+    showToast('No se pudo verificar el INI activo', 'error');
+    setText(document.querySelector('#server-footer-message'), message);
+    return false;
+  }
 }
 
 async function restoreDefaultConfiguration(): Promise<void> {
