@@ -19,6 +19,7 @@ import {
   type ParsedPalworldSetting,
   type ParsedPalworldSettings
 } from './config/palworld-settings-parser';
+import { formatBytes, formatDateTime, formatLastVerification } from './utils/format';
 import { cssEscape, escapeHtml, normalizeSearchText } from './utils/text';
 
 const palcmLogoUrl = new URL('./assets/palcm-logo.png', import.meta.url).href;
@@ -2631,41 +2632,6 @@ function showLeaveServerConfirmation(nextView: string): void {
     activeView = nextView;
     renderActiveView();
   });
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) {
-    return `${String(bytes)} B`;
-  }
-
-  if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(1)} KB`;
-  }
-
-  if (bytes < 1024 * 1024 * 1024) {
-    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-  }
-
-  return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
-}
-
-function formatDateTime(value: string): string {
-  return new Intl.DateTimeFormat('es-AR', {
-    dateStyle: 'short',
-    timeStyle: 'short'
-  }).format(new Date(value));
-}
-
-function formatLastVerification(value: Date | null): string {
-  if (!value) {
-    return 'sin verificacion reciente';
-  }
-
-  return `ultima verificacion ${new Intl.DateTimeFormat('es-AR', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
-  }).format(value)}`;
 }
 
 function showToast(message: string, tone: 'info' | 'error' = 'info'): void {
