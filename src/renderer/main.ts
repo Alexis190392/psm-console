@@ -6,6 +6,7 @@ import type { BackupSummaryDto } from '../shared/dto/backup-status.dto';
 import type { FirewallPortCheckDto, FirewallStatusDto } from '../shared/dto/firewall-status.dto';
 import type { LogModule } from '../shared/dto/log-status.dto';
 import type { OperationProgressDto } from '../shared/dto/operation-progress.dto';
+import type { PalworldRuntimeStatusDto } from '../shared/dto/palworld-runtime-status.dto';
 import {
   createSummaryCardState,
   renderSummaryCard,
@@ -856,6 +857,8 @@ async function renderGeneralView(): Promise<void> {
   const publicPlay = createPublicPlaySummary(latestFirewallStatus, isNetworkLoading);
   const backupSummary = await readBackupSummaryForGeneral();
   const backupState = createBackupSummaryCard(backupSummary);
+  const serverRuntime = await readServerRuntimeForGeneral();
+  const serverState = createServerRuntimeSummary(serverRuntime);
   const networkFreshness = formatLastVerification(latestFirewallCheckedAt);
 
   setContent(renderGeneralViewHtml({
@@ -870,10 +873,10 @@ async function renderGeneralView(): Promise<void> {
       },
       {
           title: 'Servidor',
-          value: 'Instalado',
-          detail: latestSummary?.serverPath ?? 'PalServer.exe detectado.',
-          target: 'server',
-          ...createSummaryCardState('ok')
+          value: serverState.value,
+          detail: serverState.detail,
+          target: serverState.state.tone === 'error' ? 'logs' : 'server',
+          ...serverState.state
       },
       {
           title: 'Configuracion',
@@ -933,6 +936,67 @@ async function readBackupSummaryForGeneral(): Promise<BackupSummaryDto | null> {
     appendConsoleLine(`No se pudo leer el resumen de backups: ${error instanceof Error ? error.message : String(error)}`);
     return null;
   }
+}
+
+async function readServerRuntimeForGeneral(): Promise<PalworldRuntimeStatusDto | null> {
+  if (!palcmApi) {
+    return null;
+  }
+
+  try {
+    return await palcmApi.server.getRuntimeStatus();
+  } catch (error) {
+    appendConsoleLine(`No se pudo leer el runtime del servidor: ${error instanceof Error ? error.message : String(error)}`);
+    return null;
+  }
+}
+
+function createServerRuntimeSummary(runtime: PalworldRuntimeStatusDto | null): SummaryCardViewModel {
+  if (!runtime) {
+    return {
+      value: 'Instalado',
+      detail: latestSummary?.serverPath ?? 'PalServer.exe detectado.',
+      state: createSummaryCardState('ok')
+    };
+  }
+
+  if (runtime.state === 'RUNNING') {
+    return {
+      value: 'Ejecutandose',
+      detail: runtime.pid ? `Activo. PID ${String(runtime.pid)}.` : 'Activo detectado por la app.',
+      state: createSummaryCardState('ok')
+    };
+  }
+
+  if (runtime.state === 'STARTING') {
+    return {
+      value: 'Iniciando',
+      detail: runtime.message,
+      state: createSummaryCardState('loading')
+    };
+  }
+
+  if (runtime.state === 'STOPPING') {
+    return {
+      value: 'Deteniendo',
+      detail: runtime.message,
+      state: createSummaryCardState('warning')
+    };
+  }
+
+  if (runtime.state === 'ERROR') {
+    return {
+      value: 'Revisar logs',
+      detail: runtime.message,
+      state: createSummaryCardState('error')
+    };
+  }
+
+  return {
+    value: 'Detenido',
+    detail: 'Listo para iniciar desde la app cuando la red local este OK.',
+    state: createSummaryCardState('optional')
+  };
 }
 
 function createBackupSummaryCard(summary: BackupSummaryDto | null): SummaryCardViewModel {
