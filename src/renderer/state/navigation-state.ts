@@ -1,4 +1,4 @@
-export type RendererView = 'home' | 'server' | 'players' | 'admin' | 'network' | 'backups' | 'logs';
+export type RendererView = 'home' | 'server' | 'admin' | 'network' | 'backups' | 'logs';
 
 export class NavigationState {
   #current: RendererView;
@@ -25,7 +25,6 @@ export function isRendererView(value: string | undefined): value is RendererView
   return (
     value === 'home' ||
     value === 'server' ||
-    value === 'players' ||
     value === 'admin' ||
     value === 'network' ||
     value === 'backups' ||

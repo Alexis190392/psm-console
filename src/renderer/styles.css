@@ -972,7 +972,7 @@ button {
 
 .player-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(220px, 1.4fr) minmax(100px, auto);
+  grid-template-columns: minmax(170px, 1fr) minmax(220px, 1.3fr) minmax(88px, auto) minmax(176px, auto);
   gap: 14px;
   align-items: center;
   min-height: 74px;
@@ -1022,6 +1022,33 @@ button {
 .admin-panel {
   display: grid;
   gap: 16px;
+}
+
+.admin-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 4px;
+  border: 1px solid rgba(0, 229, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(7, 10, 13, 0.38);
+}
+
+.admin-tab {
+  min-height: 38px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-weight: 800;
+}
+
+.admin-tab:hover,
+.admin-tab--active {
+  border-color: rgba(0, 229, 255, 0.28);
+  background: rgba(0, 229, 255, 0.12);
+  color: var(--color-primary-soft);
 }
 
 .admin-grid {
@@ -1152,6 +1179,85 @@ button {
 .admin-card__actions button {
   min-width: 0;
   padding-inline: 10px;
+}
+
+.admin-broadcast-bar {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid rgba(0, 229, 255, 0.16);
+  border-radius: 8px;
+  background: rgba(11, 15, 19, 0.48);
+}
+
+.admin-broadcast-bar__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.admin-broadcast-bar input {
+  width: 100%;
+  min-width: 0;
+  padding: 12px 13px;
+  border: 1px solid rgba(186, 201, 204, 0.18);
+  border-radius: 7px;
+  outline: none;
+  background: rgba(16, 20, 24, 0.88);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.admin-broadcast-bar input:focus {
+  border-color: rgba(0, 229, 255, 0.5);
+}
+
+.admin-players-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(260px, 0.7fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.admin-players-panel {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid rgba(0, 229, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(11, 15, 19, 0.42);
+}
+
+.admin-unban-panel {
+  min-height: 0;
+}
+
+.admin-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.admin-icon-button span {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.player-row__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.player-row__actions .admin-icon-button {
+  min-width: 82px;
+  min-height: 36px;
+  padding: 8px 10px;
 }
 
 .empty-state {
@@ -2108,6 +2214,8 @@ button {
   }
 
   .settings-grid,
+  .admin-players-layout,
+  .admin-broadcast-bar__row,
   .firewall-port-grid,
   .summary-grid,
   .summary-grid--ready {
@@ -2131,6 +2239,15 @@ button {
 }
 
 @media (max-width: 1180px) {
+  .player-row {
+    grid-template-columns: minmax(170px, 1fr) minmax(180px, 1.2fr);
+  }
+
+  .player-row em,
+  .player-row__actions {
+    justify-self: start;
+  }
+
   .inline-confirm {
     align-items: stretch;
     flex-direction: column;

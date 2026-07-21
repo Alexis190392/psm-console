@@ -14,6 +14,7 @@ export interface SummaryCardDetails extends SummaryCardState {
   value: string;
   detail: string;
   target: string;
+  adminTab?: string;
   copyValue?: string;
 }
 
@@ -27,9 +28,10 @@ export interface SummaryCardViewModel {
 export function renderSummaryCard(details: SummaryCardDetails): string {
   const idAttribute = details.id ? ` id="${escapeHtml(details.id)}"` : '';
   const copyAttribute = details.copyValue ? ` data-copy-value="${escapeHtml(details.copyValue)}"` : '';
+  const adminTabAttribute = details.adminTab ? ` data-admin-tab="${escapeHtml(details.adminTab)}"` : '';
 
   return `
-    <button${idAttribute} class="summary-card summary-card--${details.tone}" data-target="${details.target}"${copyAttribute} type="button">
+    <button${idAttribute} class="summary-card summary-card--${details.tone}" data-target="${details.target}"${adminTabAttribute}${copyAttribute} type="button">
       <span class="summary-card__body">
         <span class="summary-card__title">${escapeHtml(details.title)}</span>
         <strong>${escapeHtml(details.value)}</strong>

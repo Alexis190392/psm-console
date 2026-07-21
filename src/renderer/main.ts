@@ -69,7 +69,6 @@ rootElement.innerHTML = `
     <nav class="sidebar__nav" aria-label="Navegacion principal">
       <a class="sidebar__link sidebar__link--active" data-nav="home" href="#">General</a>
       <a class="sidebar__link sidebar__link--locked" data-nav="server" href="#">Servidor</a>
-      <a class="sidebar__link sidebar__link--locked" data-nav="players" href="#">Jugadores</a>
       <a class="sidebar__link sidebar__link--locked" data-nav="admin" href="#">Administracion</a>
       <a class="sidebar__link sidebar__link--locked" data-nav="network" href="#">Red y Firewall</a>
       <a class="sidebar__link sidebar__link--locked" data-nav="backups" href="#">Backups</a>
@@ -187,10 +186,9 @@ let latestFirewallCheckedAt: Date | null = null;
 let latestLocalAddresses: string[] = [];
 let latestConfiguredPort: string | null = null;
 let latestBackupSummary: BackupSummaryDto | null = null;
-let playersRefreshTimer: number | null = null;
-let playersRefreshInFlight = false;
 let adminRefreshTimer: number | null = null;
 let adminRefreshInFlight = false;
+let adminActiveTab: 'general' | 'players' = 'general';
 let consoleSearchTerm = '';
 let consoleSelectedModule: LogModule | 'all' = 'all';
 let consolePaused = false;
@@ -266,6 +264,10 @@ if (!palcmApi) {
       }
 
       const nextView = link.dataset['nav'] ?? 'home';
+      if (nextView === 'admin') {
+        adminActiveTab = 'general';
+      }
+
       if (navigationState.is('server') && nextView !== 'server' && hasServerPendingChanges()) {
         showLeaveServerConfirmation(nextView);
         return;
@@ -711,17 +713,16 @@ function updateNavigation(status: ApplicationStatus): void {
   const logsAvailable = serverAvailable;
   const serverRunning = status === ApplicationStatus.SERVER_RUNNING;
 
-  if ((navigationState.is('players') || navigationState.is('admin')) && !serverRunning) {
+  if (navigationState.is('admin') && !serverRunning) {
     navigationState.set('home');
   }
 
   navLinks.forEach((link) => {
     const nav = link.dataset['nav'];
-    const isRuntimeOnlyView = nav === 'players' || nav === 'admin';
+    const isRuntimeOnlyView = nav === 'admin';
     const enabled =
       nav === 'home' ||
       (nav === 'server' && serverAvailable) ||
-      (nav === 'players' && serverRunning) ||
       (nav === 'admin' && serverRunning) ||
       (nav === 'logs' && logsAvailable) ||
       (nav === 'backups' && serverAvailable) ||
@@ -845,11 +846,6 @@ function renderActiveView(): void {
     return;
   }
 
-  if (navigationState.is('players')) {
-    void renderPlayersView();
-    return;
-  }
-
   if (navigationState.is('admin')) {
     void renderAdminView();
     return;
@@ -946,7 +942,8 @@ async function renderGeneralView(): Promise<void> {
           title: 'Jugadores',
           value: playersState.value,
           detail: playersState.detail,
-          target: 'players',
+          target: 'admin',
+          adminTab: 'players',
           ...playersState.state
       },
       {
@@ -1055,7 +1052,7 @@ function createPlayersSummaryCard(summary: PalworldPlayersStatusDto | null): Sum
   if (!summary) {
     return {
       value: 'Sin datos',
-      detail: 'Abre Jugadores para verificar el monitor.',
+      detail: 'Abre Administracion para verificar el monitor.',
       state: createSummaryCardState('optional')
     };
   }
@@ -1508,68 +1505,7 @@ async function renderBackupsView(): Promise<void> {
   }
 }
 
-async function renderPlayersView(): Promise<void> {
-  if (!palcmApi) {
-    return;
-  }
-
-  renderPlayersLoading();
-  await refreshPlayersView();
-  startPlayersAutoRefresh();
-}
-
-function renderPlayersLoading(): void {
-  setContent(`
-    <div class="view-stack players-view">
-      <section class="content-card players-loading">
-        <span class="inline-loader" aria-hidden="true"></span>
-        <div>
-          <p class="eyebrow">JUGADORES</p>
-          <h3>Jugadores conectados</h3>
-          <p>Consultando REST API local.</p>
-        </div>
-      </section>
-    </div>
-  `);
-}
-
-async function refreshPlayersView(): Promise<void> {
-  if (!palcmApi || playersRefreshInFlight || !navigationState.is('players')) {
-    return;
-  }
-
-  playersRefreshInFlight = true;
-  try {
-    const summary = await palcmApi.players.getStatus();
-    if (navigationState.is('players')) {
-      setContent(renderPlayersStatus(summary));
-    }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (navigationState.is('players')) {
-      renderSimpleView('Jugadores', `No se pudo consultar el monitor de jugadores. ${message}`);
-    }
-  } finally {
-    playersRefreshInFlight = false;
-  }
-}
-
-function startPlayersAutoRefresh(): void {
-  if (playersRefreshTimer !== null) {
-    return;
-  }
-
-  playersRefreshTimer = window.setInterval(() => {
-    void refreshPlayersView();
-  }, 3_000);
-}
-
 function stopRuntimeViewRefreshers(): void {
-  if (playersRefreshTimer !== null) {
-    window.clearInterval(playersRefreshTimer);
-    playersRefreshTimer = null;
-  }
-
   if (adminRefreshTimer !== null) {
     window.clearInterval(adminRefreshTimer);
     adminRefreshTimer = null;
@@ -1601,7 +1537,7 @@ function renderAdminLoading(): void {
   `);
 }
 
-async function refreshAdminView(): Promise<void> {
+async function refreshAdminView(options: { force?: boolean } = {}): Promise<void> {
   if (!palcmApi || adminRefreshInFlight || !navigationState.is('admin')) {
     return;
   }
@@ -1613,7 +1549,7 @@ async function refreshAdminView(): Promise<void> {
       palcmApi.players.getStatus()
     ]);
 
-    if (navigationState.is('admin')) {
+    if (navigationState.is('admin') && (options.force || !isEditingAdminForm())) {
       setContent(renderAdminStatus(adminStatus, playersStatus));
       bindAdminControls();
     }
@@ -1627,6 +1563,12 @@ async function refreshAdminView(): Promise<void> {
   }
 }
 
+function isEditingAdminForm(): boolean {
+  const activeElement = document.activeElement;
+
+  return activeElement instanceof HTMLElement && Boolean(activeElement.closest('[data-admin-form]'));
+}
+
 function startAdminAutoRefresh(): void {
   if (adminRefreshTimer !== null) {
     return;
@@ -1634,18 +1576,11 @@ function startAdminAutoRefresh(): void {
 
   adminRefreshTimer = window.setInterval(() => {
     void refreshAdminView();
-  }, 5_000);
+  }, 3_000);
 }
 
 function renderAdminStatus(adminStatus: PalworldAdminStatusDto, playersStatus: PalworldPlayersStatusDto): string {
   const isReady = adminStatus.status === 'READY';
-  const playerOptions = playersStatus.players
-    .map((player) => {
-      const value = player.userId ?? player.steamId ?? player.playerId ?? '';
-      const label = `${player.name} - ${value || 'sin id'}`;
-      return value ? `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>` : '';
-    })
-    .join('');
 
   return `
     <div class="view-stack admin-view">
@@ -1657,17 +1592,23 @@ function renderAdminStatus(adminStatus: PalworldAdminStatusDto, playersStatus: P
           </div>
           <span>${escapeHtml(adminStatus.message)}</span>
         </div>
-        ${isReady ? renderAdminForms(adminStatus, playerOptions, playersStatus) : `<p class="empty-state">${escapeHtml(adminStatus.message)}</p>`}
+        ${isReady ? renderAdminTabs(adminStatus, playersStatus) : `<p class="empty-state">${escapeHtml(adminStatus.message)}</p>`}
       </section>
     </div>
   `;
 }
 
-function renderAdminForms(
-  adminStatus: PalworldAdminStatusDto,
-  playerOptions: string,
-  playersStatus: PalworldPlayersStatusDto
-): string {
+function renderAdminTabs(adminStatus: PalworldAdminStatusDto, playersStatus: PalworldPlayersStatusDto): string {
+  return `
+    <div class="admin-tabs" role="tablist" aria-label="Categorias de administracion">
+      <button class="admin-tab ${adminActiveTab === 'general' ? 'admin-tab--active' : ''}" type="button" data-admin-tab-button="general">General</button>
+      <button class="admin-tab ${adminActiveTab === 'players' ? 'admin-tab--active' : ''}" type="button" data-admin-tab-button="players">Jugadores</button>
+    </div>
+    ${adminActiveTab === 'players' ? renderAdminPlayersTab(playersStatus) : renderAdminGeneralTab(adminStatus)}
+  `;
+}
+
+function renderAdminGeneralTab(adminStatus: PalworldAdminStatusDto): string {
   return `
     <div class="admin-snapshot-grid">
       ${renderAdminSnapshotCard('Servidor', 'Info oficial del servidor', adminStatus.info)}
@@ -1675,37 +1616,11 @@ function renderAdminForms(
       ${renderAdminSnapshotCard('Settings', 'Configuracion activa leida del servidor', adminStatus.settings)}
     </div>
     <div class="admin-grid">
-      <form class="admin-card" data-admin-form="announce">
-        <span class="view-kicker">MENSAJE</span>
-        <h4>Anuncio global</h4>
-        <textarea name="message" rows="3" placeholder="Mensaje para todos los jugadores"></textarea>
-        <button class="primary-button" type="submit">Enviar anuncio</button>
-      </form>
       <form class="admin-card" data-admin-form="save">
         <span class="view-kicker">MUNDO</span>
         <h4>Guardar mundo</h4>
         <p>Solicita un guardado manual del estado actual del servidor.</p>
         <button class="secondary-button" type="submit">Guardar ahora</button>
-      </form>
-      <form class="admin-card" data-admin-form="player">
-        <span class="view-kicker">JUGADORES</span>
-        <h4>Jugador conectado</h4>
-        <p>Expulsa o banea solo jugadores detectados en la lista actual.</p>
-        <select name="userId" ${playerOptions ? '' : 'disabled'}>
-          ${playerOptions || '<option value="">Sin jugadores detectados</option>'}
-        </select>
-        <input name="message" type="text" placeholder="Motivo opcional" />
-        <div class="admin-card__actions">
-          <button class="secondary-button" type="submit" data-player-action="kick" ${playerOptions ? '' : 'disabled'}>Expulsar</button>
-          <button class="secondary-button" type="submit" data-player-action="ban" ${playerOptions ? '' : 'disabled'}>Banear</button>
-        </div>
-      </form>
-      <form class="admin-card" data-admin-form="unban">
-        <span class="view-kicker">BANEOS</span>
-        <h4>Desbanear por ID</h4>
-        <p>Usa SteamID/UserID exacto. No requiere que el jugador este conectado.</p>
-        <input name="manualUserId" type="text" placeholder="steam_7656..." required />
-        <button class="secondary-button" type="submit">Desbanear</button>
       </form>
       <form class="admin-card" data-admin-form="shutdown">
         <span class="view-kicker">APAGADO</span>
@@ -1721,20 +1636,44 @@ function renderAdminForms(
         <button class="secondary-button secondary-button--warning" type="submit">Forzar detencion</button>
       </form>
     </div>
-    <p class="admin-hint">${escapeHtml(renderAdminPlayersHint(playersStatus))}</p>
   `;
 }
 
-function renderAdminPlayersHint(playersStatus: PalworldPlayersStatusDto): string {
-  if (playersStatus.status !== 'READY') {
-    return playersStatus.message;
-  }
-
-  if (playersStatus.players.length === 0) {
-    return 'No hay jugadores conectados para acciones directas. Puedes usar anuncio, guardar mundo o apagado.';
-  }
-
-  return `${String(playersStatus.players.length)} jugador(es) detectados para acciones directas.`;
+function renderAdminPlayersTab(playersStatus: PalworldPlayersStatusDto): string {
+  return `
+    <form class="admin-broadcast-bar" data-admin-form="announce">
+      <span class="view-kicker">ANUNCIO GLOBAL</span>
+      <div class="admin-broadcast-bar__row">
+        <input name="message" type="text" placeholder="Mensaje para todos los jugadores" required />
+        <button class="primary-button admin-icon-button" type="submit" aria-label="Enviar anuncio">
+          <span aria-hidden="true">&rarr;</span>
+          <strong>Enviar</strong>
+        </button>
+      </div>
+    </form>
+    <div class="admin-players-layout">
+      <section class="admin-players-panel">
+        <div class="players-list-card__header">
+          <div>
+            <p class="eyebrow">JUGADORES</p>
+            <h3>Jugadores conectados</h3>
+          </div>
+          <span>${renderPlayersHeaderMeta(playersStatus)}</span>
+        </div>
+        ${renderAdminPlayersList(playersStatus)}
+      </section>
+      <form class="admin-card admin-unban-panel" data-admin-form="unban">
+        <span class="view-kicker">BANEOS</span>
+        <h4>Desbanear por ID</h4>
+        <p>Usa SteamID/UserID exacto cuando el jugador no esta conectado.</p>
+        <input name="manualUserId" type="text" placeholder="steam_7656..." required />
+        <button class="secondary-button admin-icon-button" type="submit">
+          <span aria-hidden="true">&#8634;</span>
+          <strong>Desbanear</strong>
+        </button>
+      </form>
+    </div>
+  `;
 }
 
 function renderAdminSnapshotCard(
@@ -1759,6 +1698,16 @@ function renderAdminSnapshotCard(
 }
 
 function bindAdminControls(): void {
+  document.querySelectorAll<HTMLButtonElement>('[data-admin-tab-button]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const tab = button.dataset['adminTabButton'];
+      if (tab === 'general' || tab === 'players') {
+        adminActiveTab = tab;
+        void refreshAdminView({ force: true });
+      }
+    });
+  });
+
   document.querySelectorAll<HTMLFormElement>('[data-admin-form]').forEach((form) => {
     form.addEventListener('submit', (event) => {
       event.preventDefault();
@@ -1848,7 +1797,7 @@ async function executeAdminAction(form: HTMLFormElement, action: PalworldAdminAc
     appendConsoleLine(`Administracion: ${result.message}`);
     showToast(result.message);
     updateFooterChrome();
-    await refreshAdminView();
+    await refreshAdminView({ force: true });
     await refreshStatusChrome();
   } catch (error) {
     updateFooterChrome();
@@ -1864,31 +1813,14 @@ function readFormString(formData: FormData, key: string): string {
   return typeof value === 'string' ? value : '';
 }
 
-function renderPlayersStatus(summary: PalworldPlayersStatusDto): string {
-  return `
-    <div class="view-stack players-view">
-      <section class="content-card players-list-card">
-        <div class="players-list-card__header">
-          <div>
-            <p class="eyebrow">JUGADORES</p>
-            <h3>Jugadores conectados</h3>
-          </div>
-          <span>${renderPlayersHeaderMeta(summary)}</span>
-        </div>
-        ${renderPlayersList(summary)}
-      </section>
-    </div>
-  `;
-}
-
 function renderPlayersHeaderMeta(summary: PalworldPlayersStatusDto): string {
   const capacity = `${String(summary.currentPlayers)}${summary.maxPlayers ? `/${String(summary.maxPlayers)}` : ''}`;
   return summary.status === 'READY'
-    ? `${capacity} · ${formatDateTime(summary.updatedAt)}`
+    ? `${capacity} - ${formatDateTime(summary.updatedAt)}`
     : formatDateTime(summary.updatedAt);
 }
 
-function renderPlayersList(summary: PalworldPlayersStatusDto): string {
+function renderAdminPlayersList(summary: PalworldPlayersStatusDto): string {
   if (summary.status !== 'READY') {
     return `<p class="empty-state">${escapeHtml(summary.message)}</p>`;
   }
@@ -1899,13 +1831,14 @@ function renderPlayersList(summary: PalworldPlayersStatusDto): string {
 
   return `
     <div class="players-list">
-      ${summary.players.map(renderPlayerRow).join('')}
+      ${summary.players.map(renderAdminPlayerRow).join('')}
     </div>
   `;
 }
 
-function renderPlayerRow(player: PalworldPlayersStatusDto['players'][number]): string {
-  const identity = player.steamId ?? player.userId ?? player.playerId ?? 'ID no informado';
+function renderAdminPlayerRow(player: PalworldPlayersStatusDto['players'][number]): string {
+  const actionId = player.userId ?? player.steamId ?? player.playerId ?? '';
+  const identity = actionId || 'ID no informado';
   const secondary = [
     player.playerId ? `PlayerUID ${player.playerId}` : null,
     player.userId ? `UserID ${player.userId}` : null,
@@ -1918,8 +1851,20 @@ function renderPlayerRow(player: PalworldPlayersStatusDto['players'][number]): s
         <strong>${escapeHtml(player.name)}</strong>
         <span>${escapeHtml(identity)}</span>
       </div>
-      <small>${escapeHtml(secondary.join(' · ') || 'Sin identificadores adicionales')}</small>
+      <small>${escapeHtml(secondary.join(' - ') || 'Sin identificadores adicionales')}</small>
       <em>${typeof player.ping === 'number' ? `${formatPing(player.ping)} ms` : 'Ping no informado'}</em>
+      <form class="player-row__actions" data-admin-form="player">
+        <input name="userId" type="hidden" value="${escapeHtml(actionId)}" />
+        <input name="message" type="hidden" value="Accion aplicada desde PSM Console." />
+        <button class="admin-icon-button secondary-button" type="submit" data-player-action="kick" ${actionId ? '' : 'disabled'} title="Expulsar jugador">
+          <span aria-hidden="true">&rarr;</span>
+          <strong>Kick</strong>
+        </button>
+        <button class="admin-icon-button secondary-button secondary-button--warning" type="submit" data-player-action="ban" ${actionId ? '' : 'disabled'} title="Banear jugador">
+          <span aria-hidden="true">&times;</span>
+          <strong>Ban</strong>
+        </button>
+      </form>
     </article>
   `;
 }
@@ -2870,6 +2815,11 @@ function bindSummaryCards(): void {
       if (copyValue) {
         void copyToClipboard(copyValue, card);
         return;
+      }
+
+      const adminTab = card.dataset['adminTab'];
+      if (adminTab === 'general' || adminTab === 'players') {
+        adminActiveTab = adminTab;
       }
 
       navigationState.set(card.dataset['target']);
