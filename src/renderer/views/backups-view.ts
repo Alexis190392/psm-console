@@ -74,9 +74,9 @@ function renderBackupItem(backup: BackupSummaryDto['configurationBackups'][numbe
         <small>${escapeHtml(formatDateTime(backup.createdAt))}</small>
       </span>
       <span class="backup-item__meta">${escapeHtml(formatBytes(backup.sizeBytes))}</span>
-      <label class="backup-select">
+      <label class="backup-select" aria-label="Seleccionar backup ${escapeHtml(backup.name)}">
         <input data-backup-select="${escapeHtml(backup.id)}" type="checkbox" />
-        <span>Seleccionar</span>
+        <span class="backup-select__box" aria-hidden="true"></span>
       </label>
     </article>
   `;
