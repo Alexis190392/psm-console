@@ -31,6 +31,7 @@ interface PowerShellProcessRow {
 }
 
 const STEAM_QUERY_PORT = 27015;
+const PROCESS_SCAN_CACHE_MS = 2_500;
 
 @Injectable()
 export class PalworldProcessService {
@@ -43,6 +44,8 @@ export class PalworldProcessService {
   private readonly logs: string[] = [];
   private activeOperationId: string | null = null;
   private observedProcess: DetectedPalServerProcess | null = null;
+  private lastProcessScanAt = 0;
+  private cachedProcessScan: DetectedPalServerProcess[] = [];
 
   constructor(
     private readonly palworldInstallationService: PalworldInstallationService,
@@ -165,11 +168,12 @@ export class PalworldProcessService {
         this.observedProcess = null;
         this.setRuntimeState('RUNNING', `Servidor en ejecucion. PID ${String(child.pid ?? 'desconocido')}.`);
         this.operationManagerService.update(operationId, {
-          status: 'RUNNING',
+          status: 'COMPLETED',
           percent: 100,
           message: this.message,
           logMessage: true
         });
+        this.activeOperationId = null;
       });
 
       child.stdout?.on('data', (chunk: Buffer) => {
@@ -182,55 +186,34 @@ export class PalworldProcessService {
 
       child.once('error', (error) => {
         this.process = null;
-        this.activeOperationId = null;
         this.observedProcess = null;
         this.stoppedAt = new Date().toISOString();
         this.setRuntimeState('ERROR', `No se pudo iniciar PalServer.exe: ${error.message}`);
-        this.operationManagerService.update(operationId, {
-          status: 'FAILED',
-          percent: 100,
-          message: this.message,
-          error: error.message
-        });
+        this.failActiveOperation(operationId, error.message);
       });
 
       child.once('close', (code) => {
+        const wasStopping = this.state === 'STOPPING';
         this.process = null;
-        this.activeOperationId = null;
         this.observedProcess = null;
         this.stoppedAt = new Date().toISOString();
 
-        if (code === 0 || code === 3221225786 || code === 3221225794) {
+        if (wasStopping || code === 0 || code === 3221225786 || code === 3221225794) {
           this.setRuntimeState('STOPPED', 'Servidor detenido.');
-          this.operationManagerService.update(operationId, {
-            status: 'COMPLETED',
-            percent: 100,
-            message: 'PalServer.exe se detuvo.'
-          });
+          this.completeActiveOperation(operationId, 'PalServer.exe se detuvo.');
           return;
         }
 
         const exitMessage = `PalServer.exe finalizo con codigo ${String(code)}.`;
         this.setRuntimeState('ERROR', exitMessage);
-        this.operationManagerService.update(operationId, {
-          status: 'FAILED',
-          percent: 100,
-          message: exitMessage,
-          error: exitMessage
-        });
+        this.failActiveOperation(operationId, exitMessage);
       });
     } catch (error) {
       this.process = null;
-      this.activeOperationId = null;
       this.stoppedAt = new Date().toISOString();
       const message = error instanceof Error ? error.message : String(error);
       this.setRuntimeState('ERROR', `No se pudo iniciar PalServer.exe: ${message}`);
-      this.operationManagerService.update(operationId, {
-        status: 'FAILED',
-        percent: 100,
-        message: this.message,
-        error: message
-      });
+      this.failActiveOperation(operationId, message);
     }
   }
 
@@ -253,7 +236,7 @@ export class PalworldProcessService {
   }
 
   private waitForStop(operationId: string, executablePath: string, attempt: number): void {
-    const detected = findPalServerProcesses(executablePath);
+    const detected = this.getActiveProcesses(executablePath, { forceScan: true });
     const isStillRunning = detected.length > 0;
 
     if (!isStillRunning) {
@@ -299,6 +282,7 @@ export class PalworldProcessService {
       this.process = null;
     }
 
+    const previousObservedPid = this.observedProcess?.pid ?? this.process?.pid;
     const detectedProcesses = this.getActiveProcesses(executablePath);
     const detected = detectedProcesses[0] ?? null;
     this.observedProcess = detected;
@@ -307,7 +291,10 @@ export class PalworldProcessService {
       if (this.state !== 'STOPPING') {
         this.startedAt ??= new Date().toISOString();
         this.stoppedAt = undefined;
-        this.setRuntimeState('RUNNING', `Servidor activo detectado. PID ${String(detected.pid)}.`);
+        const message = `Servidor activo detectado. PID ${String(detected.pid)}.`;
+        if (this.state !== 'RUNNING' || previousObservedPid !== detected.pid || this.message !== message) {
+          this.setRuntimeState('RUNNING', message);
+        }
       }
       return;
     }
@@ -319,21 +306,28 @@ export class PalworldProcessService {
     }
   }
 
-  private getActiveProcesses(executablePath: string): DetectedPalServerProcess[] {
-    const processes = findPalServerProcesses(executablePath);
-
+  private getActiveProcesses(
+    executablePath: string,
+    options?: { forceScan?: boolean }
+  ): DetectedPalServerProcess[] {
     if (this.process?.pid && isPidRunning(this.process.pid)) {
-      const isAlreadyDetected = processes.some((process) => process.pid === this.process?.pid);
-
-      if (!isAlreadyDetected) {
-        processes.unshift({
+      return [
+        {
           pid: this.process.pid,
           executablePath
-        });
-      }
+        }
+      ];
     }
 
-    return processes;
+    const now = Date.now();
+    if (!options?.forceScan && now - this.lastProcessScanAt < PROCESS_SCAN_CACHE_MS) {
+      return [...this.cachedProcessScan];
+    }
+
+    const processes = findPalServerProcesses(executablePath);
+    this.lastProcessScanAt = now;
+    this.cachedProcessScan = processes;
+    return [...processes];
   }
 
   private handleProcessOutput(operationId: string, chunk: Buffer): void {
@@ -355,19 +349,54 @@ export class PalworldProcessService {
       this.logs.splice(0, this.logs.length - 500);
     }
 
-    this.operationManagerService.appendLog(operationId, line);
+    if (this.activeOperationId === operationId) {
+      this.operationManagerService.appendLog(operationId, line);
+    }
     void this.loggingService?.write('palserver', 'INFO', line);
   }
 
   private setRuntimeState(state: PalworldRuntimeState, message: string): void {
+    if (this.state === state && this.message === message) {
+      return;
+    }
+
     this.state = state;
     this.message = message;
     this.updatedAt = new Date().toISOString();
 
-    if (this.activeOperationId) {
-      this.logs.push(message);
-      void this.loggingService?.write('palserver', state === 'ERROR' ? 'ERROR' : 'INFO', message);
+    this.logs.push(message);
+    if (this.logs.length > 500) {
+      this.logs.splice(0, this.logs.length - 500);
     }
+
+    void this.loggingService?.write('palserver', state === 'ERROR' ? 'ERROR' : 'INFO', message);
+  }
+
+  private completeActiveOperation(operationId: string, message: string): void {
+    if (this.activeOperationId !== operationId) {
+      return;
+    }
+
+    this.operationManagerService.update(operationId, {
+      status: 'COMPLETED',
+      percent: 100,
+      message
+    });
+    this.activeOperationId = null;
+  }
+
+  private failActiveOperation(operationId: string, error: string): void {
+    if (this.activeOperationId !== operationId) {
+      return;
+    }
+
+    this.operationManagerService.update(operationId, {
+      status: 'FAILED',
+      percent: 100,
+      message: this.message,
+      error
+    });
+    this.activeOperationId = null;
   }
 }
 
