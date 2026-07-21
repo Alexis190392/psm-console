@@ -5,12 +5,17 @@ export type PalworldAdminStatus =
   | 'REST_DISABLED'
   | 'ADMIN_PASSWORD_MISSING';
 
-export type PalworldAdminAction = 'announce' | 'save' | 'kick' | 'ban' | 'unban' | 'shutdown';
+export type PalworldAdminAction = 'announce' | 'save' | 'kick' | 'ban' | 'unban' | 'shutdown' | 'stop';
+
+export type PalworldAdminSnapshot = Record<string, string | number | boolean | null>;
 
 export interface PalworldAdminStatusDto {
   status: PalworldAdminStatus;
   restPort?: number;
   endpoint?: string;
+  info?: PalworldAdminSnapshot;
+  settings?: PalworldAdminSnapshot;
+  metrics?: PalworldAdminSnapshot;
   updatedAt: string;
   message: string;
 }

@@ -1657,14 +1657,23 @@ function renderAdminStatus(adminStatus: PalworldAdminStatusDto, playersStatus: P
           </div>
           <span>${escapeHtml(adminStatus.message)}</span>
         </div>
-        ${isReady ? renderAdminForms(playerOptions, playersStatus) : `<p class="empty-state">${escapeHtml(adminStatus.message)}</p>`}
+        ${isReady ? renderAdminForms(adminStatus, playerOptions, playersStatus) : `<p class="empty-state">${escapeHtml(adminStatus.message)}</p>`}
       </section>
     </div>
   `;
 }
 
-function renderAdminForms(playerOptions: string, playersStatus: PalworldPlayersStatusDto): string {
+function renderAdminForms(
+  adminStatus: PalworldAdminStatusDto,
+  playerOptions: string,
+  playersStatus: PalworldPlayersStatusDto
+): string {
   return `
+    <div class="admin-snapshot-grid">
+      ${renderAdminSnapshotCard('Servidor', 'Info oficial del servidor', adminStatus.info)}
+      ${renderAdminSnapshotCard('Metricas', 'Rendimiento reportado por REST', adminStatus.metrics)}
+      ${renderAdminSnapshotCard('Settings', 'Configuracion activa leida del servidor', adminStatus.settings)}
+    </div>
     <div class="admin-grid">
       <form class="admin-card" data-admin-form="announce">
         <span class="view-kicker">MENSAJE</span>
@@ -1680,17 +1689,23 @@ function renderAdminForms(playerOptions: string, playersStatus: PalworldPlayersS
       </form>
       <form class="admin-card" data-admin-form="player">
         <span class="view-kicker">JUGADORES</span>
-        <h4>Accion sobre jugador</h4>
+        <h4>Jugador conectado</h4>
+        <p>Expulsa o banea solo jugadores detectados en la lista actual.</p>
         <select name="userId" ${playerOptions ? '' : 'disabled'}>
           ${playerOptions || '<option value="">Sin jugadores detectados</option>'}
         </select>
-        <input name="manualUserId" type="text" placeholder="ID manual para desbanear" />
         <input name="message" type="text" placeholder="Motivo opcional" />
         <div class="admin-card__actions">
           <button class="secondary-button" type="submit" data-player-action="kick" ${playerOptions ? '' : 'disabled'}>Expulsar</button>
           <button class="secondary-button" type="submit" data-player-action="ban" ${playerOptions ? '' : 'disabled'}>Banear</button>
-          <button class="secondary-button" type="submit" data-player-action="unban">Desbanear</button>
         </div>
+      </form>
+      <form class="admin-card" data-admin-form="unban">
+        <span class="view-kicker">BANEOS</span>
+        <h4>Desbanear por ID</h4>
+        <p>Usa SteamID/UserID exacto. No requiere que el jugador este conectado.</p>
+        <input name="manualUserId" type="text" placeholder="steam_7656..." required />
+        <button class="secondary-button" type="submit">Desbanear</button>
       </form>
       <form class="admin-card" data-admin-form="shutdown">
         <span class="view-kicker">APAGADO</span>
@@ -1698,6 +1713,12 @@ function renderAdminForms(playerOptions: string, playersStatus: PalworldPlayersS
         <input name="seconds" type="number" min="0" max="3600" value="60" />
         <input name="message" type="text" value="Servidor detenido desde PSM Console." />
         <button class="secondary-button" type="submit">Programar apagado</button>
+      </form>
+      <form class="admin-card admin-card--danger" data-admin-form="stop">
+        <span class="view-kicker">EMERGENCIA</span>
+        <h4>Detener ahora</h4>
+        <p>Fuerza la detencion inmediata del servidor desde REST. Usalo solo si no responde el apagado programado.</p>
+        <button class="secondary-button secondary-button--warning" type="submit">Forzar detencion</button>
       </form>
     </div>
     <p class="admin-hint">${escapeHtml(renderAdminPlayersHint(playersStatus))}</p>
@@ -1716,10 +1737,34 @@ function renderAdminPlayersHint(playersStatus: PalworldPlayersStatusDto): string
   return `${String(playersStatus.players.length)} jugador(es) detectados para acciones directas.`;
 }
 
+function renderAdminSnapshotCard(
+  title: string,
+  detail: string,
+  snapshot: PalworldAdminStatusDto['info']
+): string {
+  const entries = Object.entries(snapshot ?? {}).slice(0, 6);
+
+  return `
+    <article class="admin-snapshot-card">
+      <span class="view-kicker">${escapeHtml(title.toUpperCase())}</span>
+      <h4>${escapeHtml(title)}</h4>
+      <p>${escapeHtml(detail)}</p>
+      ${
+        entries.length > 0
+          ? `<dl>${entries.map(([key, value]) => `<div><dt>${escapeHtml(key)}</dt><dd>${escapeHtml(String(value))}</dd></div>`).join('')}</dl>`
+          : '<small>Sin datos disponibles en este momento.</small>'
+      }
+    </article>
+  `;
+}
+
 function bindAdminControls(): void {
   document.querySelectorAll<HTMLFormElement>('[data-admin-form]').forEach((form) => {
     form.addEventListener('submit', (event) => {
       event.preventDefault();
+      if (!form.reportValidity()) {
+        return;
+      }
       const submitter = event instanceof SubmitEvent && event.submitter instanceof HTMLButtonElement
         ? event.submitter
         : null;
@@ -1740,7 +1785,7 @@ function showAdminConfirmation(form: HTMLFormElement, submitter: HTMLButtonEleme
   appFooter.innerHTML = renderInlineConfirm({
     message: getAdminConfirmationMessage(action),
     actions: [
-      { id: 'confirm-admin-action', label: 'Confirmar', tone: action === 'shutdown' || action === 'ban' ? 'warning' : 'primary' },
+      { id: 'confirm-admin-action', label: 'Confirmar', tone: action === 'shutdown' || action === 'ban' || action === 'stop' ? 'warning' : 'primary' },
       { id: 'cancel-admin-action', label: 'Cancelar', tone: 'secondary' }
     ]
   });
@@ -1754,7 +1799,13 @@ function showAdminConfirmation(form: HTMLFormElement, submitter: HTMLButtonEleme
 
 function resolveAdminAction(form: HTMLFormElement, submitter: HTMLButtonElement | null): PalworldAdminAction | null {
   const formKind = form.dataset['adminForm'];
-  if (formKind === 'announce' || formKind === 'save' || formKind === 'shutdown') {
+  if (
+    formKind === 'announce' ||
+    formKind === 'save' ||
+    formKind === 'unban' ||
+    formKind === 'shutdown' ||
+    formKind === 'stop'
+  ) {
     return formKind;
   }
 
@@ -1773,7 +1824,8 @@ function getAdminConfirmationMessage(action: PalworldAdminAction): string {
     kick: 'Se expulsara al jugador seleccionado de la sesion actual.',
     ban: 'Se baneara al jugador seleccionado del servidor.',
     unban: 'Se intentara remover el baneo del identificador indicado.',
-    shutdown: 'Se programara el apagado del servidor con el tiempo indicado.'
+    shutdown: 'Se programara el apagado del servidor con el tiempo indicado.',
+    stop: 'Se forzara la detencion inmediata del servidor. Usalo solo si el apagado programado no responde.'
   };
 
   return messages[action];

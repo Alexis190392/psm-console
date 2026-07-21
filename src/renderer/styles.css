@@ -1030,6 +1030,66 @@ button {
   gap: 14px;
 }
 
+.admin-snapshot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px;
+}
+
+.admin-snapshot-card {
+  display: grid;
+  gap: 8px;
+  min-height: 150px;
+  padding: 14px;
+  border: 1px solid rgba(0, 229, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(11, 15, 19, 0.38);
+}
+
+.admin-snapshot-card h4 {
+  margin: 0;
+  color: var(--color-primary-soft);
+  font-size: 16px;
+}
+
+.admin-snapshot-card p,
+.admin-snapshot-card small {
+  margin: 0;
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}
+
+.admin-snapshot-card dl {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.admin-snapshot-card dl div {
+  display: grid;
+  grid-template-columns: minmax(90px, 0.7fr) minmax(0, 1fr);
+  gap: 8px;
+}
+
+.admin-snapshot-card dt,
+.admin-snapshot-card dd {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-snapshot-card dt {
+  color: var(--color-primary);
+}
+
+.admin-snapshot-card dd {
+  color: var(--color-text);
+}
+
 .admin-card {
   display: grid;
   align-content: start;
@@ -1039,6 +1099,11 @@ button {
   border: 1px solid rgba(0, 229, 255, 0.14);
   border-radius: 8px;
   background: rgba(11, 15, 19, 0.45);
+}
+
+.admin-card--danger {
+  border-color: rgba(255, 199, 0, 0.32);
+  background: rgba(255, 199, 0, 0.06);
 }
 
 .admin-card h4 {

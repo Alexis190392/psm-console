@@ -7,6 +7,7 @@ import type {
   PalworldAdminAction,
   PalworldAdminActionRequestDto,
   PalworldAdminActionResultDto,
+  PalworldAdminSnapshot,
   PalworldAdminStatusDto
 } from '../../shared/dto/palworld-admin.dto';
 
@@ -50,10 +51,19 @@ export class PalworldAdminService {
         });
       }
 
+      const [info, settings, metrics] = await Promise.all([
+        requestAdminRead(createRestEndpoint(credentials.restPort, '/info'), credentials.adminPassword),
+        requestAdminRead(createRestEndpoint(credentials.restPort, '/settings'), credentials.adminPassword),
+        requestAdminRead(createRestEndpoint(credentials.restPort, '/metrics'), credentials.adminPassword)
+      ]);
+
       return createAdminStatus({
         status: 'READY',
         restPort: credentials.restPort,
         endpoint: createRestEndpoint(credentials.restPort, ''),
+        info,
+        settings,
+        metrics,
         message: 'Administracion REST disponible.'
       });
     } catch {
@@ -118,43 +128,84 @@ function createAdminStatus(input: {
   message: string;
   restPort?: number;
   endpoint?: string;
+  info?: PalworldAdminSnapshot;
+  settings?: PalworldAdminSnapshot;
+  metrics?: PalworldAdminSnapshot;
 }): PalworldAdminStatusDto {
   return {
     status: input.status,
     restPort: input.restPort,
     endpoint: input.endpoint,
+    info: input.info,
+    settings: input.settings,
+    metrics: input.metrics,
     updatedAt: new Date().toISOString(),
     message: input.message
   };
 }
 
+async function requestAdminRead(endpoint: string, adminPassword: string): Promise<PalworldAdminSnapshot> {
+  try {
+    const response = await requestAdminJson(endpoint, adminPassword, 'GET');
+    return normalizeSnapshot(response);
+  } catch {
+    return {};
+  }
+}
+
 function requestAdminAction(endpoint: string, adminPassword: string, payload: Record<string, unknown>): Promise<void> {
+  return requestAdminJson(endpoint, adminPassword, 'POST', payload).then(() => undefined);
+}
+
+function requestAdminJson(
+  endpoint: string,
+  adminPassword: string,
+  method: 'GET' | 'POST',
+  payload?: Record<string, unknown>
+): Promise<unknown> {
   return new Promise((resolve, reject) => {
-    const body = JSON.stringify(payload);
+    const body = payload ? JSON.stringify(payload) : '';
     const url = new URL(endpoint);
     const request = httpRequest(
       {
         hostname: url.hostname,
         port: url.port,
         path: url.pathname,
-        method: 'POST',
+        method,
         timeout: REST_REQUEST_TIMEOUT_MS,
         headers: {
           Accept: 'application/json',
           Authorization: `Basic ${Buffer.from(`admin:${adminPassword}`).toString('base64')}`,
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(body)
+          ...(payload
+            ? {
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(body)
+              }
+            : {})
         }
       },
       (response) => {
-        response.resume();
+        const chunks: Buffer[] = [];
+        response.on('data', (chunk: Buffer) => {
+          chunks.push(chunk);
+        });
         response.on('end', () => {
           if (!response.statusCode || response.statusCode < 200 || response.statusCode >= 300) {
             reject(new Error(`PALWORLD_ADMIN_REST_FAILED: HTTP ${String(response.statusCode ?? 'UNKNOWN')}`));
             return;
           }
 
-          resolve();
+          const responseBody = Buffer.concat(chunks).toString('utf8');
+          if (!responseBody) {
+            resolve({});
+            return;
+          }
+
+          try {
+            resolve(JSON.parse(responseBody));
+          } catch {
+            resolve({});
+          }
         });
       }
     );
@@ -163,7 +214,9 @@ function requestAdminAction(endpoint: string, adminPassword: string, payload: Re
       request.destroy(new Error('PALWORLD_ADMIN_REST_TIMEOUT'));
     });
     request.on('error', reject);
-    request.write(body);
+    if (body) {
+      request.write(body);
+    }
     request.end();
   });
 }
@@ -175,7 +228,8 @@ function getActionPath(action: PalworldAdminAction): string {
     kick: '/kick',
     ban: '/ban',
     unban: '/unban',
-    shutdown: '/shutdown'
+    shutdown: '/shutdown',
+    stop: '/stop'
   };
 
   return paths[action];
@@ -189,7 +243,7 @@ function createActionPayload(request: PalworldAdminActionRequestDto): Record<str
   if (request.action === 'kick' || request.action === 'ban' || request.action === 'unban') {
     return {
       userid: requireText(request.userId, 'PALWORLD_ADMIN_USER_ID_REQUIRED'),
-      message: request.message?.trim() || undefined
+      ...(request.action === 'unban' ? {} : { message: request.message?.trim() || undefined })
     };
   }
 
@@ -210,7 +264,8 @@ function getActionSuccessMessage(action: PalworldAdminAction): string {
     kick: 'jugador expulsado.',
     ban: 'jugador baneado.',
     unban: 'jugador desbaneado.',
-    shutdown: 'apagado programado solicitado.'
+    shutdown: 'apagado programado solicitado.',
+    stop: 'detencion forzada solicitada.'
   };
 
   return messages[action];
@@ -228,6 +283,25 @@ function requireText(value: string | undefined, errorCode: string): string {
 
 function createRestEndpoint(port: number, path: string): string {
   return `http://127.0.0.1:${String(port)}/v1/api${path}`;
+}
+
+function normalizeSnapshot(value: unknown): PalworldAdminSnapshot {
+  if (!isRecord(value)) {
+    return {};
+  }
+
+  return Object.entries(value).reduce<PalworldAdminSnapshot>((snapshot, [key, entryValue]) => {
+    if (
+      typeof entryValue === 'string' ||
+      typeof entryValue === 'number' ||
+      typeof entryValue === 'boolean' ||
+      entryValue === null
+    ) {
+      snapshot[key] = entryValue;
+    }
+
+    return snapshot;
+  }, {});
 }
 
 function parseOptionSettings(content: string): Map<string, string> {
@@ -289,4 +363,8 @@ function unquoteSetting(value: string): string {
   }
 
   return trimmed;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }

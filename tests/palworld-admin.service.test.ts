@@ -26,6 +26,28 @@ describe('PalworldAdminService', () => {
     await expect(service.execute({ confirmed: false, action: 'save' })).rejects.toThrow('PALWORLD_ADMIN_REQUIRES_CONFIRMATION');
   });
 
+  it('reads server info settings and metrics from the local REST API', async () => {
+    const port = await startMockServer(() => undefined);
+    const service = createService(
+      'RUNNING',
+      `OptionSettings=(RESTAPIEnabled=True,RESTAPIPort=${String(port)},AdminPassword="secret")`
+    );
+
+    await expect(service.getStatus()).resolves.toMatchObject({
+      status: 'READY',
+      info: {
+        servername: 'PSM Test',
+        version: 'v1'
+      },
+      settings: {
+        ServerPlayerMaxNum: 32
+      },
+      metrics: {
+        serverfps: 60
+      }
+    });
+  });
+
   it('sends an announce action to the local REST API', async () => {
     const calls: Array<{
       method: string | undefined;
@@ -63,13 +85,30 @@ describe('PalworldAdminService', () => {
       body: '{"message":"Servidor reinicia en 5 minutos"}'
     });
   });
+
+  it('sends force stop to the local REST API', async () => {
+    const calls: Array<{ path: string | undefined }> = [];
+    const port = await startMockServer((request) => {
+      calls.push({ path: request.url });
+    });
+    const service = createService(
+      'RUNNING',
+      `OptionSettings=(RESTAPIEnabled=True,RESTAPIPort=${String(port)},AdminPassword="secret")`
+    );
+
+    await expect(service.execute({ confirmed: true, action: 'stop' })).resolves.toMatchObject({
+      action: 'stop',
+      status: 'OK'
+    });
+    expect(calls).toContainEqual({ path: '/v1/api/stop' });
+  });
 });
 
-async function startMockServer(onRequest: (request: IncomingMessage) => Promise<void>): Promise<number> {
+async function startMockServer(onRequest: (request: IncomingMessage) => void | Promise<void>): Promise<number> {
   const server = createServer((request, response) => {
-    void onRequest(request).then(() => {
+    void Promise.resolve(onRequest(request)).then(() => {
       response.writeHead(200, { 'Content-Type': 'application/json' });
-      response.end('{}');
+      response.end(JSON.stringify(createMockResponse(request.url)));
     });
   });
 
@@ -93,6 +132,32 @@ async function startMockServer(onRequest: (request: IncomingMessage) => Promise<
   }
 
   return address.port;
+}
+
+function createMockResponse(path: string | undefined): Record<string, unknown> {
+  if (path === '/v1/api/info') {
+    return {
+      servername: 'PSM Test',
+      version: 'v1',
+      nested: {
+        ignored: true
+      }
+    };
+  }
+
+  if (path === '/v1/api/settings') {
+    return {
+      ServerPlayerMaxNum: 32
+    };
+  }
+
+  if (path === '/v1/api/metrics') {
+    return {
+      serverfps: 60
+    };
+  }
+
+  return {};
 }
 
 function readRequestBody(request: IncomingMessage): Promise<string> {
