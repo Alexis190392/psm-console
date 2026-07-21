@@ -29,6 +29,7 @@ import type {
   PalworldStartRequestDto,
   PalworldStopRequestDto
 } from '../../shared/dto/palworld-runtime-status.dto';
+import type { PalworldPlayersStatusDto } from '../../shared/dto/palworld-players-status.dto';
 import type { SteamCmdInstallRequestDto, SteamCmdStatusDto } from '../../shared/dto/steamcmd-status.dto';
 
 const ipcChannels = {
@@ -43,6 +44,7 @@ const ipcChannels = {
   serverStart: 'server:start',
   serverStop: 'server:stop',
   serverGetRuntimeStatus: 'server:get-runtime-status',
+  playersGetStatus: 'players:get-status',
   configRead: 'config:read',
   configValidate: 'config:validate',
   configSave: 'config:save',
@@ -81,6 +83,9 @@ export interface PalcmApi {
     start: (request: PalworldStartRequestDto) => Promise<OperationAcceptedDto>;
     stop: (request: PalworldStopRequestDto) => Promise<OperationAcceptedDto>;
     getRuntimeStatus: () => Promise<PalworldRuntimeStatusDto>;
+  };
+  players: {
+    getStatus: () => Promise<PalworldPlayersStatusDto>;
   };
   config: {
     getStatus: () => Promise<PalworldConfigurationStatusDto>;
@@ -140,6 +145,9 @@ const api: PalcmApi = {
       ipcRenderer.invoke(ipcChannels.serverStop, request) as Promise<OperationAcceptedDto>,
     getRuntimeStatus: () =>
       ipcRenderer.invoke(ipcChannels.serverGetRuntimeStatus) as Promise<PalworldRuntimeStatusDto>
+  },
+  players: {
+    getStatus: () => ipcRenderer.invoke(ipcChannels.playersGetStatus) as Promise<PalworldPlayersStatusDto>
   },
   config: {
     read: () => ipcRenderer.invoke(ipcChannels.configRead) as Promise<PalworldConfigurationFileDto>,

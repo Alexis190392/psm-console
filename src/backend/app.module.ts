@@ -7,6 +7,7 @@ import { LoggingService } from './logging/logging.service';
 import { OperationManagerService } from './operations/operation-manager.service';
 import { PalworldConfigurationService } from './palworld-configuration/palworld-configuration.service';
 import { PalworldInstallationService } from './palworld-installation/palworld-installation.service';
+import { PalworldPlayersService } from './palworld-players/palworld-players.service';
 import { PalworldProcessService } from './palworld-process/palworld-process.service';
 import { PortablePathService } from './portable-path/portable-path.service';
 import { PortableStateService } from './portable-state/portable-state.service';
@@ -21,6 +22,7 @@ import { SteamCmdService } from './steamcmd/steamcmd.service';
     BackupService,
     SteamCmdService,
     PalworldInstallationService,
+    PalworldPlayersService,
     PalworldProcessService,
     PalworldConfigurationService,
     NetworkService,
@@ -35,6 +37,7 @@ import { SteamCmdService } from './steamcmd/steamcmd.service';
     BackupService,
     SteamCmdService,
     PalworldInstallationService,
+    PalworldPlayersService,
     PalworldProcessService,
     PalworldConfigurationService,
     NetworkService,

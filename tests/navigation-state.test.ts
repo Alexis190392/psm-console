@@ -8,12 +8,13 @@ describe('navigation state', () => {
     expect(state.current).toBe('home');
     expect(state.set('server')).toBe('server');
     expect(state.is('server')).toBe(true);
+    expect(state.set('players')).toBe('players');
     expect(state.set('unknown')).toBe('home');
   });
 
   it('validates renderer view ids', () => {
     expect(isRendererView('network')).toBe(true);
+    expect(isRendererView('players')).toBe(true);
     expect(isRendererView('settings')).toBe(false);
   });
 });
-

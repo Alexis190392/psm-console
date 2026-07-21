@@ -14,6 +14,7 @@ export const ipcChannels = {
   serverStop: 'server:stop',
   serverRestart: 'server:restart',
   serverGetRuntimeStatus: 'server:get-runtime-status',
+  playersGetStatus: 'players:get-status',
   configRead: 'config:read',
   configValidate: 'config:validate',
   configSave: 'config:save',

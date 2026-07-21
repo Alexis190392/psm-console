@@ -6,6 +6,7 @@ import type { BackupSummaryDto } from '../shared/dto/backup-status.dto';
 import type { FirewallPortCheckDto, FirewallStatusDto } from '../shared/dto/firewall-status.dto';
 import type { LogModule } from '../shared/dto/log-status.dto';
 import type { OperationProgressDto } from '../shared/dto/operation-progress.dto';
+import type { PalworldPlayersStatusDto } from '../shared/dto/palworld-players-status.dto';
 import type { PalworldRuntimeStatusDto } from '../shared/dto/palworld-runtime-status.dto';
 import {
   createSummaryCardState,
@@ -26,7 +27,7 @@ import {
   type ParsedPalworldSetting,
   type ParsedPalworldSettings
 } from './config/palworld-settings-parser';
-import { formatLastVerification } from './utils/format';
+import { formatDateTime, formatLastVerification } from './utils/format';
 import { cssEscape, escapeHtml, normalizeSearchText } from './utils/text';
 import { renderBackupsView as renderBackupsViewHtml } from './views/backups-view';
 import { renderGeneralView as renderGeneralViewHtml } from './views/general-view';
@@ -66,6 +67,7 @@ rootElement.innerHTML = `
     <nav class="sidebar__nav" aria-label="Navegacion principal">
       <a class="sidebar__link sidebar__link--active" data-nav="home" href="#">General</a>
       <a class="sidebar__link sidebar__link--locked" data-nav="server" href="#">Servidor</a>
+      <a class="sidebar__link sidebar__link--locked" data-nav="players" href="#">Jugadores</a>
       <a class="sidebar__link sidebar__link--locked" data-nav="network" href="#">Red y Firewall</a>
       <a class="sidebar__link sidebar__link--locked" data-nav="backups" href="#">Backups</a>
       <a class="sidebar__link sidebar__link--locked" data-nav="logs" href="#">Logs</a>
@@ -705,6 +707,7 @@ function updateNavigation(status: ApplicationStatus): void {
     const enabled =
       nav === 'home' ||
       (nav === 'server' && serverAvailable) ||
+      (nav === 'players' && serverAvailable) ||
       (nav === 'logs' && logsAvailable) ||
       (nav === 'backups' && serverAvailable) ||
       (nav === 'network' && serverAvailable);
@@ -825,6 +828,11 @@ function renderActiveView(): void {
     return;
   }
 
+  if (navigationState.is('players')) {
+    void renderPlayersView();
+    return;
+  }
+
   if (navigationState.is('network')) {
     void renderFirewallView();
     return;
@@ -859,6 +867,8 @@ async function renderGeneralView(): Promise<void> {
   const backupState = createBackupSummaryCard(backupSummary);
   const serverRuntime = await readServerRuntimeForGeneral();
   const serverState = createServerRuntimeSummary(serverRuntime);
+  const playersSummary = await readPlayersStatusForGeneral();
+  const playersState = createPlayersSummaryCard(playersSummary);
   const networkFreshness = formatLastVerification(latestFirewallCheckedAt);
 
   setContent(renderGeneralViewHtml({
@@ -911,6 +921,13 @@ async function renderGeneralView(): Promise<void> {
           ...publicPlay.state
       },
       {
+          title: 'Jugadores',
+          value: playersState.value,
+          detail: playersState.detail,
+          target: 'players',
+          ...playersState.state
+      },
+      {
           title: 'Backups',
           value: backupState.value,
           detail: backupState.detail,
@@ -947,6 +964,19 @@ async function readServerRuntimeForGeneral(): Promise<PalworldRuntimeStatusDto |
     return await palcmApi.server.getRuntimeStatus();
   } catch (error) {
     appendConsoleLine(`No se pudo leer el runtime del servidor: ${error instanceof Error ? error.message : String(error)}`);
+    return null;
+  }
+}
+
+async function readPlayersStatusForGeneral(): Promise<PalworldPlayersStatusDto | null> {
+  if (!palcmApi) {
+    return null;
+  }
+
+  try {
+    return await palcmApi.players.getStatus();
+  } catch (error) {
+    appendConsoleLine(`No se pudo leer el monitor de jugadores: ${error instanceof Error ? error.message : String(error)}`);
     return null;
   }
 }
@@ -996,6 +1026,46 @@ function createServerRuntimeSummary(runtime: PalworldRuntimeStatusDto | null): S
     value: 'Detenido',
     detail: 'Listo para iniciar desde la app cuando la red local este OK.',
     state: createSummaryCardState('optional')
+  };
+}
+
+function createPlayersSummaryCard(summary: PalworldPlayersStatusDto | null): SummaryCardViewModel {
+  if (!summary) {
+    return {
+      value: 'Sin datos',
+      detail: 'Abre Jugadores para verificar el monitor.',
+      state: createSummaryCardState('optional')
+    };
+  }
+
+  if (summary.status === 'READY') {
+    return {
+      value: `${String(summary.currentPlayers)}${summary.maxPlayers ? `/${String(summary.maxPlayers)}` : ''}`,
+      detail: summary.currentPlayers === 1 ? '1 jugador conectado.' : `${String(summary.currentPlayers)} jugadores conectados.`,
+      state: createSummaryCardState('ok')
+    };
+  }
+
+  if (summary.status === 'SERVER_STOPPED') {
+    return {
+      value: 'Servidor detenido',
+      detail: 'Inicia el servidor para consultar jugadores.',
+      state: createSummaryCardState('optional')
+    };
+  }
+
+  if (summary.status === 'REST_DISABLED' || summary.status === 'ADMIN_PASSWORD_MISSING') {
+    return {
+      value: 'Configurar monitor',
+      detail: summary.message,
+      state: createSummaryCardState('configuration')
+    };
+  }
+
+  return {
+    value: 'Sin conexion',
+    detail: summary.message,
+    state: createSummaryCardState('warning')
   };
 }
 
@@ -1398,6 +1468,164 @@ async function renderBackupsView(): Promise<void> {
     const message = error instanceof Error ? error.message : String(error);
     renderSimpleView('Backups', `No se pudo leer el estado de backups. ${message}`);
   }
+}
+
+async function renderPlayersView(): Promise<void> {
+  if (!palcmApi) {
+    return;
+  }
+
+  setContent(`
+    <div class="view-stack players-view">
+      <section class="content-card players-loading">
+        <span class="inline-loader" aria-hidden="true"></span>
+        <div>
+          <p class="eyebrow">JUGADORES</p>
+          <h3>Consultando servidor</h3>
+          <p>Verificando runtime, configuracion REST API y jugadores conectados.</p>
+        </div>
+      </section>
+    </div>
+  `);
+
+  try {
+    const summary = await palcmApi.players.getStatus();
+    setContent(renderPlayersStatus(summary));
+    bindPlayersViewActions();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    renderSimpleView('Jugadores', `No se pudo consultar el monitor de jugadores. ${message}`);
+  }
+}
+
+function bindPlayersViewActions(): void {
+  document.querySelector<HTMLButtonElement>('#refresh-players')?.addEventListener('click', () => {
+    void renderPlayersView();
+  });
+}
+
+function renderPlayersStatus(summary: PalworldPlayersStatusDto): string {
+  const status = createPlayersViewStatus(summary);
+  return `
+    <div class="view-stack players-view">
+      <section class="content-card players-header">
+        <div>
+          <p class="eyebrow">JUGADORES</p>
+          <h3>Jugadores conectados</h3>
+          <p>${escapeHtml(summary.message)}</p>
+        </div>
+        <button id="refresh-players" class="secondary-button" type="button">Actualizar</button>
+      </section>
+
+      <section class="players-state-grid">
+        ${renderSummaryCard({
+          title: 'Monitor',
+          value: status.value,
+          detail: status.detail,
+          target: 'players',
+          ...status.state
+        })}
+        ${renderSummaryCard({
+          title: 'Capacidad',
+          value: `${String(summary.currentPlayers)}${summary.maxPlayers ? `/${String(summary.maxPlayers)}` : ''}`,
+          detail: summary.status === 'READY' ? 'Lectura tomada desde REST API local.' : 'Se mostrara cuando el monitor este disponible.',
+          target: 'players',
+          ...createSummaryCardState(summary.status === 'READY' ? 'ok' : 'optional')
+        })}
+        ${renderSummaryCard({
+          title: 'REST API',
+          value: summary.restPort ? `Local ${String(summary.restPort)}` : 'Sin puerto',
+          detail: summary.endpoint ?? 'Endpoint local pendiente de configuracion.',
+          target: 'players',
+          ...createSummaryCardState(summary.status === 'READY' ? 'ok' : 'configuration')
+        })}
+      </section>
+
+      <section class="content-card players-list-card">
+        <div class="players-list-card__header">
+          <h4>Lista actual</h4>
+          <span>${formatDateTime(summary.updatedAt)}</span>
+        </div>
+        ${renderPlayersList(summary)}
+      </section>
+    </div>
+  `;
+}
+
+function createPlayersViewStatus(summary: PalworldPlayersStatusDto): SummaryCardViewModel {
+  if (summary.status === 'READY') {
+    return {
+      value: summary.currentPlayers === 0 ? 'Sin jugadores' : 'Activo',
+      detail: summary.currentPlayers === 0 ? 'El servidor responde, pero no hay jugadores conectados.' : summary.message,
+      state: createSummaryCardState('ok')
+    };
+  }
+
+  if (summary.status === 'SERVER_STOPPED') {
+    return {
+      value: 'Servidor detenido',
+      detail: 'Inicia el servidor desde la barra lateral para habilitar el monitor.',
+      state: createSummaryCardState('optional')
+    };
+  }
+
+  if (summary.status === 'REST_DISABLED') {
+    return {
+      value: 'REST desactivada',
+      detail: 'Activa RESTAPIEnabled en Servidor para poder leer jugadores sin mirar logs.',
+      state: createSummaryCardState('configuration')
+    };
+  }
+
+  if (summary.status === 'ADMIN_PASSWORD_MISSING') {
+    return {
+      value: 'Falta Admin Password',
+      detail: 'Define AdminPassword en Servidor; la app no lo muestra ni lo envia al renderer.',
+      state: createSummaryCardState('configuration')
+    };
+  }
+
+  return {
+    value: 'Sin conexion',
+    detail: summary.message,
+    state: createSummaryCardState(summary.status === 'CONNECTION_ERROR' ? 'warning' : 'error')
+  };
+}
+
+function renderPlayersList(summary: PalworldPlayersStatusDto): string {
+  if (summary.status !== 'READY') {
+    return `<p class="empty-state">${escapeHtml(summary.message)}</p>`;
+  }
+
+  if (summary.players.length === 0) {
+    return '<p class="empty-state">No hay jugadores conectados en este momento.</p>';
+  }
+
+  return `
+    <div class="players-list">
+      ${summary.players.map(renderPlayerRow).join('')}
+    </div>
+  `;
+}
+
+function renderPlayerRow(player: PalworldPlayersStatusDto['players'][number]): string {
+  const identity = player.steamId ?? player.userId ?? player.playerId ?? 'ID no informado';
+  const secondary = [
+    player.playerId ? `PlayerUID ${player.playerId}` : null,
+    player.userId ? `UserID ${player.userId}` : null,
+    player.steamId ? `SteamID ${player.steamId}` : null
+  ].filter((value): value is string => value !== null);
+
+  return `
+    <article class="player-row">
+      <div>
+        <strong>${escapeHtml(player.name)}</strong>
+        <span>${escapeHtml(identity)}</span>
+      </div>
+      <small>${escapeHtml(secondary.join(' · ') || 'Sin identificadores adicionales')}</small>
+      <em>${typeof player.ping === 'number' ? `${String(player.ping)} ms` : 'Ping no informado'}</em>
+    </article>
+  `;
 }
 
 function renderBackupsFooter(): void {

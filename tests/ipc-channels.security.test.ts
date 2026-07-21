@@ -31,4 +31,8 @@ describe('IPC channel surface', () => {
   it('keeps log reading behind a concrete readonly domain channel', () => {
     expect(ipcChannels.logsGetRecent).toBe('logs:get-recent');
   });
+
+  it('keeps player monitoring behind a concrete readonly domain channel', () => {
+    expect(ipcChannels.playersGetStatus).toBe('players:get-status');
+  });
 });

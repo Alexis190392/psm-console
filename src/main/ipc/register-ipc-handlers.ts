@@ -8,6 +8,7 @@ import { LoggingService } from '../../backend/logging/logging.service';
 import { OperationManagerService } from '../../backend/operations/operation-manager.service';
 import { PalworldConfigurationService } from '../../backend/palworld-configuration/palworld-configuration.service';
 import { PalworldInstallationService } from '../../backend/palworld-installation/palworld-installation.service';
+import { PalworldPlayersService } from '../../backend/palworld-players/palworld-players.service';
 import { PalworldProcessService } from '../../backend/palworld-process/palworld-process.service';
 import { SteamCmdService } from '../../backend/steamcmd/steamcmd.service';
 import { ipcChannels } from '../../shared/contracts/ipc-channels';
@@ -41,6 +42,7 @@ export function registerIpcHandlers(
   const steamCmdService = nestContext.get(SteamCmdService);
   const palworldInstallationService = nestContext.get(PalworldInstallationService);
   const palworldProcessService = nestContext.get(PalworldProcessService);
+  const palworldPlayersService = nestContext.get(PalworldPlayersService);
   const palworldConfigurationService = nestContext.get(PalworldConfigurationService);
   const operationManagerService = nestContext.get(OperationManagerService);
   const firewallService = nestContext.get(FirewallService);
@@ -84,6 +86,10 @@ export function registerIpcHandlers(
 
   ipcMain.handle(ipcChannels.serverGetRuntimeStatus, () =>
     palworldProcessService.getRuntimeStatus()
+  );
+
+  ipcMain.handle(ipcChannels.playersGetStatus, () =>
+    palworldPlayersService.getStatus()
   );
 
   ipcMain.handle(ipcChannels.configValidate, () => palworldConfigurationService.getStatus());

@@ -706,6 +706,14 @@ button {
   line-height: 1.5;
 }
 
+.content-card {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid rgba(0, 229, 255, 0.16);
+  border-radius: 8px;
+  background: rgba(16, 20, 24, 0.82);
+}
+
 .view-kicker {
   color: var(--color-primary);
   font-family: "JetBrains Mono", Consolas, monospace;
@@ -887,9 +895,140 @@ button {
   animation: spin 0.9s linear infinite;
 }
 
+.inline-loader {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  border: 3px solid rgba(0, 229, 255, 0.14);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
 .summary-card__icon--error {
   background: rgba(255, 82, 82, 0.16);
   color: #ff8a80;
+}
+
+.players-view {
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.players-header,
+.players-loading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.players-loading {
+  justify-content: flex-start;
+}
+
+.players-header h3,
+.players-loading h3 {
+  margin: 4px 0 6px;
+  color: var(--color-primary-soft);
+  font-size: 24px;
+}
+
+.players-header p,
+.players-loading p {
+  margin: 0;
+  color: var(--color-text-muted);
+  line-height: 1.45;
+}
+
+.players-state-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.players-list-card {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.players-list-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.players-list-card__header h4 {
+  margin: 0;
+  color: var(--color-primary-soft);
+  font-size: 16px;
+}
+
+.players-list-card__header span {
+  color: var(--color-text-muted);
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 12px;
+}
+
+.players-list {
+  display: grid;
+  gap: 10px;
+}
+
+.player-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(220px, 1.4fr) minmax(100px, auto);
+  gap: 14px;
+  align-items: center;
+  min-height: 74px;
+  padding: 14px;
+  border: 1px solid rgba(0, 229, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(11, 15, 19, 0.45);
+}
+
+.player-row strong,
+.player-row span,
+.player-row small,
+.player-row em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.player-row strong {
+  display: block;
+  color: var(--color-primary-soft);
+  font-size: 15px;
+}
+
+.player-row span,
+.player-row small {
+  color: var(--color-text-muted);
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 12px;
+}
+
+.player-row em {
+  justify-self: end;
+  color: var(--color-primary);
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.empty-state {
+  margin: 0;
+  padding: 18px;
+  border: 1px dashed rgba(186, 201, 204, 0.2);
+  border-radius: 8px;
+  color: var(--color-text-muted);
+  line-height: 1.45;
 }
 
 .network-state-grid {
