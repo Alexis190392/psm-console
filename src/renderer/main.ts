@@ -239,6 +239,7 @@ if (!palcmApi) {
   clearConsoleButton?.addEventListener('click', () => {
     consoleLines.splice(0, consoleLines.length);
     operationLogOffsets.clear();
+    latestPersistentLogsSignature = '';
     renderConsoleOutput();
   });
   startServerAction?.addEventListener('click', () => {
@@ -1825,8 +1826,15 @@ async function loadPersistentLogs(): Promise<void> {
     }
 
     latestPersistentLogsSignature = signature;
-    appendConsoleLine('Logs persistentes cargados desde la carpeta portable.');
-    lines.forEach((line) => {
+    const knownLines = new Set(consoleLines);
+    const newLines = lines.filter((line) => !knownLines.has(line));
+
+    if (newLines.length === 0) {
+      return;
+    }
+
+    appendConsoleLine('Logs de esta ejecucion cargados desde la carpeta portable.');
+    newLines.forEach((line) => {
       appendConsoleLine(line, false);
     });
   } catch (error) {

@@ -1,4 +1,4 @@
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { LoggingService } from '../src/backend/logging/logging.service';
@@ -36,6 +36,20 @@ describe('LoggingService', () => {
     expect(recent.entries[0]?.lines.join('\n')).toContain('password=<redacted>');
   });
 
+  it('only returns logs from the current app session', async () => {
+    const logPath = service.getLogPath('manager');
+    await mkdir(portablePathService.getLogsRoot(), { recursive: true });
+    await writeFile(logPath, '[2000-01-01 00:00:00] [INFO] [manager] Entrada vieja\n', 'utf8');
+
+    await service.write('manager', 'INFO', 'Entrada de esta sesion');
+
+    const recent = await service.readRecent({ modules: ['manager'], maxLines: 20 });
+    const lines = recent.entries[0]?.lines.join('\n') ?? '';
+
+    expect(lines).not.toContain('Entrada vieja');
+    expect(lines).toContain('Entrada de esta sesion');
+  });
+
   it('rotates oversized log files before appending', async () => {
     const logPath = service.getLogPath('manager');
     await mkdir(portablePathService.getLogsRoot(), { recursive: true });
@@ -46,5 +60,26 @@ describe('LoggingService', () => {
     const recent = await service.readRecent({ modules: ['manager'], maxLines: 20 });
 
     expect(recent.entries[0]?.lines.join('\n')).toContain('Despues de rotar');
+  });
+
+  it('keeps at most ten log files per module after rotation', async () => {
+    const logPath = service.getLogPath('manager');
+    await mkdir(portablePathService.getLogsRoot(), { recursive: true });
+    await writeFile(logPath, 'x'.repeat(5 * 1024 * 1024 + 1));
+
+    await Promise.all(
+      Array.from({ length: 9 }, (_, index) => {
+        const rotationIndex = String(index + 1);
+
+        return writeFile(`${logPath}.${rotationIndex}`, `rotated ${rotationIndex}`);
+      })
+    );
+
+    await service.write('manager', 'INFO', 'Nueva linea');
+
+    const logFiles = (await readdir(portablePathService.getLogsRoot())).filter((fileName) => fileName.startsWith('manager.log'));
+
+    expect(logFiles).toHaveLength(10);
+    expect(logFiles).not.toContain('manager.log.10');
   });
 });
