@@ -916,36 +916,23 @@ button {
   padding-right: 4px;
 }
 
-.players-header,
 .players-loading {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
   gap: 20px;
-}
-
-.players-loading {
   justify-content: flex-start;
 }
 
-.players-header h3,
 .players-loading h3 {
   margin: 4px 0 6px;
   color: var(--color-primary-soft);
   font-size: 24px;
 }
 
-.players-header p,
 .players-loading p {
   margin: 0;
   color: var(--color-text-muted);
   line-height: 1.45;
-}
-
-.players-state-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 12px;
 }
 
 .players-list-card {
@@ -962,10 +949,14 @@ button {
   gap: 12px;
 }
 
-.players-list-card__header h4 {
+.players-list-card__header .eyebrow {
+  margin-bottom: 4px;
+}
+
+.players-list-card__header h3 {
   margin: 0;
   color: var(--color-primary-soft);
-  font-size: 16px;
+  font-size: 24px;
 }
 
 .players-list-card__header span {

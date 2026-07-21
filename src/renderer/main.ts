@@ -705,10 +705,11 @@ function updateNavigation(status: ApplicationStatus): void {
 
   navLinks.forEach((link) => {
     const nav = link.dataset['nav'];
+    const serverRunning = status === ApplicationStatus.SERVER_RUNNING;
     const enabled =
       nav === 'home' ||
       (nav === 'server' && serverAvailable) ||
-      (nav === 'players' && serverAvailable) ||
+      (nav === 'players' && serverRunning) ||
       (nav === 'logs' && logsAvailable) ||
       (nav === 'backups' && serverAvailable) ||
       (nav === 'network' && serverAvailable);
@@ -717,6 +718,10 @@ function updateNavigation(status: ApplicationStatus): void {
     link.classList.toggle('sidebar__link--active', nav === navigationState.current);
     link.setAttribute('aria-disabled', enabled ? 'false' : 'true');
   });
+
+  if (navigationState.is('players') && status !== ApplicationStatus.SERVER_RUNNING) {
+    navigationState.set('home');
+  }
 }
 
 function updateStartServerButton(actions: AllowedActionsDto): void {
@@ -1490,8 +1495,8 @@ async function renderPlayersView(): Promise<void> {
         <span class="inline-loader" aria-hidden="true"></span>
         <div>
           <p class="eyebrow">JUGADORES</p>
-          <h3>Consultando servidor</h3>
-          <p>Verificando runtime, configuracion REST API y jugadores conectados.</p>
+          <h3>Jugadores conectados</h3>
+          <p>Consultando REST API local.</p>
         </div>
       </section>
     </div>
@@ -1500,60 +1505,22 @@ async function renderPlayersView(): Promise<void> {
   try {
     const summary = await palcmApi.players.getStatus();
     setContent(renderPlayersStatus(summary));
-    bindPlayersViewActions();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     renderSimpleView('Jugadores', `No se pudo consultar el monitor de jugadores. ${message}`);
   }
 }
 
-function bindPlayersViewActions(): void {
-  document.querySelector<HTMLButtonElement>('#refresh-players')?.addEventListener('click', () => {
-    void renderPlayersView();
-  });
-}
-
 function renderPlayersStatus(summary: PalworldPlayersStatusDto): string {
-  const status = createPlayersViewStatus(summary);
   return `
     <div class="view-stack players-view">
-      <section class="content-card players-header">
-        <div>
-          <p class="eyebrow">JUGADORES</p>
-          <h3>Jugadores conectados</h3>
-          <p>${escapeHtml(summary.message)}</p>
-        </div>
-        <button id="refresh-players" class="secondary-button" type="button">Actualizar</button>
-      </section>
-
-      <section class="players-state-grid">
-        ${renderSummaryCard({
-          title: 'Monitor',
-          value: status.value,
-          detail: status.detail,
-          target: 'players',
-          ...status.state
-        })}
-        ${renderSummaryCard({
-          title: 'Capacidad',
-          value: `${String(summary.currentPlayers)}${summary.maxPlayers ? `/${String(summary.maxPlayers)}` : ''}`,
-          detail: summary.status === 'READY' ? 'Lectura tomada desde REST API local.' : 'Se mostrara cuando el monitor este disponible.',
-          target: 'players',
-          ...createSummaryCardState(summary.status === 'READY' ? 'ok' : 'optional')
-        })}
-        ${renderSummaryCard({
-          title: 'REST API',
-          value: summary.restPort ? `Local ${String(summary.restPort)}` : 'Sin puerto',
-          detail: summary.endpoint ?? 'Endpoint local pendiente de configuracion.',
-          target: 'players',
-          ...createSummaryCardState(summary.status === 'READY' ? 'ok' : 'configuration')
-        })}
-      </section>
-
       <section class="content-card players-list-card">
         <div class="players-list-card__header">
-          <h4>Lista actual</h4>
-          <span>${formatDateTime(summary.updatedAt)}</span>
+          <div>
+            <p class="eyebrow">JUGADORES</p>
+            <h3>Jugadores conectados</h3>
+          </div>
+          <span>${renderPlayersHeaderMeta(summary)}</span>
         </div>
         ${renderPlayersList(summary)}
       </section>
@@ -1561,52 +1528,11 @@ function renderPlayersStatus(summary: PalworldPlayersStatusDto): string {
   `;
 }
 
-function createPlayersViewStatus(summary: PalworldPlayersStatusDto): SummaryCardViewModel {
-  if (summary.status === 'READY') {
-    return {
-      value: summary.currentPlayers === 0 ? 'Sin jugadores' : 'Activo',
-      detail: summary.currentPlayers === 0 ? 'El servidor responde, pero no hay jugadores conectados.' : summary.message,
-      state: createSummaryCardState('ok')
-    };
-  }
-
-  if (summary.status === 'SERVER_STOPPED') {
-    return {
-      value: 'Servidor detenido',
-      detail: 'Inicia el servidor desde la barra lateral para habilitar el monitor.',
-      state: createSummaryCardState('optional')
-    };
-  }
-
-  if (summary.status === 'REST_DISABLED') {
-    return {
-      value: 'REST desactivada',
-      detail: 'Activa RESTAPIEnabled en Servidor para poder leer jugadores sin mirar logs.',
-      state: createSummaryCardState('configuration')
-    };
-  }
-
-  if (summary.status === 'REST_CONFIGURED_RESTART_REQUIRED') {
-    return {
-      value: 'Reiniciar servidor',
-      detail: 'La app activo REST API en el INI. Detene e inicia el servidor para aplicar el cambio.',
-      state: createSummaryCardState('warning')
-    };
-  }
-
-  if (summary.status === 'ADMIN_PASSWORD_MISSING') {
-    return {
-      value: 'Falta Admin Password',
-      detail: 'Define AdminPassword en Servidor; la app no lo muestra ni lo envia al renderer.',
-      state: createSummaryCardState('configuration')
-    };
-  }
-
-  return {
-    value: 'Sin conexion',
-    detail: summary.message,
-    state: createSummaryCardState(summary.status === 'CONNECTION_ERROR' ? 'warning' : 'error')
-  };
+function renderPlayersHeaderMeta(summary: PalworldPlayersStatusDto): string {
+  const capacity = `${String(summary.currentPlayers)}${summary.maxPlayers ? `/${String(summary.maxPlayers)}` : ''}`;
+  return summary.status === 'READY'
+    ? `${capacity} · ${formatDateTime(summary.updatedAt)}`
+    : formatDateTime(summary.updatedAt);
 }
 
 function renderPlayersList(summary: PalworldPlayersStatusDto): string {
