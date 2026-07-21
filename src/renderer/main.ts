@@ -1054,6 +1054,14 @@ function createPlayersSummaryCard(summary: PalworldPlayersStatusDto | null): Sum
     };
   }
 
+  if (summary.status === 'REST_CONFIGURED_RESTART_REQUIRED') {
+    return {
+      value: 'Reiniciar servidor',
+      detail: summary.message,
+      state: createSummaryCardState('warning')
+    };
+  }
+
   if (summary.status === 'REST_DISABLED' || summary.status === 'ADMIN_PASSWORD_MISSING') {
     return {
       value: 'Configurar monitor',
@@ -1574,6 +1582,14 @@ function createPlayersViewStatus(summary: PalworldPlayersStatusDto): SummaryCard
       value: 'REST desactivada',
       detail: 'Activa RESTAPIEnabled en Servidor para poder leer jugadores sin mirar logs.',
       state: createSummaryCardState('configuration')
+    };
+  }
+
+  if (summary.status === 'REST_CONFIGURED_RESTART_REQUIRED') {
+    return {
+      value: 'Reiniciar servidor',
+      detail: 'La app activo REST API en el INI. Detene e inicia el servidor para aplicar el cambio.',
+      state: createSummaryCardState('warning')
     };
   }
 

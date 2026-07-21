@@ -1,8 +1,11 @@
 import { Injectable, Optional } from '@nestjs/common';
+import { copyFile, mkdir, writeFile } from 'node:fs/promises';
 import { request as httpRequest } from 'node:http';
+import { dirname, join } from 'node:path';
 import { PalworldConfigurationService } from '../palworld-configuration/palworld-configuration.service';
 import { PalworldProcessService } from '../palworld-process/palworld-process.service';
 import { LoggingService } from '../logging/logging.service';
+import { PortablePathService } from '../portable-path/portable-path.service';
 import type { PalworldPlayerDto, PalworldPlayersStatusDto } from '../../shared/dto/palworld-players-status.dto';
 
 const DEFAULT_REST_API_PORT = 8212;
@@ -14,6 +17,7 @@ export class PalworldPlayersService {
   constructor(
     private readonly palworldConfigurationService: PalworldConfigurationService,
     private readonly palworldProcessService: PalworldProcessService,
+    private readonly portablePathService: PortablePathService,
     @Optional() private readonly loggingService?: LoggingService
   ) {}
 
@@ -36,11 +40,12 @@ export class PalworldPlayersService {
       const maxPlayers = parseIntegerSetting(settings.get('ServerPlayerMaxNum'));
 
       if (!restEnabled) {
+        await this.enableRestApi(configuration.path, configuration.content);
         return createPlayersStatus({
-          status: 'REST_DISABLED',
-          restPort,
+          status: 'REST_CONFIGURED_RESTART_REQUIRED',
+          restPort: DEFAULT_REST_API_PORT,
           maxPlayers,
-          message: 'Activa REST API en la configuracion del servidor para consultar jugadores.'
+          message: 'REST API fue activada en el INI. Reinicia el servidor para que Palworld aplique el cambio.'
         });
       }
 
@@ -76,6 +81,29 @@ export class PalworldPlayersService {
           : 'No se pudo conectar con la REST API local del servidor.'
       });
     }
+  }
+
+  private async enableRestApi(activePath: string, content: string): Promise<void> {
+    const nextContent = upsertOptionSettings(content, new Map([
+      ['RESTAPIEnabled', 'True'],
+      ['RESTAPIPort', String(DEFAULT_REST_API_PORT)]
+    ]));
+    if (nextContent === content) {
+      return;
+    }
+
+    const backupPath = join(
+      this.portablePathService.getPortableRoot(),
+      'backups',
+      'configuration',
+      `PalWorldSettings.before-rest-api.${new Date().toISOString().replace(/[:.]/g, '-')}.ini`
+    );
+    const tempPath = `${activePath}.tmp`;
+    await mkdir(dirname(backupPath), { recursive: true });
+    await copyFile(activePath, backupPath);
+    await writeFile(tempPath, nextContent, 'utf8');
+    await copyFile(tempPath, activePath);
+    void this.loggingService?.write('palserver', 'INFO', 'Monitor de jugadores: REST API activada en PalWorldSettings.ini.');
   }
 }
 
@@ -200,6 +228,65 @@ function parseOptionSettings(content: string): Map<string, string> {
     settings.set(entry.slice(0, separator).trim(), entry.slice(separator + 1).trim());
     return settings;
   }, new Map<string, string>());
+}
+
+function upsertOptionSettings(content: string, updates: Map<string, string>): string {
+  const marker = 'OptionSettings=(';
+  const start = content.indexOf(marker);
+  if (start < 0) {
+    throw new Error('CONFIGURATION_CONTENT_INVALID: falta OptionSettings.');
+  }
+
+  const valueStart = start + marker.length;
+  const valueEnd = findOptionSettingsEnd(content, valueStart);
+  if (valueEnd < valueStart) {
+    throw new Error('CONFIGURATION_CONTENT_INVALID: OptionSettings incompleto.');
+  }
+
+  const body = content.slice(valueStart, valueEnd);
+  const entries = splitTopLevel(body);
+  const seen = new Set<string>();
+  const nextEntries = entries.map((entry) => {
+    const separator = entry.indexOf('=');
+    if (separator <= 0) {
+      return entry;
+    }
+
+    const key = entry.slice(0, separator).trim();
+    const update = updates.get(key);
+    if (update === undefined) {
+      return entry;
+    }
+
+    seen.add(key);
+    return `${key}=${update}`;
+  });
+
+  updates.forEach((value, key) => {
+    if (!seen.has(key)) {
+      nextEntries.push(`${key}=${value}`);
+    }
+  });
+
+  return `${content.slice(0, valueStart)}${nextEntries.join(',')}${content.slice(valueEnd)}`;
+}
+
+function findOptionSettingsEnd(content: string, valueStart: number): number {
+  let quoted = false;
+
+  for (let index = valueStart; index < content.length; index += 1) {
+    const char = content[index];
+
+    if (char === '"') {
+      quoted = !quoted;
+    }
+
+    if (char === ')' && !quoted) {
+      return index;
+    }
+  }
+
+  return -1;
 }
 
 function splitTopLevel(value: string): string[] {

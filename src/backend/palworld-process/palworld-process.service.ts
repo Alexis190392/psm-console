@@ -46,6 +46,7 @@ export class PalworldProcessService {
   private observedProcess: DetectedPalServerProcess | null = null;
   private lastProcessScanAt = 0;
   private cachedProcessScan: DetectedPalServerProcess[] = [];
+  private stopRequestedAt = 0;
 
   constructor(
     private readonly palworldInstallationService: PalworldInstallationService,
@@ -193,7 +194,7 @@ export class PalworldProcessService {
       });
 
       child.once('close', (code) => {
-        const wasStopping = this.state === 'STOPPING';
+        const wasStopping = this.state === 'STOPPING' || Date.now() - this.stopRequestedAt < 30_000;
         this.process = null;
         this.observedProcess = null;
         this.stoppedAt = new Date().toISOString();
@@ -219,6 +220,7 @@ export class PalworldProcessService {
 
   private stopAsync(operationId: string, processes: DetectedPalServerProcess[], executablePath: string): void {
     const pids = processes.map((process) => process.pid);
+    this.stopRequestedAt = Date.now();
     this.operationManagerService.update(operationId, {
       status: 'RUNNING',
       percent: 20,
