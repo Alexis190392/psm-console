@@ -19,6 +19,12 @@ interface DetectedPalServerProcess {
   executablePath: string;
 }
 
+interface PalworldRuntimeExecutable {
+  executablePath: string;
+  workingDirectory: string;
+  displayName: string;
+}
+
 interface PowerShellProcessRow {
   Id?: unknown;
   Path?: unknown;
@@ -136,16 +142,21 @@ export class PalworldProcessService {
         message: 'Verificando puertos requeridos antes de iniciar.',
         canCancel: false
       });
-      this.appendLog(operationId, `"${executablePath}"`);
+      const runtimeExecutable = resolvePalworldRuntimeExecutable(executablePath);
+      this.appendLog(operationId, `"${runtimeExecutable.executablePath}"`);
       await assertUdpPortAvailable(STEAM_QUERY_PORT);
 
       this.operationManagerService.update(operationId, {
         status: 'RUNNING',
         percent: 20,
-        message: 'Lanzando PalServer.exe.',
+        message: `Lanzando ${runtimeExecutable.displayName} oculto para capturar logs en la app.`,
         canCancel: false
       });
-      const child = spawn(executablePath, [], createHiddenProcessOptions(executablePath));
+      const child = spawn(
+        runtimeExecutable.executablePath,
+        [],
+        createHiddenProcessOptions(runtimeExecutable.workingDirectory)
+      );
       this.process = child;
 
       child.once('spawn', () => {
@@ -360,13 +371,38 @@ export class PalworldProcessService {
   }
 }
 
-function createHiddenProcessOptions(executablePath: string): SpawnOptions {
+function createHiddenProcessOptions(workingDirectory: string): SpawnOptions {
   return {
-    cwd: dirname(executablePath),
+    cwd: workingDirectory,
     windowsHide: true,
     detached: false,
     shell: false,
     stdio: ['ignore', 'pipe', 'pipe']
+  };
+}
+
+export function resolvePalworldRuntimeExecutable(executablePath: string): PalworldRuntimeExecutable {
+  const installRoot = dirname(executablePath);
+  const commandExecutablePath = join(
+    installRoot,
+    'Pal',
+    'Binaries',
+    'Win64',
+    'PalServer-Win64-Shipping-Cmd.exe'
+  );
+
+  if (existsSync(commandExecutablePath)) {
+    return {
+      executablePath: commandExecutablePath,
+      workingDirectory: installRoot,
+      displayName: 'PalServer-Win64-Shipping-Cmd.exe'
+    };
+  }
+
+  return {
+    executablePath,
+    workingDirectory: installRoot,
+    displayName: 'PalServer.exe'
   };
 }
 
