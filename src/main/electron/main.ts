@@ -1,22 +1,91 @@
-import { app, BrowserWindow, ipcMain, screen } from 'electron';
-import { join } from 'node:path';
+import { app, BrowserWindow, ipcMain, protocol, screen } from 'electron';
+import { mkdirSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
+import { dirname, join, relative, resolve } from 'node:path';
 import { APP_INFO } from '../../shared/constants/app-info';
 import { createNestContext } from '../bootstrap/nest-bootstrap';
 import { registerIpcHandlers } from '../ipc/register-ipc-handlers';
 import { createMainWindowOptions } from './window-options';
 
+const RENDERER_PROTOCOL = 'palcm';
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: RENDERER_PROTOCOL,
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true
+    }
+  }
+]);
+
+function configureElectronRuntime(): void {
+  const userDataPath = app.isPackaged
+    ? join(dirname(app.getPath('exe')), 'app-data')
+    : join(process.cwd(), 'ejecucionPruebas', 'app-data');
+
+  mkdirSync(userDataPath, { recursive: true });
+  app.setPath('userData', userDataPath);
+  app.disableHardwareAcceleration();
+  app.commandLine.appendSwitch('disable-gpu-sandbox');
+  app.commandLine.appendSwitch('use-angle', 'swiftshader');
+}
+
 function configureAppIdentity(): void {
   app.setName(APP_INFO.displayName);
-  process.title = APP_INFO.packageProductName;
 
   if (process.platform === 'win32') {
     app.setAppUserModelId(APP_INFO.appId);
   }
+}
 
-  app.setAboutPanelOptions({
-    applicationName: APP_INFO.displayName,
-    applicationVersion: APP_INFO.version,
-    copyright: `Copyright 2026 ${APP_INFO.authorName} (${APP_INFO.authorAlias})`
+function resolveRendererRoot(): string {
+  return app.isPackaged ? join(__dirname, '..', '..', 'renderer') : join(process.cwd(), 'dist', 'renderer');
+}
+
+function resolveContentType(filePath: string): string {
+  if (filePath.endsWith('.html')) {
+    return 'text/html; charset=utf-8';
+  }
+
+  if (filePath.endsWith('.js')) {
+    return 'text/javascript; charset=utf-8';
+  }
+
+  if (filePath.endsWith('.css')) {
+    return 'text/css; charset=utf-8';
+  }
+
+  if (filePath.endsWith('.png')) {
+    return 'image/png';
+  }
+
+  return 'application/octet-stream';
+}
+
+function registerRendererProtocol(): void {
+  const rendererRoot = resolveRendererRoot();
+
+  protocol.handle(RENDERER_PROTOCOL, async (request) => {
+    const requestUrl = new URL(request.url);
+    const relativePath = decodeURIComponent(requestUrl.pathname.replace(/^\/+/, '')) || 'index.html';
+    const filePath = resolve(rendererRoot, relativePath);
+    const relativeToRoot = relative(rendererRoot, filePath);
+
+    if (relativeToRoot.startsWith('..')) {
+      return new Response('Ruta no permitida', { status: 403 });
+    }
+
+    const fileBuffer = await readFile(filePath);
+    const fileBody = new ArrayBuffer(fileBuffer.byteLength);
+    new Uint8Array(fileBody).set(fileBuffer);
+
+    return new Response(fileBody, {
+      headers: {
+        'content-type': resolveContentType(filePath)
+      }
+    });
   });
 }
 
@@ -29,16 +98,13 @@ async function createMainWindow(): Promise<BrowserWindow> {
     })
   );
 
-  if (app.isPackaged) {
-    await window.loadFile(join(__dirname, '..', '..', 'renderer', 'index.html'));
-  } else {
-    await window.loadFile(join(process.cwd(), 'dist', 'renderer', 'index.html'));
-  }
+  await window.loadURL(`${RENDERER_PROTOCOL}://app/index.html`);
 
   return window;
 }
 
 async function bootstrap(): Promise<void> {
+  configureElectronRuntime();
   configureAppIdentity();
 
   process.env['PALCM_ELECTRON_IS_PACKAGED'] = app.isPackaged ? 'true' : 'false';
@@ -48,6 +114,7 @@ async function bootstrap(): Promise<void> {
   registerIpcHandlers(ipcMain, nestContext);
 
   await app.whenReady();
+  registerRendererProtocol();
   await createMainWindow();
 
   app.on('activate', () => {

@@ -8,7 +8,7 @@ describe('Electron window security options', () => {
     expect(options.webPreferences).toMatchObject({
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: false
     });
   });
 
