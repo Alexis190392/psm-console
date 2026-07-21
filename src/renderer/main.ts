@@ -4,6 +4,7 @@ import { ApplicationStatus } from '../shared/enums/application-status';
 import type { AllowedActionsDto } from '../shared/dto/allowed-actions.dto';
 import type { BackupSummaryDto } from '../shared/dto/backup-status.dto';
 import type { FirewallPortCheckDto, FirewallStatusDto } from '../shared/dto/firewall-status.dto';
+import type { LogModule } from '../shared/dto/log-status.dto';
 import type { OperationProgressDto } from '../shared/dto/operation-progress.dto';
 import {
   createSummaryCardState,
@@ -93,6 +94,15 @@ rootElement.innerHTML = `
         <button id="export-console" class="console-export" type="button" aria-label="Exportar consola">Exportar</button>
         <div class="console-tools">
           <input id="console-search" type="search" placeholder="Buscar en logs" aria-label="Buscar en logs" />
+          <select id="console-module-filter" aria-label="Filtrar modulo de logs">
+            <option value="all">Todos</option>
+            <option value="manager">App</option>
+            <option value="steamcmd">SteamCMD</option>
+            <option value="palserver">Servidor</option>
+            <option value="firewall">Firewall</option>
+            <option value="backup">Backups</option>
+            <option value="error">Errores</option>
+          </select>
           <button id="pause-console" class="console-tool-button" type="button" aria-pressed="false">Pausar</button>
           <button id="clear-console" class="console-tool-button" type="button">Limpiar vista</button>
         </div>
@@ -140,6 +150,7 @@ const panelStatusHeader = document.querySelector('.panel__header');
 const consoleOutput = document.querySelector<HTMLPreElement>('#console-output');
 const exportConsoleButton = document.querySelector<HTMLButtonElement>('#export-console');
 const consoleSearchInput = document.querySelector<HTMLInputElement>('#console-search');
+const consoleModuleFilter = document.querySelector<HTMLSelectElement>('#console-module-filter');
 const pauseConsoleButton = document.querySelector<HTMLButtonElement>('#pause-console');
 const clearConsoleButton = document.querySelector<HTMLButtonElement>('#clear-console');
 const progressBar = document.querySelector<HTMLDivElement>('#progress-bar');
@@ -171,6 +182,7 @@ let latestLocalAddresses: string[] = [];
 let latestConfiguredPort: string | null = null;
 let latestBackupSummary: BackupSummaryDto | null = null;
 let consoleSearchTerm = '';
+let consoleSelectedModule: LogModule | 'all' = 'all';
 let consolePaused = false;
 let latestPersistentLogsSignature = '';
 let settingInfoDismissBound = false;
@@ -206,6 +218,13 @@ if (!palcmApi) {
   consoleSearchInput?.addEventListener('input', () => {
     consoleSearchTerm = consoleSearchInput.value.trim().toLowerCase();
     renderConsoleOutput();
+  });
+  consoleModuleFilter?.addEventListener('change', () => {
+    consoleSelectedModule = parseConsoleModuleFilter(consoleModuleFilter.value);
+    latestPersistentLogsSignature = '';
+    if (navigationState.is('logs')) {
+      void loadPersistentLogs();
+    }
   });
   pauseConsoleButton?.addEventListener('click', () => {
     consolePaused = !consolePaused;
@@ -1543,13 +1562,14 @@ async function loadPersistentLogs(): Promise<void> {
   }
 
   try {
-    const logs = await palcmApi.logs.getRecent({ maxLines: 80 });
+    const modules = consoleSelectedModule === 'all' ? undefined : [consoleSelectedModule];
+    const logs = await palcmApi.logs.getRecent({ modules, maxLines: 80 });
     const lines = logs.entries.flatMap((entry) =>
       entry.lines.length > 0
         ? [`--- ${entry.module}.log ---`, ...entry.lines]
         : [`--- ${entry.module}.log sin entradas ---`]
     );
-    const signature = lines.join('\n');
+    const signature = `${consoleSelectedModule}:${lines.join('\n')}`;
 
     if (signature === latestPersistentLogsSignature) {
       return;
@@ -1563,6 +1583,14 @@ async function loadPersistentLogs(): Promise<void> {
   } catch (error) {
     appendConsoleLine(`No se pudieron leer logs persistentes: ${error instanceof Error ? error.message : String(error)}`);
   }
+}
+
+function parseConsoleModuleFilter(value: string): LogModule | 'all' {
+  if (['manager', 'steamcmd', 'palserver', 'firewall', 'backup', 'api', 'error'].includes(value)) {
+    return value as LogModule;
+  }
+
+  return 'all';
 }
 
 function hideRestoreDefaultConfirmation(): void {

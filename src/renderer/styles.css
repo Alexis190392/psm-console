@@ -515,7 +515,8 @@ button {
   gap: 8px;
 }
 
-.console-tools input {
+.console-tools input,
+.console-tools select {
   min-width: 180px;
   flex: 1;
   padding: 7px 10px;
@@ -524,6 +525,12 @@ button {
   outline: none;
   background: rgba(16, 20, 24, 0.92);
   color: var(--color-text);
+}
+
+.console-tools select {
+  min-width: 140px;
+  flex: 0 0 150px;
+  cursor: pointer;
 }
 
 .console-tool-button {
