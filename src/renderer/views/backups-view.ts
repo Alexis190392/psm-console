@@ -15,6 +15,9 @@ export function renderBackupsView(summary: BackupSummaryDto): string {
         <div class="view-actions">
           <button id="create-config-backup" class="secondary-button" type="button">Backup INI</button>
           <button id="create-world-backup" class="primary-button" type="button">Backup mundo</button>
+          <button id="delete-selected-backups" class="secondary-button backup-trash-selected" type="button" disabled>
+            Enviar seleccionados a papelera
+          </button>
         </div>
       </div>
       <section class="backup-actions">
@@ -71,7 +74,10 @@ function renderBackupItem(backup: BackupSummaryDto['configurationBackups'][numbe
         <small>${escapeHtml(formatDateTime(backup.createdAt))}</small>
       </span>
       <span class="backup-item__meta">${escapeHtml(formatBytes(backup.sizeBytes))}</span>
-      <button class="backup-delete-button" data-backup-delete="${escapeHtml(backup.id)}" type="button">Enviar a papelera</button>
+      <label class="backup-select">
+        <input data-backup-select="${escapeHtml(backup.id)}" type="checkbox" />
+        <span>Seleccionar</span>
+      </label>
     </article>
   `;
 }

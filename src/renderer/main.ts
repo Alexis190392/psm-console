@@ -1312,11 +1312,13 @@ async function renderBackupsView(): Promise<void> {
     document.querySelector<HTMLButtonElement>('#create-world-backup')?.addEventListener('click', () => {
       showBackupConfirmation('world');
     });
-    document.querySelectorAll<HTMLButtonElement>('[data-backup-delete]').forEach((button) => {
-      button.addEventListener('click', () => {
-        showBackupDeleteConfirmation(button.dataset['backupDelete'] ?? '');
-      });
+    document.querySelectorAll<HTMLInputElement>('[data-backup-select]').forEach((checkbox) => {
+      checkbox.addEventListener('change', updateSelectedBackupsState);
     });
+    document.querySelector<HTMLButtonElement>('#delete-selected-backups')?.addEventListener('click', () => {
+      showBackupDeleteConfirmation(getSelectedBackupIds());
+    });
+    updateSelectedBackupsState();
     document.querySelector<HTMLButtonElement>('#cancel-backup')?.addEventListener('click', hideBackupConfirmation);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -1343,19 +1345,43 @@ function showBackupConfirmation(kind: 'configuration' | 'world'): void {
   };
 }
 
-function showBackupDeleteConfirmation(backupId: string): void {
+function getSelectedBackupIds(): string[] {
+  return Array.from(document.querySelectorAll<HTMLInputElement>('[data-backup-select]:checked'))
+    .map((checkbox) => checkbox.dataset['backupSelect'] ?? '')
+    .filter((backupId) => backupId.length > 0);
+}
+
+function updateSelectedBackupsState(): void {
+  const button = document.querySelector<HTMLButtonElement>('#delete-selected-backups');
+  const selectedCount = getSelectedBackupIds().length;
+
+  if (!button) {
+    return;
+  }
+
+  button.disabled = selectedCount === 0;
+  button.textContent =
+    selectedCount === 0
+      ? 'Enviar seleccionados a papelera'
+      : `Enviar ${String(selectedCount)} a papelera`;
+}
+
+function showBackupDeleteConfirmation(backupIds: string[]): void {
   const confirmation = document.querySelector<HTMLDivElement>('#backup-confirmation');
   const message = document.querySelector<HTMLElement>('#backup-confirmation-message');
   const confirm = document.querySelector<HTMLButtonElement>('#confirm-backup');
 
-  if (!confirmation || !message || !confirm || backupId.length === 0) {
+  if (!confirmation || !message || !confirm || backupIds.length === 0) {
     return;
   }
 
-  message.textContent = 'El backup se enviara a la papelera de Windows. Podras recuperarlo desde ahi si fue un error.';
+  message.textContent =
+    backupIds.length === 1
+      ? 'El backup seleccionado se enviara a la papelera de Windows. Podras recuperarlo desde ahi si fue un error.'
+      : `Se enviaran ${String(backupIds.length)} backups a la papelera de Windows. Podras recuperarlos desde ahi si fue un error.`;
   confirmation.classList.remove('hidden');
   confirm.onclick = () => {
-    void deleteBackup(backupId);
+    void deleteBackups(backupIds);
   };
 }
 
@@ -1383,23 +1409,30 @@ async function createBackup(kind: 'configuration' | 'world'): Promise<void> {
   await refreshState();
 }
 
-async function deleteBackup(backupId: string): Promise<void> {
+async function deleteBackups(backupIds: string[]): Promise<void> {
   if (!palcmApi) {
     return;
   }
 
-  appendConsoleLine(`Confirmado: enviar backup a la papelera. ${backupId}`);
+  appendConsoleLine(`Confirmado: enviar ${String(backupIds.length)} backup(s) a la papelera.`);
   navigationState.set('logs');
   renderActiveView();
 
-  const accepted = await palcmApi.backup.delete({
-    confirmed: true,
-    backupId
-  });
+  for (const backupId of backupIds) {
+    appendConsoleLine(`Enviando backup a papelera: ${backupId}`);
+    const accepted = await palcmApi.backup.delete({
+      confirmed: true,
+      backupId
+    });
+    await pollOperation(accepted.operationId);
+  }
 
-  await pollOperation(accepted.operationId);
   latestBackupSummary = null;
-  showToast('Backup enviado a la papelera');
+  showToast(
+    backupIds.length === 1
+      ? 'Backup enviado a la papelera'
+      : `${String(backupIds.length)} backups enviados a la papelera`
+  );
   navigationState.set('backups');
   await refreshState();
 }
