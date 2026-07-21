@@ -46,6 +46,12 @@ npm.cmd run dev
 
 `electron:dev` abre Electron con el ultimo build disponible. `dev` ejecuta el mismo flujo que `start:dev`.
 
+Nota sobre identidad visual en desarrollo:
+
+- `start:dev` usa el binario `electron.exe` de desarrollo, por eso el Administrador de tareas puede agrupar procesos hijos como `Electron`.
+- La app define nombre, AppUserModelID e icono de ventana propios, pero el nombre/descripcion del ejecutable de desarrollo sigue dependiendo de Electron.
+- El portable generado con `npm.cmd run dist:portable` usa los metadatos e icono propios de PSM Console.
+
 ## Ejecutar en modo test local
 
 ```powershell

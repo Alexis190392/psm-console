@@ -5,9 +5,13 @@ import { APP_INFO, APP_VERSION_LABEL } from '../src/shared/constants/app-info';
 
 describe('app info', () => {
   it('keeps visible version aligned with package version', () => {
-    const packageJson = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8')) as { version: string };
+    const packageJson = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8')) as {
+      build: { appId: string };
+      version: string;
+    };
 
     expect(APP_INFO.version).toBe(packageJson.version);
+    expect(APP_INFO.appId).toBe(packageJson.build.appId);
     expect(APP_VERSION_LABEL).toBe(`v${packageJson.version} Dev`);
   });
 });

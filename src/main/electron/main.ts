@@ -1,8 +1,24 @@
 import { app, BrowserWindow, ipcMain, screen } from 'electron';
 import { join } from 'node:path';
+import { APP_INFO } from '../../shared/constants/app-info';
 import { createNestContext } from '../bootstrap/nest-bootstrap';
 import { registerIpcHandlers } from '../ipc/register-ipc-handlers';
 import { createMainWindowOptions } from './window-options';
+
+function configureAppIdentity(): void {
+  app.setName(APP_INFO.displayName);
+  process.title = APP_INFO.packageProductName;
+
+  if (process.platform === 'win32') {
+    app.setAppUserModelId(APP_INFO.appId);
+  }
+
+  app.setAboutPanelOptions({
+    applicationName: APP_INFO.displayName,
+    applicationVersion: APP_INFO.version,
+    copyright: `Copyright 2026 ${APP_INFO.authorName} (${APP_INFO.authorAlias})`
+  });
+}
 
 async function createMainWindow(): Promise<BrowserWindow> {
   const { workAreaSize } = screen.getPrimaryDisplay();
@@ -23,6 +39,8 @@ async function createMainWindow(): Promise<BrowserWindow> {
 }
 
 async function bootstrap(): Promise<void> {
+  configureAppIdentity();
+
   process.env['PALCM_ELECTRON_IS_PACKAGED'] = app.isPackaged ? 'true' : 'false';
   process.env['PALCM_ELECTRON_EXE_PATH'] = app.getPath('exe');
 

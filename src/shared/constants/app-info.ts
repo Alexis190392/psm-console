@@ -3,9 +3,10 @@ export const APP_INFO = {
   packageProductName: 'PSM Console by GR477',
   shortName: 'PSM Console',
   productScope: 'Palworld Server Manager',
+  appId: 'com.palcm.servermanager',
   authorAlias: '>GR477<',
   authorName: 'Alexis Joel Dávila',
-  version: '0.7.4',
+  version: '0.7.5',
   channel: 'Dev'
 } as const;
 
