@@ -23,7 +23,11 @@ import type {
 } from '../../shared/dto/palworld-runtime-status.dto';
 import type { SteamCmdInstallRequestDto } from '../../shared/dto/steamcmd-status.dto';
 import type { FirewallApplyRulesRequestDto } from '../../shared/dto/firewall-status.dto';
-import type { BackupCreateRequestDto, BackupDeleteRequestDto } from '../../shared/dto/backup-status.dto';
+import type {
+  BackupCreateRequestDto,
+  BackupDeleteRequestDto,
+  BackupRestoreRequestDto
+} from '../../shared/dto/backup-status.dto';
 import type { LogsRecentRequestDto } from '../../shared/dto/log-status.dto';
 
 export function registerIpcHandlers(
@@ -111,6 +115,10 @@ export function registerIpcHandlers(
 
   ipcMain.handle(ipcChannels.backupCreateWorld, (_event, request: BackupCreateRequestDto) =>
     backupService.createWorldBackup(request)
+  );
+
+  ipcMain.handle(ipcChannels.backupRestore, (_event, request: BackupRestoreRequestDto) =>
+    backupService.restoreBackup(request)
   );
 
   ipcMain.handle(ipcChannels.backupDelete, (_event, request: BackupDeleteRequestDto) =>

@@ -1327,6 +1327,9 @@ function renderBackupsFooter(): void {
     <span id="backup-footer-message" class="app-footer__message">Selecciona backups para enviarlos a la papelera de Windows.</span>
     <button id="create-config-backup" class="secondary-button" type="button">Backup INI</button>
     <button id="create-world-backup" class="primary-button" type="button">Backup mundo</button>
+    <button id="restore-selected-backup" class="secondary-button" type="button" disabled>
+      Restaurar seleccionado
+    </button>
     <button id="delete-selected-backups" class="secondary-button backup-trash-selected" type="button" disabled>
       Enviar seleccionados a papelera
     </button>
@@ -1339,6 +1342,9 @@ function renderBackupsFooter(): void {
   });
   document.querySelector<HTMLButtonElement>('#delete-selected-backups')?.addEventListener('click', () => {
     showBackupDeleteConfirmation(getSelectedBackupIds());
+  });
+  document.querySelector<HTMLButtonElement>('#restore-selected-backup')?.addEventListener('click', () => {
+    showBackupRestoreConfirmation(getSelectedBackupIds());
   });
 }
 
@@ -1372,24 +1378,54 @@ function getSelectedBackupIds(): string[] {
 }
 
 function updateSelectedBackupsState(): void {
-  const button = document.querySelector<HTMLButtonElement>('#delete-selected-backups');
+  const deleteButton = document.querySelector<HTMLButtonElement>('#delete-selected-backups');
+  const restoreButton = document.querySelector<HTMLButtonElement>('#restore-selected-backup');
   const selectedCount = getSelectedBackupIds().length;
 
-  if (!button) {
+  if (!deleteButton || !restoreButton) {
     return;
   }
 
-  button.disabled = selectedCount === 0;
-  button.textContent =
+  deleteButton.disabled = selectedCount === 0;
+  deleteButton.textContent =
     selectedCount === 0
       ? 'Enviar seleccionados a papelera'
       : `Enviar ${String(selectedCount)} a papelera`;
+  restoreButton.disabled = selectedCount !== 1;
   setText(
     document.querySelector('#backup-footer-message'),
     selectedCount === 0
       ? 'Selecciona backups para enviarlos a la papelera de Windows.'
+      : selectedCount === 1
+        ? '1 backup seleccionado. Puedes restaurarlo o enviarlo a la papelera.'
       : `${String(selectedCount)} backup(s) seleccionados.`
   );
+}
+
+function showBackupRestoreConfirmation(backupIds: string[]): void {
+  if (!appFooter || backupIds.length !== 1) {
+    return;
+  }
+
+  const backupId = backupIds[0] ?? '';
+  const backup = findLatestBackupById(backupId);
+  const isWorldBackup = backup?.kind === 'world';
+
+  appFooter.classList.remove('hidden');
+  appFooter.classList.add('app-footer--confirm');
+  appFooter.innerHTML = renderInlineConfirm({
+    message: isWorldBackup
+      ? 'Se creara un backup preventivo del mundo actual y se restaurara el SaveGames seleccionado. El servidor debe estar detenido.'
+      : 'Se creara un backup preventivo del INI actual y se restaurara la configuracion seleccionada.',
+    actions: [
+      { id: 'confirm-backup', label: 'Restaurar', tone: 'warning' },
+      { id: 'cancel-backup', label: 'Cancelar', tone: 'secondary' }
+    ]
+  });
+  document.querySelector<HTMLButtonElement>('#confirm-backup')?.addEventListener('click', () => {
+    void restoreBackup(backupId);
+  });
+  document.querySelector<HTMLButtonElement>('#cancel-backup')?.addEventListener('click', hideBackupConfirmation);
 }
 
 function showBackupDeleteConfirmation(backupIds: string[]): void {
@@ -1413,6 +1449,16 @@ function showBackupDeleteConfirmation(backupIds: string[]): void {
     void deleteBackups(backupIds);
   });
   document.querySelector<HTMLButtonElement>('#cancel-backup')?.addEventListener('click', hideBackupConfirmation);
+}
+
+function findLatestBackupById(backupId: string): BackupSummaryDto['configurationBackups'][number] | null {
+  if (!latestBackupSummary) {
+    return null;
+  }
+
+  return [...latestBackupSummary.configurationBackups, ...latestBackupSummary.worldBackups].find(
+    (backup) => backup.id === backupId
+  ) ?? null;
 }
 
 function hideBackupConfirmation(): void {
@@ -1466,6 +1512,27 @@ async function deleteBackups(backupIds: string[]): Promise<void> {
       ? 'Backup enviado a la papelera'
       : `${String(backupIds.length)} backups enviados a la papelera`
   );
+  navigationState.set('backups');
+  await refreshState();
+}
+
+async function restoreBackup(backupId: string): Promise<void> {
+  if (!palcmApi) {
+    return;
+  }
+
+  appendConsoleLine(`Confirmado: restaurar backup. ${backupId}`);
+  navigationState.set('logs');
+  renderActiveView();
+
+  const accepted = await palcmApi.backup.restore({
+    confirmed: true,
+    backupId
+  });
+
+  await pollOperation(accepted.operationId);
+  latestBackupSummary = null;
+  showToast('Backup restaurado');
   navigationState.set('backups');
   await refreshState();
 }

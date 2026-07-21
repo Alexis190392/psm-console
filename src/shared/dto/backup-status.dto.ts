@@ -25,3 +25,8 @@ export interface BackupDeleteRequestDto {
   confirmed: boolean;
   backupId: string;
 }
+
+export interface BackupRestoreRequestDto {
+  confirmed: boolean;
+  backupId: string;
+}

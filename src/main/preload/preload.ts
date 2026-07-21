@@ -4,6 +4,7 @@ import type { ApplicationStatusDto } from '../../shared/dto/application-status.d
 import type {
   BackupCreateRequestDto,
   BackupDeleteRequestDto,
+  BackupRestoreRequestDto,
   BackupSummaryDto
 } from '../../shared/dto/backup-status.dto';
 import type { OperationAcceptedDto, OperationProgressDto } from '../../shared/dto/operation-progress.dto';
@@ -51,6 +52,7 @@ const ipcChannels = {
   backupGetSummary: 'backup:get-summary',
   backupCreateConfiguration: 'backup:create-configuration',
   backupCreateWorld: 'backup:create-world',
+  backupRestore: 'backup:restore',
   backupDelete: 'backup:delete',
   logsGetRecent: 'logs:get-recent',
   windowMinimize: 'window:minimize',
@@ -95,6 +97,7 @@ export interface PalcmApi {
     getSummary: () => Promise<BackupSummaryDto>;
     createConfiguration: (request: BackupCreateRequestDto) => Promise<OperationAcceptedDto>;
     createWorld: (request: BackupCreateRequestDto) => Promise<OperationAcceptedDto>;
+    restore: (request: BackupRestoreRequestDto) => Promise<OperationAcceptedDto>;
     delete: (request: BackupDeleteRequestDto) => Promise<OperationAcceptedDto>;
   };
   logs: {
@@ -156,6 +159,8 @@ const api: PalcmApi = {
       ipcRenderer.invoke(ipcChannels.backupCreateConfiguration, request) as Promise<OperationAcceptedDto>,
     createWorld: (request) =>
       ipcRenderer.invoke(ipcChannels.backupCreateWorld, request) as Promise<OperationAcceptedDto>,
+    restore: (request) =>
+      ipcRenderer.invoke(ipcChannels.backupRestore, request) as Promise<OperationAcceptedDto>,
     delete: (request) =>
       ipcRenderer.invoke(ipcChannels.backupDelete, request) as Promise<OperationAcceptedDto>
   },

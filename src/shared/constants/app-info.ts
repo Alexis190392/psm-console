@@ -5,7 +5,7 @@ export const APP_INFO = {
   productScope: 'Palworld Server Manager',
   authorAlias: '>GR477<',
   authorName: 'Alexis Joel Dávila',
-  version: '0.1.0',
+  version: '0.2.0',
   channel: 'Dev'
 } as const;
 

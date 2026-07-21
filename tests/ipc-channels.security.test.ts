@@ -20,6 +20,7 @@ describe('IPC channel surface', () => {
     expect(ipcChannels.backupGetSummary).toBe('backup:get-summary');
     expect(ipcChannels.backupCreateConfiguration).toBe('backup:create-configuration');
     expect(ipcChannels.backupCreateWorld).toBe('backup:create-world');
+    expect(ipcChannels.backupRestore).toBe('backup:restore');
     expect(ipcChannels.backupDelete).toBe('backup:delete');
   });
 

@@ -1,14 +1,16 @@
-import { Injectable } from '@nestjs/common';
-import { copyFile, cp, mkdir, readdir, stat } from 'node:fs/promises';
+import { Injectable, Optional } from '@nestjs/common';
+import { copyFile, cp, mkdir, readdir, rm, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { OperationManagerService } from '../operations/operation-manager.service';
 import { PalworldConfigurationService } from '../palworld-configuration/palworld-configuration.service';
+import { PalworldProcessService } from '../palworld-process/palworld-process.service';
 import { PortablePathService } from '../portable-path/portable-path.service';
 import type {
   BackupCreateRequestDto,
   BackupDeleteRequestDto,
   BackupEntryDto,
+  BackupRestoreRequestDto,
   BackupSummaryDto
 } from '../../shared/dto/backup-status.dto';
 import type { OperationAcceptedDto } from '../../shared/dto/operation-progress.dto';
@@ -18,7 +20,8 @@ export class BackupService {
   constructor(
     private readonly portablePathService: PortablePathService,
     private readonly palworldConfigurationService: PalworldConfigurationService,
-    private readonly operationManagerService: OperationManagerService
+    private readonly operationManagerService: OperationManagerService,
+    @Optional() private readonly palworldProcessService?: PalworldProcessService
   ) {}
 
   async getSummary(): Promise<BackupSummaryDto> {
@@ -87,6 +90,23 @@ export class BackupService {
     );
 
     void this.deleteBackupAsync(operation.operationId, request.backupId, moveToTrash);
+
+    return {
+      operationId: operation.operationId
+    };
+  }
+
+  restoreBackup(request: BackupRestoreRequestDto): OperationAcceptedDto {
+    if (!request.confirmed) {
+      throw new Error('BACKUP_RESTORE_REQUIRES_CONFIRMATION');
+    }
+
+    const operation = this.operationManagerService.create(
+      'Restaurar backup',
+      'Preparando restauracion segura del backup seleccionado.'
+    );
+
+    void this.restoreBackupAsync(operation.operationId, request.backupId);
 
     return {
       operationId: operation.operationId
@@ -237,6 +257,126 @@ export class BackupService {
         error: error instanceof Error ? error.message : String(error)
       });
     }
+  }
+
+  private async restoreBackupAsync(operationId: string, backupId: string): Promise<void> {
+    try {
+      const backup = await this.findBackupById(backupId);
+
+      if (!backup) {
+        throw new Error(`BACKUP_NOT_FOUND: ${backupId}`);
+      }
+
+      this.operationManagerService.update(operationId, {
+        status: 'RUNNING',
+        percent: 15,
+        message: `Validando backup: ${backup.name}.`
+      });
+
+      if (backup.kind === 'configuration') {
+        await this.restoreConfigurationBackup(operationId, backup);
+        return;
+      }
+
+      await this.restoreWorldBackup(operationId, backup);
+    } catch (error) {
+      this.operationManagerService.update(operationId, {
+        status: 'FAILED',
+        percent: 100,
+        message: 'No se pudo restaurar el backup.',
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  private async restoreConfigurationBackup(operationId: string, backup: BackupEntryDto): Promise<void> {
+    const targetPath = this.palworldConfigurationService.getStatus().activePath;
+
+    if (!existsSync(backup.path)) {
+      throw new Error(`BACKUP_SOURCE_NOT_FOUND: ${backup.path}`);
+    }
+
+    this.operationManagerService.update(operationId, {
+      status: 'RUNNING',
+      percent: 35,
+      message: 'Creando backup preventivo del INI actual.'
+    });
+    await this.createCurrentConfigurationSafetyBackup(targetPath);
+
+    this.operationManagerService.update(operationId, {
+      status: 'RUNNING',
+      percent: 75,
+      message: 'Restaurando PalWorldSettings.ini.'
+    });
+    await mkdir(dirname(targetPath), { recursive: true });
+    await copyFile(backup.path, targetPath);
+    this.operationManagerService.appendLog(operationId, `restore "${backup.path}" "${targetPath}"`);
+
+    this.operationManagerService.update(operationId, {
+      status: 'COMPLETED',
+      percent: 100,
+      message: 'Configuracion restaurada correctamente.'
+    });
+  }
+
+  private async restoreWorldBackup(operationId: string, backup: BackupEntryDto): Promise<void> {
+    const runtime = this.palworldProcessService?.getRuntimeStatus();
+
+    if (runtime && ['STARTING', 'RUNNING', 'STOPPING'].includes(runtime.state)) {
+      throw new Error('WORLD_RESTORE_REQUIRES_SERVER_STOPPED');
+    }
+
+    if (!existsSync(backup.path)) {
+      throw new Error(`BACKUP_SOURCE_NOT_FOUND: ${backup.path}`);
+    }
+
+    const targetPath = this.getWorldSourcePath();
+
+    this.operationManagerService.update(operationId, {
+      status: 'RUNNING',
+      percent: 30,
+      message: 'Creando backup preventivo del mundo actual.'
+    });
+    await this.createCurrentWorldSafetyBackup(targetPath);
+
+    this.operationManagerService.update(operationId, {
+      status: 'RUNNING',
+      percent: 65,
+      message: 'Reemplazando SaveGames por el backup seleccionado.'
+    });
+    await rm(targetPath, { recursive: true, force: true });
+    await mkdir(dirname(targetPath), { recursive: true });
+    await cp(backup.path, targetPath, { recursive: true, force: false, errorOnExist: true });
+    this.operationManagerService.appendLog(operationId, `restore-dir "${backup.path}" "${targetPath}"`);
+
+    this.operationManagerService.update(operationId, {
+      status: 'COMPLETED',
+      percent: 100,
+      message: 'Mundo restaurado correctamente.'
+    });
+  }
+
+  private async createCurrentConfigurationSafetyBackup(sourcePath: string): Promise<void> {
+    if (!existsSync(sourcePath)) {
+      return;
+    }
+
+    const targetPath = join(
+      this.getBackupDirectory('configuration'),
+      `PalWorldSettings.before-restore.${createTimestamp()}.ini`
+    );
+    await mkdir(dirname(targetPath), { recursive: true });
+    await copyFile(sourcePath, targetPath);
+  }
+
+  private async createCurrentWorldSafetyBackup(sourcePath: string): Promise<void> {
+    if (!existsSync(sourcePath)) {
+      return;
+    }
+
+    const targetPath = join(this.getBackupDirectory('world'), `SaveGames.before-restore.${createTimestamp()}`);
+    await mkdir(dirname(targetPath), { recursive: true });
+    await cp(sourcePath, targetPath, { recursive: true, force: false, errorOnExist: true });
   }
 
   private async findBackupById(backupId: string): Promise<BackupEntryDto | null> {
