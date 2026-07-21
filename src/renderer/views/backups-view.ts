@@ -1,5 +1,4 @@
 import type { BackupSummaryDto } from '../../shared/dto/backup-status.dto';
-import { renderInlineConfirm } from '../components/inline-confirm';
 import { formatBytes, formatDateTime } from '../utils/format';
 import { escapeHtml } from '../utils/text';
 
@@ -11,13 +10,6 @@ export function renderBackupsView(summary: BackupSummaryDto): string {
           <span class="view-kicker">BACKUPS</span>
           <h3>Backups del servidor</h3>
           <p>${escapeHtml(summary.message)}</p>
-        </div>
-        <div class="view-actions">
-          <button id="create-config-backup" class="secondary-button" type="button">Backup INI</button>
-          <button id="create-world-backup" class="primary-button" type="button">Backup mundo</button>
-          <button id="delete-selected-backups" class="secondary-button backup-trash-selected" type="button" disabled>
-            Enviar seleccionados a papelera
-          </button>
         </div>
       </div>
       <section class="backup-actions">
@@ -34,16 +26,6 @@ export function renderBackupsView(summary: BackupSummaryDto): string {
         ${renderBackupList('Configuracion', summary.configurationBackups)}
         ${renderBackupList('Mundo', summary.worldBackups)}
       </section>
-      ${renderInlineConfirm({
-        id: 'backup-confirmation',
-        messageId: 'backup-confirmation-message',
-        message: 'La accion requiere confirmacion.',
-        hidden: true,
-        actions: [
-          { id: 'confirm-backup', label: 'Confirmar', tone: 'primary' },
-          { id: 'cancel-backup', label: 'Cancelar', tone: 'secondary' }
-        ]
-      })}
     </div>
   `;
 }

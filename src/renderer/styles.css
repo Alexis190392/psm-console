@@ -1010,12 +1010,14 @@ button {
 .backup-layout {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
   gap: 14px;
 }
 
 .backup-list {
   display: grid;
   min-width: 0;
+  align-content: start;
   gap: 10px;
   padding: 14px;
   border: 1px solid rgba(0, 229, 255, 0.14);
@@ -1037,14 +1039,16 @@ button {
 
 .backup-list__items {
   display: grid;
+  align-content: start;
   gap: 8px;
 }
 
 .backup-item {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) 72px 32px;
   align-items: center;
   gap: 12px;
+  min-height: 64px;
   padding: 12px;
   border: 1px solid rgba(186, 201, 204, 0.12);
   border-radius: 8px;

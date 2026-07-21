@@ -1306,43 +1306,63 @@ async function renderBackupsView(): Promise<void> {
     const summary = latestBackupSummary;
 
     setContent(renderBackupsViewHtml(summary));
-    document.querySelector<HTMLButtonElement>('#create-config-backup')?.addEventListener('click', () => {
-      showBackupConfirmation('configuration');
-    });
-    document.querySelector<HTMLButtonElement>('#create-world-backup')?.addEventListener('click', () => {
-      showBackupConfirmation('world');
-    });
+    renderBackupsFooter();
     document.querySelectorAll<HTMLInputElement>('[data-backup-select]').forEach((checkbox) => {
       checkbox.addEventListener('change', updateSelectedBackupsState);
     });
-    document.querySelector<HTMLButtonElement>('#delete-selected-backups')?.addEventListener('click', () => {
-      showBackupDeleteConfirmation(getSelectedBackupIds());
-    });
     updateSelectedBackupsState();
-    document.querySelector<HTMLButtonElement>('#cancel-backup')?.addEventListener('click', hideBackupConfirmation);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     renderSimpleView('Backups', `No se pudo leer el estado de backups. ${message}`);
   }
 }
 
-function showBackupConfirmation(kind: 'configuration' | 'world'): void {
-  const confirmation = document.querySelector<HTMLDivElement>('#backup-confirmation');
-  const message = document.querySelector<HTMLElement>('#backup-confirmation-message');
-  const confirm = document.querySelector<HTMLButtonElement>('#confirm-backup');
-
-  if (!confirmation || !message || !confirm) {
+function renderBackupsFooter(): void {
+  if (!appFooter) {
     return;
   }
 
-  message.textContent =
-    kind === 'configuration'
-      ? 'Se copiara el PalWorldSettings.ini activo a backups/configuration. No se modifica la configuracion actual.'
-      : 'Se copiara la carpeta SaveGames del servidor a backups/world. El servidor no se modifica.';
-  confirmation.classList.remove('hidden');
-  confirm.onclick = () => {
+  appFooter.classList.remove('hidden', 'app-footer--confirm');
+  appFooter.innerHTML = `
+    <span id="backup-footer-message" class="app-footer__message">Selecciona backups para enviarlos a la papelera de Windows.</span>
+    <button id="create-config-backup" class="secondary-button" type="button">Backup INI</button>
+    <button id="create-world-backup" class="primary-button" type="button">Backup mundo</button>
+    <button id="delete-selected-backups" class="secondary-button backup-trash-selected" type="button" disabled>
+      Enviar seleccionados a papelera
+    </button>
+  `;
+  document.querySelector<HTMLButtonElement>('#create-config-backup')?.addEventListener('click', () => {
+    showBackupConfirmation('configuration');
+  });
+  document.querySelector<HTMLButtonElement>('#create-world-backup')?.addEventListener('click', () => {
+    showBackupConfirmation('world');
+  });
+  document.querySelector<HTMLButtonElement>('#delete-selected-backups')?.addEventListener('click', () => {
+    showBackupDeleteConfirmation(getSelectedBackupIds());
+  });
+}
+
+function showBackupConfirmation(kind: 'configuration' | 'world'): void {
+  if (!appFooter) {
+    return;
+  }
+
+  appFooter.classList.remove('hidden');
+  appFooter.classList.add('app-footer--confirm');
+  appFooter.innerHTML = renderInlineConfirm({
+    message:
+      kind === 'configuration'
+        ? 'Se copiara el PalWorldSettings.ini activo a backups/configuration. No se modifica la configuracion actual.'
+        : 'Se copiara la carpeta SaveGames del servidor a backups/world. El servidor no se modifica.',
+    actions: [
+      { id: 'confirm-backup', label: 'Confirmar', tone: 'primary' },
+      { id: 'cancel-backup', label: 'Cancelar', tone: 'secondary' }
+    ]
+  });
+  document.querySelector<HTMLButtonElement>('#confirm-backup')?.addEventListener('click', () => {
     void createBackup(kind);
-  };
+  });
+  document.querySelector<HTMLButtonElement>('#cancel-backup')?.addEventListener('click', hideBackupConfirmation);
 }
 
 function getSelectedBackupIds(): string[] {
@@ -1364,29 +1384,42 @@ function updateSelectedBackupsState(): void {
     selectedCount === 0
       ? 'Enviar seleccionados a papelera'
       : `Enviar ${String(selectedCount)} a papelera`;
+  setText(
+    document.querySelector('#backup-footer-message'),
+    selectedCount === 0
+      ? 'Selecciona backups para enviarlos a la papelera de Windows.'
+      : `${String(selectedCount)} backup(s) seleccionados.`
+  );
 }
 
 function showBackupDeleteConfirmation(backupIds: string[]): void {
-  const confirmation = document.querySelector<HTMLDivElement>('#backup-confirmation');
-  const message = document.querySelector<HTMLElement>('#backup-confirmation-message');
-  const confirm = document.querySelector<HTMLButtonElement>('#confirm-backup');
-
-  if (!confirmation || !message || !confirm || backupIds.length === 0) {
+  if (!appFooter || backupIds.length === 0) {
     return;
   }
 
-  message.textContent =
-    backupIds.length === 1
-      ? 'El backup seleccionado se enviara a la papelera de Windows. Podras recuperarlo desde ahi si fue un error.'
-      : `Se enviaran ${String(backupIds.length)} backups a la papelera de Windows. Podras recuperarlos desde ahi si fue un error.`;
-  confirmation.classList.remove('hidden');
-  confirm.onclick = () => {
+  appFooter.classList.remove('hidden');
+  appFooter.classList.add('app-footer--confirm');
+  appFooter.innerHTML = renderInlineConfirm({
+    message:
+      backupIds.length === 1
+        ? 'El backup seleccionado se enviara a la papelera de Windows. Podras recuperarlo desde ahi si fue un error.'
+        : `Se enviaran ${String(backupIds.length)} backups a la papelera de Windows. Podras recuperarlos desde ahi si fue un error.`,
+    actions: [
+      { id: 'confirm-backup', label: 'Enviar a papelera', tone: 'warning' },
+      { id: 'cancel-backup', label: 'Cancelar', tone: 'secondary' }
+    ]
+  });
+  document.querySelector<HTMLButtonElement>('#confirm-backup')?.addEventListener('click', () => {
     void deleteBackups(backupIds);
-  };
+  });
+  document.querySelector<HTMLButtonElement>('#cancel-backup')?.addEventListener('click', hideBackupConfirmation);
 }
 
 function hideBackupConfirmation(): void {
-  document.querySelector('#backup-confirmation')?.classList.add('hidden');
+  if (navigationState.is('backups')) {
+    renderBackupsFooter();
+    updateSelectedBackupsState();
+  }
 }
 
 async function createBackup(kind: 'configuration' | 'world'): Promise<void> {
@@ -1489,7 +1522,8 @@ function updateHeroChrome(): void {
 }
 
 function updateFooterChrome(): void {
-  const shouldShowFooter = isOperationalStatus(latestStatus) && navigationState.is('server');
+  const shouldShowFooter =
+    isOperationalStatus(latestStatus) && (navigationState.is('server') || navigationState.is('backups'));
   const shouldUseWideLayout = isOperationalStatus(latestStatus);
   rootElement.classList.toggle('app--footer-visible', shouldShowFooter);
   rootElement.classList.toggle('app--wide', shouldUseWideLayout);
