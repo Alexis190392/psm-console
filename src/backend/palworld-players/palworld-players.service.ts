@@ -11,9 +11,15 @@ import type { PalworldPlayerDto, PalworldPlayersStatusDto } from '../../shared/d
 const DEFAULT_REST_API_PORT = 8212;
 const PLAYERS_ENDPOINT_PATH = '/v1/api/players';
 const REST_REQUEST_TIMEOUT_MS = 1_800;
+const REST_READY_GRACE_MS = 60_000;
+const REST_ERROR_LOG_THROTTLE_MS = 60_000;
 
 @Injectable()
 export class PalworldPlayersService {
+  private runningRuntimeKey: string | null = null;
+  private restReadyWaitStartedAt = 0;
+  private lastRestErrorLoggedAt = 0;
+
   constructor(
     private readonly palworldConfigurationService: PalworldConfigurationService,
     private readonly palworldProcessService: PalworldProcessService,
@@ -25,19 +31,25 @@ export class PalworldPlayersService {
     const runtime = this.palworldProcessService.getRuntimeStatus();
 
     if (runtime.state !== 'RUNNING') {
+      this.resetRuntimeTracking();
       return createPlayersStatus({
         status: 'SERVER_STOPPED',
         message: 'Inicia el servidor para consultar jugadores conectados.'
       });
     }
 
+    this.trackRunningRuntime(`${String(runtime.pid ?? 'sin-pid')}:${runtime.startedAt ?? runtime.updatedAt}`);
+    let restPort = DEFAULT_REST_API_PORT;
+    let maxPlayers: number | undefined;
+    let endpoint: string | undefined;
+
     try {
       const configuration = await this.palworldConfigurationService.readActive();
       const settings = parseOptionSettings(configuration.content);
       const restEnabled = parseBooleanSetting(settings.get('RESTAPIEnabled'));
-      const restPort = parsePort(settings.get('RESTAPIPort')) ?? DEFAULT_REST_API_PORT;
+      restPort = parsePort(settings.get('RESTAPIPort')) ?? DEFAULT_REST_API_PORT;
       const adminPassword = unquoteSetting(settings.get('AdminPassword') ?? '');
-      const maxPlayers = parseIntegerSetting(settings.get('ServerPlayerMaxNum'));
+      maxPlayers = parseIntegerSetting(settings.get('ServerPlayerMaxNum'));
 
       if (!restEnabled) {
         await this.enableRestApi(configuration.path, configuration.content);
@@ -58,7 +70,7 @@ export class PalworldPlayersService {
         });
       }
 
-      const endpoint = createPlayersEndpoint(restPort);
+      endpoint = createPlayersEndpoint(restPort);
       const response = await requestPlayers(endpoint, adminPassword);
       const players = normalizePlayersResponse(response);
 
@@ -73,9 +85,22 @@ export class PalworldPlayersService {
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      void this.loggingService?.write('palserver', 'ERROR', `Monitor de jugadores: ${message}`);
+      if (isRestWarmupError(message) && Date.now() - this.restReadyWaitStartedAt < REST_READY_GRACE_MS) {
+        return createPlayersStatus({
+          status: 'REST_STARTING',
+          restPort,
+          maxPlayers,
+          endpoint,
+          message: 'Servidor en ejecucion. Esperando que la REST API local quede disponible.'
+        });
+      }
+
+      this.logRestErrorThrottled(message);
       return createPlayersStatus({
         status: message.startsWith('ACTIVE_CONFIGURATION') ? 'CONFIGURATION_MISSING' : 'CONNECTION_ERROR',
+        restPort,
+        maxPlayers,
+        endpoint,
         message: message.startsWith('ACTIVE_CONFIGURATION')
           ? 'No se pudo leer PalWorldSettings.ini para configurar el monitor.'
           : 'No se pudo conectar con la REST API local del servidor.'
@@ -104,6 +129,32 @@ export class PalworldPlayersService {
     await writeFile(tempPath, nextContent, 'utf8');
     await copyFile(tempPath, activePath);
     void this.loggingService?.write('palserver', 'INFO', 'Monitor de jugadores: REST API activada en PalWorldSettings.ini.');
+  }
+
+  private trackRunningRuntime(runtimeKey: string): void {
+    if (this.runningRuntimeKey === runtimeKey) {
+      return;
+    }
+
+    this.runningRuntimeKey = runtimeKey;
+    this.restReadyWaitStartedAt = Date.now();
+    this.lastRestErrorLoggedAt = 0;
+  }
+
+  private resetRuntimeTracking(): void {
+    this.runningRuntimeKey = null;
+    this.restReadyWaitStartedAt = 0;
+    this.lastRestErrorLoggedAt = 0;
+  }
+
+  private logRestErrorThrottled(message: string): void {
+    const now = Date.now();
+    if (now - this.lastRestErrorLoggedAt < REST_ERROR_LOG_THROTTLE_MS) {
+      return;
+    }
+
+    this.lastRestErrorLoggedAt = now;
+    void this.loggingService?.write('palserver', 'ERROR', `Monitor de jugadores: ${message}`);
   }
 }
 
@@ -179,6 +230,10 @@ function requestPlayers(endpoint: string, adminPassword: string): Promise<unknow
     request.on('error', reject);
     request.end();
   });
+}
+
+function isRestWarmupError(message: string): boolean {
+  return /ECONNREFUSED|ECONNRESET|REST_API_PLAYERS_TIMEOUT/i.test(message);
 }
 
 function normalizePlayersResponse(response: unknown): PalworldPlayerDto[] {

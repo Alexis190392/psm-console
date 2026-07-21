@@ -702,10 +702,15 @@ function updateNavigation(status: ApplicationStatus): void {
     ApplicationStatus.SERVER_MISSING
   ].includes(status);
   const logsAvailable = serverAvailable;
+  const serverRunning = status === ApplicationStatus.SERVER_RUNNING;
+
+  if (navigationState.is('players') && !serverRunning) {
+    navigationState.set('home');
+  }
 
   navLinks.forEach((link) => {
     const nav = link.dataset['nav'];
-    const serverRunning = status === ApplicationStatus.SERVER_RUNNING;
+    const isRuntimeOnlyView = nav === 'players';
     const enabled =
       nav === 'home' ||
       (nav === 'server' && serverAvailable) ||
@@ -714,14 +719,11 @@ function updateNavigation(status: ApplicationStatus): void {
       (nav === 'backups' && serverAvailable) ||
       (nav === 'network' && serverAvailable);
 
+    link.classList.toggle('hidden', isRuntimeOnlyView && !serverRunning);
     link.classList.toggle('sidebar__link--locked', !enabled);
     link.classList.toggle('sidebar__link--active', nav === navigationState.current);
     link.setAttribute('aria-disabled', enabled ? 'false' : 'true');
   });
-
-  if (navigationState.is('players') && status !== ApplicationStatus.SERVER_RUNNING) {
-    navigationState.set('home');
-  }
 }
 
 function updateStartServerButton(actions: AllowedActionsDto): void {
@@ -1065,6 +1067,14 @@ function createPlayersSummaryCard(summary: PalworldPlayersStatusDto | null): Sum
       value: 'Reiniciar servidor',
       detail: summary.message,
       state: createSummaryCardState('warning')
+    };
+  }
+
+  if (summary.status === 'REST_STARTING') {
+    return {
+      value: 'Esperando REST',
+      detail: summary.message,
+      state: createSummaryCardState('loading')
     };
   }
 

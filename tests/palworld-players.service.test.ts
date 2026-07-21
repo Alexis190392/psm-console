@@ -53,6 +53,20 @@ describe('PalworldPlayersService', () => {
       currentPlayers: 0
     });
   });
+
+  it('waits for REST API warmup before reporting connection errors', async () => {
+    const service = createService(
+      'RUNNING',
+      'OptionSettings=(RESTAPIEnabled=True,RESTAPIPort=1,AdminPassword="secret",ServerPlayerMaxNum=8)'
+    );
+
+    await expect(service.getStatus()).resolves.toMatchObject({
+      status: 'REST_STARTING',
+      players: [],
+      currentPlayers: 0,
+      restPort: 1
+    });
+  });
 });
 
 async function writeConfiguration(path: string, content: string): Promise<void> {
