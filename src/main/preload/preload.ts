@@ -21,7 +21,8 @@ import type {
 } from '../../shared/dto/palworld-configuration-status.dto';
 import type {
   PalworldInstallationStatusDto,
-  PalworldInstallRequestDto
+  PalworldInstallRequestDto,
+  PalworldUpdateRequestDto
 } from '../../shared/dto/palworld-installation-status.dto';
 import type {
   PalworldRuntimeStatusDto,
@@ -38,6 +39,7 @@ const ipcChannels = {
   steamCmdInstall: 'steamcmd:install',
   serverGetInstallationStatus: 'server:get-installation-status',
   serverInstall: 'server:install',
+  serverUpdate: 'server:update',
   serverStart: 'server:start',
   serverStop: 'server:stop',
   serverGetRuntimeStatus: 'server:get-runtime-status',
@@ -75,6 +77,7 @@ export interface PalcmApi {
   server: {
     getInstallationStatus: () => Promise<PalworldInstallationStatusDto>;
     install: (request: PalworldInstallRequestDto) => Promise<OperationAcceptedDto>;
+    update: (request: PalworldUpdateRequestDto) => Promise<OperationAcceptedDto>;
     start: (request: PalworldStartRequestDto) => Promise<OperationAcceptedDto>;
     stop: (request: PalworldStopRequestDto) => Promise<OperationAcceptedDto>;
     getRuntimeStatus: () => Promise<PalworldRuntimeStatusDto>;
@@ -129,6 +132,8 @@ const api: PalcmApi = {
       ipcRenderer.invoke(ipcChannels.serverGetInstallationStatus) as Promise<PalworldInstallationStatusDto>,
     install: (request) =>
       ipcRenderer.invoke(ipcChannels.serverInstall, request) as Promise<OperationAcceptedDto>,
+    update: (request) =>
+      ipcRenderer.invoke(ipcChannels.serverUpdate, request) as Promise<OperationAcceptedDto>,
     start: (request) =>
       ipcRenderer.invoke(ipcChannels.serverStart, request) as Promise<OperationAcceptedDto>,
     stop: (request) =>

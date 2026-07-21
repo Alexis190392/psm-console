@@ -8,6 +8,7 @@ export const ipcChannels = {
   steamCmdRepair: 'steamcmd:repair',
   serverGetInstallationStatus: 'server:get-installation-status',
   serverInstall: 'server:install',
+  serverUpdate: 'server:update',
   serverRepair: 'server:repair',
   serverStart: 'server:start',
   serverStop: 'server:stop',

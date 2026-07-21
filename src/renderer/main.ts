@@ -1610,6 +1610,7 @@ function renderServerFooter(parsed: ParsedPalworldSettings): void {
   appFooter.innerHTML = `
     <span id="server-footer-message" class="app-footer__message">Sin cambios pendientes.</span>
     <button id="restore-default-config" class="secondary-button secondary-button--warning" type="button">Volver a default</button>
+    <button id="update-server" class="secondary-button" type="button" ${isServerUpdateBlocked() ? 'disabled' : ''}>Actualizar servidor</button>
     <button id="discard-config" class="secondary-button" type="button" disabled>Descartar cambios</button>
     <button id="save-config" class="primary-button" type="button">Guardar</button>
   `;
@@ -1623,7 +1624,53 @@ function renderServerFooter(parsed: ParsedPalworldSettings): void {
     'click',
     showRestoreDefaultConfirmation
   );
+  document.querySelector<HTMLButtonElement>('#update-server')?.addEventListener('click', showServerUpdateConfirmation);
   updateServerDirtyState(parsed);
+}
+
+function isServerUpdateBlocked(): boolean {
+  return [
+    ApplicationStatus.SERVER_STARTING,
+    ApplicationStatus.SERVER_RUNNING,
+    ApplicationStatus.SERVER_STOPPING
+  ].includes(latestStatus);
+}
+
+function showServerUpdateConfirmation(): void {
+  if (!appFooter) {
+    return;
+  }
+
+  appFooter.classList.remove('hidden');
+  appFooter.classList.add('app-footer--confirm');
+  appFooter.innerHTML = renderInlineConfirm({
+    message: 'Se ejecutara SteamCMD para actualizar y validar Palworld Dedicated Server. El servidor debe estar detenido.',
+    actions: [
+      { id: 'confirm-server-update', label: 'Actualizar', tone: 'warning' },
+      { id: 'cancel-server-update', label: 'Cancelar', tone: 'secondary' }
+    ]
+  });
+  document.querySelector<HTMLButtonElement>('#confirm-server-update')?.addEventListener('click', () => {
+    void updateServerInstallation();
+  });
+  document.querySelector<HTMLButtonElement>('#cancel-server-update')?.addEventListener('click', () => {
+    void renderServerConfigurationView();
+  });
+}
+
+async function updateServerInstallation(): Promise<void> {
+  if (!palcmApi) {
+    return;
+  }
+
+  appendConsoleLine('Confirmado: actualizar Palworld Dedicated Server.');
+  navigationState.set('logs');
+  renderActiveView();
+  const accepted = await palcmApi.server.update({ confirmed: true });
+  await pollOperation(accepted.operationId);
+  showToast('Actualizacion del servidor finalizada');
+  navigationState.set('server');
+  await refreshState();
 }
 
 async function getFirewallStatus(forceRefresh = false): Promise<FirewallStatusDto> {

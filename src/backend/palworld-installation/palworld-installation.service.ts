@@ -9,7 +9,8 @@ import { SteamCmdService } from '../steamcmd/steamcmd.service';
 import type { OperationAcceptedDto } from '../../shared/dto/operation-progress.dto';
 import type {
   PalworldInstallationStatusDto,
-  PalworldInstallRequestDto
+  PalworldInstallRequestDto,
+  PalworldUpdateRequestDto
 } from '../../shared/dto/palworld-installation-status.dto';
 
 export const PALWORLD_DEDICATED_SERVER_APP_ID = '2394010';
@@ -79,7 +80,50 @@ export class PalworldInstallationService {
     };
   }
 
+  update(request: PalworldUpdateRequestDto, getServerState?: () => string): OperationAcceptedDto {
+    if (!request.confirmed) {
+      throw new Error('PALWORLD_UPDATE_REQUIRES_CONFIRMATION');
+    }
+
+    const status = this.getStatus();
+
+    if (status.status !== 'READY' || !existsSync(status.executablePath)) {
+      throw new Error('PALWORLD_SERVER_NOT_READY');
+    }
+
+    const runtimeState = getServerState?.();
+
+    if (runtimeState && ['STARTING', 'RUNNING', 'STOPPING'].includes(runtimeState)) {
+      throw new Error('PALWORLD_UPDATE_REQUIRES_SERVER_STOPPED');
+    }
+
+    const steamCmdStatus = this.steamCmdService.getStatus();
+
+    if (steamCmdStatus.status !== 'READY') {
+      throw new Error('STEAMCMD_NOT_READY');
+    }
+
+    const operation = this.operationManagerService.create(
+      'Actualizacion de Palworld Dedicated Server',
+      'Preparando SteamCMD para actualizar y validar el servidor.'
+    );
+
+    void this.updateAsync(operation.operationId);
+
+    return {
+      operationId: operation.operationId
+    };
+  }
+
   private async installAsync(operationId: string): Promise<void> {
+    await this.runServerAppUpdate(operationId, 'install');
+  }
+
+  private async updateAsync(operationId: string): Promise<void> {
+    await this.runServerAppUpdate(operationId, 'update');
+  }
+
+  private async runServerAppUpdate(operationId: string, mode: 'install' | 'update'): Promise<void> {
     const steamCmdExecutable = this.steamCmdService.getStatus().executablePath;
     const installDirectory = this.portablePathService.getPalworldServerRoot();
 
@@ -87,7 +131,10 @@ export class PalworldInstallationService {
       this.operationManagerService.update(operationId, {
         status: 'RUNNING',
         percent: 5,
-        message: 'Ejecutando SteamCMD para descargar Palworld Dedicated Server.'
+        message:
+          mode === 'install'
+            ? 'Ejecutando SteamCMD para descargar Palworld Dedicated Server.'
+            : 'Ejecutando SteamCMD para actualizar Palworld Dedicated Server.'
       });
       this.operationManagerService.appendLog(
         operationId,
@@ -108,13 +155,19 @@ export class PalworldInstallationService {
       this.operationManagerService.update(operationId, {
         status: 'COMPLETED',
         percent: 100,
-        message: 'Palworld Dedicated Server instalado correctamente.'
+        message:
+          mode === 'install'
+            ? 'Palworld Dedicated Server instalado correctamente.'
+            : 'Palworld Dedicated Server actualizado correctamente.'
       });
     } catch (error) {
       this.operationManagerService.update(operationId, {
         status: 'FAILED',
         percent: 100,
-        message: 'No se pudo instalar Palworld Dedicated Server.',
+        message:
+          mode === 'install'
+            ? 'No se pudo instalar Palworld Dedicated Server.'
+            : 'No se pudo actualizar Palworld Dedicated Server.',
         error: error instanceof Error ? error.message : String(error)
       });
     }

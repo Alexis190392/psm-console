@@ -9,3 +9,7 @@ export interface PalworldInstallationStatusDto {
 export interface PalworldInstallRequestDto {
   confirmed: boolean;
 }
+
+export interface PalworldUpdateRequestDto {
+  confirmed: boolean;
+}

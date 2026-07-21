@@ -16,6 +16,10 @@ describe('IPC channel surface', () => {
     expect(ipcChannels.firewallCreateRule).toBe('firewall:create-rule');
   });
 
+  it('keeps server maintenance actions behind concrete domain channels', () => {
+    expect(ipcChannels.serverUpdate).toBe('server:update');
+  });
+
   it('keeps backup actions behind concrete domain channels', () => {
     expect(ipcChannels.backupGetSummary).toBe('backup:get-summary');
     expect(ipcChannels.backupCreateConfiguration).toBe('backup:create-configuration');
