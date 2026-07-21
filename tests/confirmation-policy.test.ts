@@ -5,6 +5,7 @@ describe('confirmation policy', () => {
   it('requires confirmation before downloads, server actions, firewall and backups', () => {
     expect(requiresUserConfirmation('steamcmd:install')).toBe(true);
     expect(requiresUserConfirmation('server:install')).toBe(true);
+    expect(requiresUserConfirmation('admin:execute-action')).toBe(true);
     expect(requiresUserConfirmation('firewall:create-rule')).toBe(true);
     expect(requiresUserConfirmation('backup:create-configuration')).toBe(true);
     expect(requiresUserConfirmation('backup:create-world')).toBe(true);

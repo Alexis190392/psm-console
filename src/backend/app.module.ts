@@ -5,6 +5,7 @@ import { FirewallService } from './firewall/firewall.service';
 import { NetworkService } from './network/network.service';
 import { LoggingService } from './logging/logging.service';
 import { OperationManagerService } from './operations/operation-manager.service';
+import { PalworldAdminService } from './palworld-admin/palworld-admin.service';
 import { PalworldConfigurationService } from './palworld-configuration/palworld-configuration.service';
 import { PalworldInstallationService } from './palworld-installation/palworld-installation.service';
 import { PalworldPlayersService } from './palworld-players/palworld-players.service';
@@ -22,6 +23,7 @@ import { SteamCmdService } from './steamcmd/steamcmd.service';
     BackupService,
     SteamCmdService,
     PalworldInstallationService,
+    PalworldAdminService,
     PalworldPlayersService,
     PalworldProcessService,
     PalworldConfigurationService,
@@ -37,6 +39,7 @@ import { SteamCmdService } from './steamcmd/steamcmd.service';
     BackupService,
     SteamCmdService,
     PalworldInstallationService,
+    PalworldAdminService,
     PalworldPlayersService,
     PalworldProcessService,
     PalworldConfigurationService,

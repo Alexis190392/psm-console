@@ -35,4 +35,9 @@ describe('IPC channel surface', () => {
   it('keeps player monitoring behind a concrete readonly domain channel', () => {
     expect(ipcChannels.playersGetStatus).toBe('players:get-status');
   });
+
+  it('keeps admin actions behind concrete domain channels', () => {
+    expect(ipcChannels.adminGetStatus).toBe('admin:get-status');
+    expect(ipcChannels.adminExecuteAction).toBe('admin:execute-action');
+  });
 });

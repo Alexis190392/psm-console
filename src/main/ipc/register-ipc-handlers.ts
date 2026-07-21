@@ -6,6 +6,7 @@ import { FirewallService } from '../../backend/firewall/firewall.service';
 import { NetworkService } from '../../backend/network/network.service';
 import { LoggingService } from '../../backend/logging/logging.service';
 import { OperationManagerService } from '../../backend/operations/operation-manager.service';
+import { PalworldAdminService } from '../../backend/palworld-admin/palworld-admin.service';
 import { PalworldConfigurationService } from '../../backend/palworld-configuration/palworld-configuration.service';
 import { PalworldInstallationService } from '../../backend/palworld-installation/palworld-installation.service';
 import { PalworldPlayersService } from '../../backend/palworld-players/palworld-players.service';
@@ -25,6 +26,7 @@ import type {
   PalworldStartRequestDto,
   PalworldStopRequestDto
 } from '../../shared/dto/palworld-runtime-status.dto';
+import type { PalworldAdminActionRequestDto } from '../../shared/dto/palworld-admin.dto';
 import type { SteamCmdInstallRequestDto } from '../../shared/dto/steamcmd-status.dto';
 import type { FirewallApplyRulesRequestDto } from '../../shared/dto/firewall-status.dto';
 import type {
@@ -43,6 +45,7 @@ export function registerIpcHandlers(
   const palworldInstallationService = nestContext.get(PalworldInstallationService);
   const palworldProcessService = nestContext.get(PalworldProcessService);
   const palworldPlayersService = nestContext.get(PalworldPlayersService);
+  const palworldAdminService = nestContext.get(PalworldAdminService);
   const palworldConfigurationService = nestContext.get(PalworldConfigurationService);
   const operationManagerService = nestContext.get(OperationManagerService);
   const firewallService = nestContext.get(FirewallService);
@@ -90,6 +93,14 @@ export function registerIpcHandlers(
 
   ipcMain.handle(ipcChannels.playersGetStatus, () =>
     palworldPlayersService.getStatus()
+  );
+
+  ipcMain.handle(ipcChannels.adminGetStatus, () =>
+    palworldAdminService.getStatus()
+  );
+
+  ipcMain.handle(ipcChannels.adminExecuteAction, (_event, request: PalworldAdminActionRequestDto) =>
+    palworldAdminService.execute(request)
   );
 
   ipcMain.handle(ipcChannels.configValidate, () => palworldConfigurationService.getStatus());

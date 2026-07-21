@@ -7,6 +7,7 @@ export const confirmationRequiredActions = [
   'server:start',
   'server:stop',
   'server:restart',
+  'admin:execute-action',
   'config:save',
   'config:create-default',
   'firewall:create-rule',
