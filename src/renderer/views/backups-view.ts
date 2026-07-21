@@ -9,9 +9,7 @@ export function renderBackupsView(summary: BackupSummaryDto): string {
     <div class="view-stack view-stack--scroll">
       <div class="view-header view-header--contained">
         <div>
-          <span class="view-kicker">BACKUPS</span>
-          <h3>Backups del servidor</h3>
-          <p>${escapeHtml(summary.message)}</p>
+          <h3>Backups</h3>
         </div>
         <span class="view-meta-pill">${String(totalBackups)} backups</span>
       </div>

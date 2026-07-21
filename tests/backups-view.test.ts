@@ -23,7 +23,7 @@ describe('backups view', () => {
 
     const html = renderBackupsView(summary);
 
-    expect(html).toContain('Backups del servidor');
+    expect(html).toContain('Backups');
     expect(html).toContain('D:\\Pal\\PalWorldSettings.ini');
     expect(html).toContain('config-1.ini');
     expect(html).toContain('2.0 KB');

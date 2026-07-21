@@ -1437,9 +1437,7 @@ async function renderServerConfigurationView(): Promise<void> {
       <div class="view-stack">
         <div class="view-header view-header--contained">
           <div>
-            <span class="view-kicker">SERVER</span>
-            <h3>Configuracion del servidor</h3>
-            <p>Edita PalWorldSettings.ini.</p>
+            <h3>Configuracion</h3>
           </div>
           <div class="view-meta-stack" aria-label="Resumen de configuracion">
             <span class="view-meta-pill">${String(parsed.settings.length)} parametros</span>
@@ -2428,9 +2426,7 @@ async function renderFirewallView(forceRefresh = false): Promise<void> {
     <div class="view-stack view-stack--scroll">
       <div class="view-header view-header--contained">
         <div>
-          <span class="view-kicker">NETWORK & FIREWALL</span>
-          <h3>Firewall y acceso externo</h3>
-          <p>Diagnostico local y externo.</p>
+          <h3>Red y Firewall</h3>
         </div>
         <span class="view-meta-pill">Diagnostico</span>
       </div>
@@ -2478,11 +2474,10 @@ function renderFirewallStatusView(firewall: FirewallStatusDto): void {
       <div class="view-stack view-stack--scroll">
         <div class="view-header view-header--contained">
           <div>
-            <span class="view-kicker">NETWORK & FIREWALL</span>
-            <h3>Firewall y acceso externo</h3>
-            <p>${escapeHtml(formatLastVerification(latestFirewallCheckedAt))}.</p>
+            <h3>Red y Firewall</h3>
           </div>
           <div class="view-actions">
+            <span class="view-meta-pill">${escapeHtml(formatLastVerification(latestFirewallCheckedAt))}</span>
             <button id="refresh-firewall" class="secondary-button icon-button" type="button" aria-label="Actualizar diagnostico" title="Actualizar diagnostico">
               ${renderIcon('refresh')}
             </button>
@@ -2529,11 +2524,10 @@ function renderFirewallErrorView(message: string): void {
     <div class="view-stack view-stack--scroll">
       <div class="view-header view-header--contained">
         <div>
-          <span class="view-kicker">NETWORK & FIREWALL</span>
-          <h3>Firewall y acceso externo</h3>
-          <p>Diagnostico interrumpido.</p>
+          <h3>Red y Firewall</h3>
         </div>
         <div class="view-actions">
+          <span class="view-meta-pill">Error</span>
           <button id="refresh-firewall" class="secondary-button icon-button" type="button" aria-label="Reintentar diagnostico" title="Reintentar diagnostico">
             ${renderIcon('refresh')}
           </button>

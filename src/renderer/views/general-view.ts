@@ -11,9 +11,7 @@ export function renderGeneralView(model: GeneralViewModel): string {
     <div class="view-stack">
       <div class="view-header view-header--contained">
         <div>
-          <span class="view-kicker">GENERAL</span>
-          <h3>Panel general</h3>
-          <p>Estado operativo y accesos.</p>
+          <h3>General</h3>
         </div>
         <span class="view-meta-pill">Red: ${escapeHtml(model.networkFreshness)}</span>
       </div>

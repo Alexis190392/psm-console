@@ -1164,7 +1164,7 @@ button {
   min-height: 0;
   height: 100%;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 
 .view-stack--scroll {
@@ -1175,31 +1175,34 @@ button {
 
 .view-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 20px;
+  gap: 12px;
   min-width: 0;
 }
 
 .view-header--contained {
-  padding: 14px 16px;
+  min-height: 48px;
+  padding: 8px 12px;
   border: 1px solid rgba(0, 229, 255, 0.14);
-  border-radius: 10px;
+  border-radius: 8px;
   background:
-    linear-gradient(180deg, rgba(0, 229, 255, 0.055), rgba(11, 15, 19, 0.22)),
-    rgba(11, 15, 19, 0.5);
+    linear-gradient(180deg, rgba(0, 229, 255, 0.035), rgba(11, 15, 19, 0.12)),
+    rgba(11, 15, 19, 0.36);
 }
 
 .view-actions {
   display: flex;
   flex: 0 0 auto;
+  align-items: center;
   gap: 10px;
 }
 
 .view-header h3 {
-  margin: 4px 0 6px;
+  margin: 0;
   color: var(--color-primary-soft);
-  font-size: 24px;
+  font-size: 18px;
+  line-height: 1.2;
 }
 
 .view-header p,
@@ -1211,9 +1214,10 @@ button {
 }
 
 .view-meta-stack {
-  display: grid;
-  justify-items: end;
-  gap: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
   min-width: min(380px, 38vw);
 }
 
@@ -1221,19 +1225,19 @@ button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 32px;
-  padding: 0 12px;
+  min-height: 28px;
+  padding: 0 10px;
   border: 1px solid rgba(0, 229, 255, 0.16);
   border-radius: 999px;
   background: rgba(0, 229, 255, 0.07);
   color: var(--color-primary-soft);
   font-family: "JetBrains Mono", Consolas, monospace;
-  font-size: 12px;
+  font-size: 11px;
   white-space: nowrap;
 }
 
 .view-meta-path {
-  max-width: 100%;
+  max-width: min(540px, 42vw);
   overflow: hidden;
   color: var(--color-text-muted);
   font-family: "JetBrains Mono", Consolas, monospace;
