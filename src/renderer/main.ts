@@ -1,5 +1,6 @@
 import './styles.css';
 import { APP_INFO, APP_VERSION_LABEL } from '../shared/constants/app-info';
+import { formatLocalLogTimestamp } from '../shared/utils/local-time';
 import { ApplicationStatus } from '../shared/enums/application-status';
 import type { AllowedActionsDto } from '../shared/dto/allowed-actions.dto';
 import type { BackupSummaryDto } from '../shared/dto/backup-status.dto';
@@ -669,7 +670,7 @@ function appendOperationLogs(operation: OperationProgressDto): void {
 }
 
 function appendConsoleLine(line: string, includeTimestamp = true): void {
-  const text = includeTimestamp ? `[${new Date().toISOString()}] ${line}` : line;
+  const text = includeTimestamp ? `[${formatLocalLogTimestamp()}] ${line}` : line;
   consoleLines.push(text);
 
   if (consoleLines.length > 500) {
@@ -1639,9 +1640,13 @@ function renderPlayerRow(player: PalworldPlayersStatusDto['players'][number]): s
         <span>${escapeHtml(identity)}</span>
       </div>
       <small>${escapeHtml(secondary.join(' · ') || 'Sin identificadores adicionales')}</small>
-      <em>${typeof player.ping === 'number' ? `${String(player.ping)} ms` : 'Ping no informado'}</em>
+      <em>${typeof player.ping === 'number' ? `${formatPing(player.ping)} ms` : 'Ping no informado'}</em>
     </article>
   `;
+}
+
+function formatPing(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
 function renderBackupsFooter(): void {

@@ -1,6 +1,7 @@
 import { Injectable, Optional } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { LoggingService } from '../logging/logging.service';
+import { formatLocalLogTimestamp } from '../../shared/utils/local-time';
 import type { OperationProgressDto, OperationStatus } from '../../shared/dto/operation-progress.dto';
 
 @Injectable()
@@ -89,5 +90,5 @@ function clampPercent(value: number): number {
 }
 
 function formatLogLine(line: string): string {
-  return `[${new Date().toISOString()}] ${line}`;
+  return `[${formatLocalLogTimestamp()}] ${line}`;
 }

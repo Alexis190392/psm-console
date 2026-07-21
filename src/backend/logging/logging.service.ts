@@ -3,6 +3,7 @@ import { appendFile, mkdir, readFile, rename, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { PortablePathService } from '../portable-path/portable-path.service';
+import { formatLocalLogTimestamp } from '../../shared/utils/local-time';
 import type { LogEntryDto, LogLevel, LogModule, LogsRecentDto, LogsRecentRequestDto } from '../../shared/dto/log-status.dto';
 
 const LOG_MODULES: LogModule[] = ['manager', 'steamcmd', 'palserver', 'firewall', 'backup', 'api', 'error'];
@@ -13,7 +14,7 @@ export class LoggingService {
   constructor(private readonly portablePathService: PortablePathService) {}
 
   async write(module: LogModule, level: LogLevel, message: string): Promise<void> {
-    const line = `[${new Date().toISOString()}] [${level}] [${module}] ${sanitizeLogMessage(message)}\n`;
+    const line = `[${formatLocalLogTimestamp()}] [${level}] [${module}] ${sanitizeLogMessage(message)}\n`;
     const filePath = this.getLogPath(module);
 
     await mkdir(this.portablePathService.getLogsRoot(), { recursive: true });
