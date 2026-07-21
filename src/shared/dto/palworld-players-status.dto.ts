@@ -14,11 +14,15 @@ export interface PalworldPlayerDto {
   userId?: string;
   steamId?: string;
   ping?: number;
+  online?: boolean;
+  lastSeenAt?: string;
+  banState?: 'BANNED' | 'NOT_BANNED' | 'UNKNOWN';
 }
 
 export interface PalworldPlayersStatusDto {
   status: PalworldPlayersStatus;
   players: PalworldPlayerDto[];
+  previousPlayers?: PalworldPlayerDto[];
   currentPlayers: number;
   maxPlayers?: number;
   restPort?: number;

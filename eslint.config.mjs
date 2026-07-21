@@ -2,7 +2,15 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['dist/**', 'release/**', 'node_modules/**', 'design/**', 'ejecucionPruebas/**', 'eslint.config.mjs']
+    ignores: [
+      'dist/**',
+      'release/**',
+      'node_modules/**',
+      'design/**',
+      'ejecucionPruebas/**',
+      'scripts/capture-screenshots.js',
+      'eslint.config.mjs'
+    ]
   },
   ...tseslint.configs.strictTypeChecked,
   {

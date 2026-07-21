@@ -37,22 +37,24 @@ export function renderSummaryCard(details: SummaryCardDetails): string {
         <strong>${escapeHtml(details.value)}</strong>
         <small>${escapeHtml(details.detail)}</small>
       </span>
-      <span class="summary-card__icon" aria-label="${escapeHtml(details.label)}">${details.icon}</span>
+      <span class="summary-card__icon" aria-label="${escapeHtml(details.label)}">
+        <span class="ui-icon ui-icon--${escapeHtml(details.icon)}" aria-hidden="true"></span>
+      </span>
     </button>
   `;
 }
 
 export function createSummaryCardState(state: SummaryCardTone): SummaryCardState {
   if (state === 'ok') {
-    return { icon: '&#10003;', tone: 'ok', label: 'Correcto' };
+    return { icon: 'check', tone: 'ok', label: 'Correcto' };
   }
 
   if (state === 'error') {
-    return { icon: '&times;', tone: 'error', label: 'Incorrecto' };
+    return { icon: 'x', tone: 'error', label: 'Incorrecto' };
   }
 
   if (state === 'warning') {
-    return { icon: '!', tone: 'warning', label: 'Revisar' };
+    return { icon: 'warning', tone: 'warning', label: 'Revisar' };
   }
 
   if (state === 'loading') {
@@ -60,8 +62,8 @@ export function createSummaryCardState(state: SummaryCardTone): SummaryCardState
   }
 
   if (state === 'configuration') {
-    return { icon: '&#9881;!', tone: 'configuration', label: 'Requiere configuracion' };
+    return { icon: 'settings-warning', tone: 'configuration', label: 'Requiere configuracion' };
   }
 
-  return { icon: '&#9881;', tone: 'optional', label: 'Configuracion opcional' };
+  return { icon: 'settings', tone: 'optional', label: 'Configuracion opcional' };
 }

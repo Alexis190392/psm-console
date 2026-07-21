@@ -5,6 +5,7 @@ import { existsSync } from 'node:fs';
 import { dirname, join, normalize } from 'node:path';
 import { OperationManagerService } from '../operations/operation-manager.service';
 import { LoggingService } from '../logging/logging.service';
+import { PalworldConfigurationService } from '../palworld-configuration/palworld-configuration.service';
 import { PalworldInstallationService } from '../palworld-installation/palworld-installation.service';
 import type { OperationAcceptedDto } from '../../shared/dto/operation-progress.dto';
 import type {
@@ -50,6 +51,7 @@ export class PalworldProcessService {
 
   constructor(
     private readonly palworldInstallationService: PalworldInstallationService,
+    private readonly palworldConfigurationService: PalworldConfigurationService,
     private readonly operationManagerService: OperationManagerService,
     @Optional() private readonly loggingService?: LoggingService
   ) {}
@@ -143,6 +145,15 @@ export class PalworldProcessService {
       this.operationManagerService.update(operationId, {
         status: 'RUNNING',
         percent: 10,
+        message: 'Verificando configuracion activa antes de iniciar.',
+        canCancel: false
+      });
+      const configuration = await this.palworldConfigurationService.readActive();
+      this.appendLog(operationId, `Config verificada antes de iniciar: ${configuration.path}`);
+
+      this.operationManagerService.update(operationId, {
+        status: 'RUNNING',
+        percent: 15,
         message: 'Verificando puertos requeridos antes de iniciar.',
         canCancel: false
       });

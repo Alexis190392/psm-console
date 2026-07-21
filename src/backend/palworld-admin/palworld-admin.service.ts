@@ -1,6 +1,7 @@
 import { Injectable, Optional } from '@nestjs/common';
 import { request as httpRequest } from 'node:http';
 import { PalworldConfigurationService } from '../palworld-configuration/palworld-configuration.service';
+import { PalworldPlayersService } from '../palworld-players/palworld-players.service';
 import { PalworldProcessService } from '../palworld-process/palworld-process.service';
 import { LoggingService } from '../logging/logging.service';
 import type {
@@ -19,6 +20,7 @@ export class PalworldAdminService {
   constructor(
     private readonly palworldConfigurationService: PalworldConfigurationService,
     private readonly palworldProcessService: PalworldProcessService,
+    private readonly palworldPlayersService: PalworldPlayersService,
     @Optional() private readonly loggingService?: LoggingService
   ) {}
 
@@ -96,6 +98,7 @@ export class PalworldAdminService {
     const payload = createActionPayload(request);
     const endpoint = createRestEndpoint(credentials.restPort, getActionPath(request.action));
     await requestAdminAction(endpoint, credentials.adminPassword, payload);
+    this.updateKnownPlayerBanState(request);
     const message = getActionSuccessMessage(request.action);
     void this.loggingService?.write('palserver', 'INFO', `Administracion: ${message}`);
 
@@ -105,6 +108,16 @@ export class PalworldAdminService {
       message,
       updatedAt: new Date().toISOString()
     };
+  }
+
+  private updateKnownPlayerBanState(request: PalworldAdminActionRequestDto): void {
+    if (request.action === 'ban' && request.userId) {
+      this.palworldPlayersService.markBanState(request.userId, 'BANNED');
+    }
+
+    if (request.action === 'unban' && request.userId) {
+      this.palworldPlayersService.markBanState(request.userId, 'NOT_BANNED');
+    }
   }
 
   private async readRestCredentials(): Promise<{

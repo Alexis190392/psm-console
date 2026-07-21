@@ -3,14 +3,17 @@ import { formatBytes, formatDateTime } from '../utils/format';
 import { escapeHtml } from '../utils/text';
 
 export function renderBackupsView(summary: BackupSummaryDto): string {
+  const totalBackups = summary.configurationBackups.length + summary.worldBackups.length;
+
   return `
     <div class="view-stack view-stack--scroll">
-      <div class="view-header">
+      <div class="view-header view-header--contained">
         <div>
           <span class="view-kicker">BACKUPS</span>
           <h3>Backups del servidor</h3>
           <p>${escapeHtml(summary.message)}</p>
         </div>
+        <span class="view-meta-pill">${String(totalBackups)} backups</span>
       </div>
       <section class="backup-actions">
         <article class="backup-source-card">

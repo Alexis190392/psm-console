@@ -57,6 +57,7 @@ describe('PalworldConfigurationService', () => {
     await waitForOperation(accepted.operationId, operationManager);
 
     expect(existsSync(activePath)).toBe(true);
+    await expect(readFile(activePath, 'utf8')).resolves.toContain('AdminPassword="admin"');
     expect(service.getStatus().status).toBe('READY');
   });
 
@@ -86,7 +87,7 @@ describe('PalworldConfigurationService', () => {
     const accepted = service.createDefault({ confirmed: true });
     await waitForOperation(accepted.operationId, operationManager);
 
-    await expect(readFile(activePath, 'utf8')).resolves.toContain('OptionSettings=(Difficulty=None)');
+    await expect(readFile(activePath, 'utf8')).resolves.toContain('OptionSettings=(Difficulty=None,AdminPassword="admin")');
     expect(service.getStatus().status).toBe('READY');
   });
 
@@ -99,7 +100,7 @@ describe('PalworldConfigurationService', () => {
 
     await expect(service.readActive()).resolves.toMatchObject({
       path: activePath,
-      content: '[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(Difficulty=None)'
+      content: '[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(Difficulty=None,AdminPassword="admin")'
     });
 
     const accepted = service.saveActive({
@@ -109,7 +110,7 @@ describe('PalworldConfigurationService', () => {
     await waitForOperation(accepted.operationId, operationManager);
 
     await expect(service.readActive()).resolves.toMatchObject({
-      content: '[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(Difficulty=Normal)'
+      content: '[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(Difficulty=Normal,AdminPassword="admin")'
     });
   });
 
@@ -124,8 +125,24 @@ describe('PalworldConfigurationService', () => {
     await waitForOperation(accepted.operationId, operationManager);
 
     await expect(service.readActive()).resolves.toMatchObject({
-      content: '[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(Difficulty=None)'
+      content: '[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(Difficulty=None,AdminPassword="admin")'
     });
+  });
+
+  it('repairs an empty admin password in an existing active configuration', async () => {
+    await mkdir(join(serverRoot, 'Pal', 'Saved', 'Config', 'WindowsServer'), { recursive: true });
+    await writeFile(templatePath, '[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(Difficulty=None)');
+    await writeFile(activePath, '[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(Difficulty=None,AdminPassword="")');
+    const service = new PalworldConfigurationService(
+      portablePathService,
+      new OperationManagerService(),
+      portableStateService
+    );
+
+    await expect(service.readActive()).resolves.toMatchObject({
+      content: '[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(Difficulty=None,AdminPassword="admin")'
+    });
+    await expect(readFile(activePath, 'utf8')).resolves.toContain('AdminPassword="admin"');
   });
 });
 

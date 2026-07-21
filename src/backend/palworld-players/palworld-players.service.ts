@@ -9,16 +9,26 @@ import { PortablePathService } from '../portable-path/portable-path.service';
 import type { PalworldPlayerDto, PalworldPlayersStatusDto } from '../../shared/dto/palworld-players-status.dto';
 
 const DEFAULT_REST_API_PORT = 8212;
+const DEFAULT_ADMIN_PASSWORD = 'admin';
 const PLAYERS_ENDPOINT_PATH = '/v1/api/players';
 const REST_REQUEST_TIMEOUT_MS = 1_800;
 const REST_READY_GRACE_MS = 60_000;
 const REST_ERROR_LOG_THROTTLE_MS = 60_000;
+
+interface KnownPlayerRecord extends PalworldPlayerDto {
+  key: string;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  online: boolean;
+  banState: 'BANNED' | 'NOT_BANNED' | 'UNKNOWN';
+}
 
 @Injectable()
 export class PalworldPlayersService {
   private runningRuntimeKey: string | null = null;
   private restReadyWaitStartedAt = 0;
   private lastRestErrorLoggedAt = 0;
+  private readonly knownPlayers = new Map<string, KnownPlayerRecord>();
 
   constructor(
     private readonly palworldConfigurationService: PalworldConfigurationService,
@@ -62,21 +72,24 @@ export class PalworldPlayersService {
       }
 
       if (!adminPassword) {
+        await this.enableRestApi(configuration.path, configuration.content);
         return createPlayersStatus({
-          status: 'ADMIN_PASSWORD_MISSING',
+          status: 'REST_CONFIGURED_RESTART_REQUIRED',
           restPort,
           maxPlayers,
-          message: 'Define Admin Password en la configuracion para autenticar la API local.'
+          message: 'AdminPassword estaba vacio y se configuro como admin. Reinicia el servidor para que Palworld aplique el cambio.'
         });
       }
 
       endpoint = createPlayersEndpoint(restPort);
       const response = await requestPlayers(endpoint, adminPassword);
-      const players = normalizePlayersResponse(response);
+      const players = this.mergeOnlinePlayers(normalizePlayersResponse(response));
+      const previousPlayers = this.getPreviousPlayers(players);
 
       return createPlayersStatus({
         status: 'READY',
         players,
+        previousPlayers,
         currentPlayers: players.length,
         maxPlayers,
         restPort,
@@ -109,10 +122,17 @@ export class PalworldPlayersService {
   }
 
   private async enableRestApi(activePath: string, content: string): Promise<void> {
-    const nextContent = upsertOptionSettings(content, new Map([
+    const settings = parseOptionSettings(content);
+    const updates = new Map([
       ['RESTAPIEnabled', 'True'],
       ['RESTAPIPort', String(DEFAULT_REST_API_PORT)]
-    ]));
+    ]);
+
+    if (!unquoteSetting(settings.get('AdminPassword') ?? '').trim()) {
+      updates.set('AdminPassword', `"${DEFAULT_ADMIN_PASSWORD}"`);
+    }
+
+    const nextContent = upsertOptionSettings(content, updates);
     if (nextContent === content) {
       return;
     }
@@ -145,6 +165,7 @@ export class PalworldPlayersService {
     this.runningRuntimeKey = null;
     this.restReadyWaitStartedAt = 0;
     this.lastRestErrorLoggedAt = 0;
+    this.knownPlayers.clear();
   }
 
   private logRestErrorThrottled(message: string): void {
@@ -156,12 +177,78 @@ export class PalworldPlayersService {
     this.lastRestErrorLoggedAt = now;
     void this.loggingService?.write('palserver', 'ERROR', `Monitor de jugadores: ${message}`);
   }
+
+  markBanState(userId: string, banState: 'BANNED' | 'NOT_BANNED'): void {
+    const key = createPlayerKey({ userId });
+    const existing = this.knownPlayers.get(key);
+    const now = new Date().toISOString();
+
+    this.knownPlayers.set(key, {
+      key,
+      name: existing?.name ?? userId,
+      playerId: existing?.playerId,
+      userId: existing?.userId ?? userId,
+      steamId: existing?.steamId,
+      ping: existing?.ping,
+      firstSeenAt: existing?.firstSeenAt ?? now,
+      lastSeenAt: existing?.lastSeenAt ?? now,
+      online: existing?.online ?? false,
+      banState
+    });
+  }
+
+  private mergeOnlinePlayers(players: PalworldPlayerDto[]): PalworldPlayerDto[] {
+    const now = new Date().toISOString();
+    const onlineKeys = new Set<string>();
+
+    const merged = players.map((player) => {
+      const key = createPlayerKey(player);
+      onlineKeys.add(key);
+      const existing = this.knownPlayers.get(key);
+      const record: KnownPlayerRecord = {
+        key,
+        name: player.name,
+        playerId: player.playerId ?? existing?.playerId,
+        userId: player.userId ?? existing?.userId,
+        steamId: player.steamId ?? existing?.steamId,
+        ping: player.ping,
+        firstSeenAt: existing?.firstSeenAt ?? now,
+        lastSeenAt: now,
+        online: true,
+        banState: existing?.banState ?? 'UNKNOWN'
+      };
+      this.knownPlayers.set(key, record);
+
+      return toPlayerDto(record);
+    });
+
+    this.knownPlayers.forEach((record, key) => {
+      if (!onlineKeys.has(key) && record.online) {
+        this.knownPlayers.set(key, {
+          ...record,
+          online: false
+        });
+      }
+    });
+
+    return merged;
+  }
+
+  private getPreviousPlayers(currentPlayers: PalworldPlayerDto[]): PalworldPlayerDto[] {
+    const currentKeys = new Set(currentPlayers.map(createPlayerKey));
+
+    return [...this.knownPlayers.values()]
+      .filter((record) => !currentKeys.has(record.key))
+      .sort((left, right) => right.lastSeenAt.localeCompare(left.lastSeenAt))
+      .map(toPlayerDto);
+  }
 }
 
 interface PlayersStatusInput {
   status: PalworldPlayersStatusDto['status'];
   message: string;
   players?: PalworldPlayerDto[];
+  previousPlayers?: PalworldPlayerDto[];
   currentPlayers?: number;
   maxPlayers?: number;
   restPort?: number;
@@ -172,12 +259,30 @@ function createPlayersStatus(input: PlayersStatusInput): PalworldPlayersStatusDt
   return {
     status: input.status,
     players: input.players ?? [],
+    previousPlayers: input.previousPlayers ?? [],
     currentPlayers: input.currentPlayers ?? input.players?.length ?? 0,
     maxPlayers: input.maxPlayers,
     restPort: input.restPort,
     endpoint: input.endpoint,
     updatedAt: new Date().toISOString(),
     message: input.message
+  };
+}
+
+function createPlayerKey(player: Partial<Pick<PalworldPlayerDto, 'userId' | 'steamId' | 'playerId' | 'name'>>): string {
+  return player.userId ?? player.steamId ?? player.playerId ?? player.name ?? 'jugador-desconocido';
+}
+
+function toPlayerDto(record: KnownPlayerRecord): PalworldPlayerDto {
+  return {
+    name: record.name,
+    playerId: record.playerId,
+    userId: record.userId,
+    steamId: record.steamId,
+    ping: record.ping,
+    online: record.online,
+    lastSeenAt: record.lastSeenAt,
+    banState: record.banState
   };
 }
 

@@ -44,6 +44,12 @@ if (!appRoot) {
   throw new Error('Renderer root element was not found.');
 }
 
+function renderIcon(name: string, extraClass = ''): string {
+  const className = `ui-icon ui-icon--${name}${extraClass ? ` ${extraClass}` : ''}`;
+
+  return `<span class="${className}" aria-hidden="true"></span>`;
+}
+
 const rootElement = appRoot;
 
 rootElement.innerHTML = `
@@ -53,9 +59,9 @@ rootElement.innerHTML = `
       <span>${escapeHtml(APP_INFO.displayName)}</span>
     </div>
     <div class="titlebar__spacer"></div>
-    <button id="window-minimize" class="window-button" aria-label="Minimizar"><span aria-hidden="true">&minus;</span></button>
-    <button id="window-maximize" class="window-button" aria-label="Maximizar"><span aria-hidden="true">&#9633;</span></button>
-    <button id="window-close" class="window-button window-button--close" aria-label="Cerrar"><span aria-hidden="true">&times;</span></button>
+    <button id="window-minimize" class="window-button" aria-label="Minimizar">${renderIcon('minus')}</button>
+    <button id="window-maximize" class="window-button" aria-label="Maximizar">${renderIcon('maximize')}</button>
+    <button id="window-close" class="window-button window-button--close" aria-label="Cerrar">${renderIcon('x')}</button>
   </header>
   <aside class="sidebar">
     <section class="sidebar__identity">
@@ -67,12 +73,41 @@ rootElement.innerHTML = `
       </div>
     </section>
     <nav class="sidebar__nav" aria-label="Navegacion principal">
-      <a class="sidebar__link sidebar__link--active" data-nav="home" href="#">General</a>
-      <a class="sidebar__link sidebar__link--locked" data-nav="server" href="#">Servidor</a>
-      <a class="sidebar__link sidebar__link--locked" data-nav="admin" href="#">Administracion</a>
-      <a class="sidebar__link sidebar__link--locked" data-nav="network" href="#">Red y Firewall</a>
-      <a class="sidebar__link sidebar__link--locked" data-nav="backups" href="#">Backups</a>
-      <a class="sidebar__link sidebar__link--locked" data-nav="logs" href="#">Logs</a>
+      <a class="sidebar__link sidebar__link--active" data-nav="home" href="#">
+        ${renderIcon('home', 'sidebar__link-icon')}
+        <span>General</span>
+      </a>
+      <a class="sidebar__link sidebar__link--locked" data-nav="server" href="#">
+        ${renderIcon('server', 'sidebar__link-icon')}
+        <span>Servidor</span>
+      </a>
+      <div class="sidebar__group sidebar__group--collapsed hidden" data-nav-group="admin">
+        <a class="sidebar__link sidebar__link--group sidebar__link--locked" data-nav="admin" data-admin-group-toggle="true" href="#">
+          ${renderIcon('admin', 'sidebar__link-icon')}
+          <span>Administracion</span>
+          <span class="sidebar__chevron" aria-hidden="true"></span>
+        </a>
+        <div class="sidebar__subnav" aria-label="Secciones de administracion">
+          <a class="sidebar__sublink sidebar__link--locked" data-nav="admin" data-admin-sidebar-tab="general" href="#">
+            <span>Servidor</span>
+          </a>
+          <a class="sidebar__sublink sidebar__link--locked" data-nav="admin" data-admin-sidebar-tab="players" href="#">
+            <span>Jugadores</span>
+          </a>
+        </div>
+      </div>
+      <a class="sidebar__link sidebar__link--locked" data-nav="network" href="#">
+        ${renderIcon('network', 'sidebar__link-icon')}
+        <span>Red y Firewall</span>
+      </a>
+      <a class="sidebar__link sidebar__link--locked" data-nav="backups" href="#">
+        ${renderIcon('backup', 'sidebar__link-icon')}
+        <span>Backups</span>
+      </a>
+      <a class="sidebar__link sidebar__link--locked" data-nav="logs" href="#">
+        ${renderIcon('logs', 'sidebar__link-icon')}
+        <span>Logs</span>
+      </a>
     </nav>
     <section id="sidebar-runtime-status" class="sidebar-status sidebar-status--blocked" aria-live="polite">
       <span class="sidebar-status__dot" aria-hidden="true"></span>
@@ -96,7 +131,9 @@ rootElement.innerHTML = `
       </div>
       <div class="progress"><div id="progress-bar" class="progress__bar"></div></div>
       <div class="console-shell">
-        <button id="export-console" class="console-export" type="button" aria-label="Exportar consola">Exportar</button>
+        <button id="export-console" class="console-export icon-button" type="button" aria-label="Exportar consola" title="Exportar consola">
+          ${renderIcon('download')}
+        </button>
         <div class="console-tools">
           <input id="console-search" type="search" placeholder="Buscar en logs" aria-label="Buscar en logs" />
           <select id="console-module-filter" aria-label="Filtrar modulo de logs">
@@ -108,8 +145,12 @@ rootElement.innerHTML = `
             <option value="backup">Backups</option>
             <option value="error">Errores</option>
           </select>
-          <button id="pause-console" class="console-tool-button" type="button" aria-pressed="false">Pausar</button>
-          <button id="clear-console" class="console-tool-button" type="button">Limpiar vista</button>
+          <button id="pause-console" class="console-tool-button icon-button" type="button" aria-label="Pausar logs" aria-pressed="false" title="Pausar logs">
+            ${renderIcon('pause')}
+          </button>
+          <button id="clear-console" class="console-tool-button icon-button" type="button" aria-label="Limpiar vista" title="Limpiar vista">
+            ${renderIcon('clear')}
+          </button>
         </div>
         <pre id="console-output" class="log">Consultando IPC seguro...</pre>
       </div>
@@ -174,7 +215,8 @@ const appFooter = document.querySelector<HTMLElement>('#app-footer');
 const toastRegion = document.querySelector<HTMLElement>('#toast-region');
 const sidebarRuntimeStatus = document.querySelector<HTMLElement>('#sidebar-runtime-status');
 const startServerAction = document.querySelector<HTMLButtonElement>('#start-server-action');
-const navLinks = Array.from(document.querySelectorAll<HTMLAnchorElement>('.sidebar__link[data-nav]'));
+const navLinks = Array.from(document.querySelectorAll<HTMLAnchorElement>('[data-nav]'));
+const adminNavGroup = document.querySelector<HTMLElement>('[data-nav-group="admin"]');
 const consoleLines: string[] = [];
 const operationLogOffsets = new Map<string, number>();
 let firewallLoadingTimers: number[] = [];
@@ -189,6 +231,7 @@ let latestBackupSummary: BackupSummaryDto | null = null;
 let adminRefreshTimer: number | null = null;
 let adminRefreshInFlight = false;
 let adminActiveTab: 'general' | 'players' = 'general';
+let adminMenuOpen = false;
 let consoleSearchTerm = '';
 let consoleSelectedModule: LogModule | 'all' = 'all';
 let consolePaused = false;
@@ -237,7 +280,9 @@ if (!palcmApi) {
   pauseConsoleButton?.addEventListener('click', () => {
     consolePaused = !consolePaused;
     pauseConsoleButton.setAttribute('aria-pressed', consolePaused ? 'true' : 'false');
-    pauseConsoleButton.textContent = consolePaused ? 'Reanudar' : 'Pausar';
+    pauseConsoleButton.setAttribute('aria-label', consolePaused ? 'Reanudar logs' : 'Pausar logs');
+    pauseConsoleButton.title = consolePaused ? 'Reanudar logs' : 'Pausar logs';
+    pauseConsoleButton.innerHTML = consolePaused ? renderIcon('play') : renderIcon('pause');
     renderConsoleOutput();
   });
   clearConsoleButton?.addEventListener('click', () => {
@@ -265,7 +310,11 @@ if (!palcmApi) {
 
       const nextView = link.dataset['nav'] ?? 'home';
       if (nextView === 'admin') {
-        adminActiveTab = 'general';
+        adminMenuOpen = true;
+        const requestedAdminTab = link.dataset['adminSidebarTab'];
+        if (requestedAdminTab === 'general' || requestedAdminTab === 'players') {
+          adminActiveTab = requestedAdminTab;
+        }
       }
 
       if (navigationState.is('server') && nextView !== 'server' && hasServerPendingChanges()) {
@@ -275,6 +324,7 @@ if (!palcmApi) {
 
       navigationState.set(nextView);
       renderActiveView();
+      updateNavigation(latestStatus);
     });
   });
 }
@@ -715,11 +765,11 @@ function updateNavigation(status: ApplicationStatus): void {
 
   if (navigationState.is('admin') && !serverRunning) {
     navigationState.set('home');
+    adminMenuOpen = false;
   }
 
   navLinks.forEach((link) => {
     const nav = link.dataset['nav'];
-    const isRuntimeOnlyView = nav === 'admin';
     const enabled =
       nav === 'home' ||
       (nav === 'server' && serverAvailable) ||
@@ -728,11 +778,38 @@ function updateNavigation(status: ApplicationStatus): void {
       (nav === 'backups' && serverAvailable) ||
       (nav === 'network' && serverAvailable);
 
-    link.classList.toggle('hidden', isRuntimeOnlyView && !serverRunning);
     link.classList.toggle('sidebar__link--locked', !enabled);
-    link.classList.toggle('sidebar__link--active', nav === navigationState.current);
+    link.classList.toggle('sidebar__link--active', isSidebarNavActive(link));
     link.setAttribute('aria-disabled', enabled ? 'false' : 'true');
   });
+
+  if (adminNavGroup) {
+    adminNavGroup.classList.toggle('hidden', !serverRunning);
+    adminNavGroup.classList.toggle('sidebar__group--open', serverRunning && (adminMenuOpen || navigationState.is('admin')));
+    adminNavGroup.classList.toggle('sidebar__group--collapsed', !serverRunning || (!adminMenuOpen && !navigationState.is('admin')));
+  }
+}
+
+function isSidebarNavActive(link: HTMLAnchorElement): boolean {
+  const nav = link.dataset['nav'];
+  if (nav !== navigationState.current) {
+    return false;
+  }
+
+  if (nav !== 'admin') {
+    return true;
+  }
+
+  if (link.dataset['adminGroupToggle'] === 'true') {
+    return false;
+  }
+
+  const requestedAdminTab = link.dataset['adminSidebarTab'];
+  if (!requestedAdminTab) {
+    return true;
+  }
+
+  return requestedAdminTab === adminActiveTab;
 }
 
 function updateStartServerButton(actions: AllowedActionsDto): void {
@@ -833,7 +910,7 @@ function renderActiveView(): void {
   document.querySelector('.console-tools')?.classList.toggle('hidden', !isLogsView);
   contentView?.classList.toggle('hidden', navigationState.is('logs'));
   navLinks.forEach((link) => {
-    link.classList.toggle('sidebar__link--active', link.dataset['nav'] === navigationState.current);
+    link.classList.toggle('sidebar__link--active', isSidebarNavActive(link));
   });
 
   if (navigationState.is('home')) {
@@ -1358,11 +1435,15 @@ async function renderServerConfigurationView(): Promise<void> {
     latestServerSettings = parsed;
     setContent(`
       <div class="view-stack">
-        <div class="view-header">
+        <div class="view-header view-header--contained">
           <div>
             <span class="view-kicker">SERVER</span>
             <h3>Configuracion del servidor</h3>
-            <p>${escapeHtml(file.path)}</p>
+            <p>Edita PalWorldSettings.ini.</p>
+          </div>
+          <div class="view-meta-stack" aria-label="Resumen de configuracion">
+            <span class="view-meta-pill">${String(parsed.settings.length)} parametros</span>
+            <span class="view-meta-path">${escapeHtml(file.path)}</span>
           </div>
         </div>
         ${renderConfigurationPresets()}
@@ -1585,14 +1666,11 @@ function renderAdminStatus(adminStatus: PalworldAdminStatusDto, playersStatus: P
   return `
     <div class="view-stack admin-view">
       <section class="content-card admin-panel">
-        <div class="players-list-card__header">
-          <div>
-            <p class="eyebrow">ADMINISTRACION</p>
-            <h3>Panel del servidor</h3>
-          </div>
-          <span>${escapeHtml(adminStatus.message)}</span>
-        </div>
-        ${isReady ? renderAdminTabs(adminStatus, playersStatus) : `<p class="empty-state">${escapeHtml(adminStatus.message)}</p>`}
+        ${
+          isReady
+            ? renderAdminTabs(adminStatus, playersStatus)
+            : `<div class="admin-toolbar"><span class="view-kicker">ADMINISTRACION</span><span class="view-meta-pill">${escapeHtml(adminStatus.message)}</span></div><p class="empty-state">${escapeHtml(adminStatus.message)}</p>`
+        }
       </section>
     </div>
   `;
@@ -1600,9 +1678,9 @@ function renderAdminStatus(adminStatus: PalworldAdminStatusDto, playersStatus: P
 
 function renderAdminTabs(adminStatus: PalworldAdminStatusDto, playersStatus: PalworldPlayersStatusDto): string {
   return `
-    <div class="admin-tabs" role="tablist" aria-label="Categorias de administracion">
-      <button class="admin-tab ${adminActiveTab === 'general' ? 'admin-tab--active' : ''}" type="button" data-admin-tab-button="general">General</button>
-      <button class="admin-tab ${adminActiveTab === 'players' ? 'admin-tab--active' : ''}" type="button" data-admin-tab-button="players">Jugadores</button>
+    <div class="admin-toolbar">
+      <span class="view-kicker">ADMINISTRACION / ${adminActiveTab === 'players' ? 'JUGADORES' : 'SERVIDOR'}</span>
+      <span class="view-meta-pill">${escapeHtml(adminStatus.message)}</span>
     </div>
     ${adminActiveTab === 'players' ? renderAdminPlayersTab(playersStatus) : renderAdminGeneralTab(adminStatus)}
   `;
@@ -1620,20 +1698,29 @@ function renderAdminGeneralTab(adminStatus: PalworldAdminStatusDto): string {
         <span class="view-kicker">MUNDO</span>
         <h4>Guardar mundo</h4>
         <p>Solicita un guardado manual del estado actual del servidor.</p>
-        <button class="secondary-button" type="submit">Guardar ahora</button>
+        <button class="secondary-button button-with-icon" type="submit">
+          ${renderIcon('save')}
+          <span>Guardar ahora</span>
+        </button>
       </form>
       <form class="admin-card" data-admin-form="shutdown">
         <span class="view-kicker">APAGADO</span>
         <h4>Apagado programado</h4>
         <input name="seconds" type="number" min="0" max="3600" value="60" />
         <input name="message" type="text" value="Servidor detenido desde PSM Console." />
-        <button class="secondary-button" type="submit">Programar apagado</button>
+        <button class="secondary-button button-with-icon" type="submit">
+          ${renderIcon('clock')}
+          <span>Programar</span>
+        </button>
       </form>
       <form class="admin-card admin-card--danger" data-admin-form="stop">
         <span class="view-kicker">EMERGENCIA</span>
         <h4>Detener ahora</h4>
         <p>Fuerza la detencion inmediata del servidor desde REST. Usalo solo si no responde el apagado programado.</p>
-        <button class="secondary-button secondary-button--warning" type="submit">Forzar detencion</button>
+        <button class="secondary-button secondary-button--warning button-with-icon" type="submit">
+          ${renderIcon('stop')}
+          <span>Forzar detencion</span>
+        </button>
       </form>
     </div>
   `;
@@ -1645,14 +1732,13 @@ function renderAdminPlayersTab(playersStatus: PalworldPlayersStatusDto): string 
       <span class="view-kicker">ANUNCIO GLOBAL</span>
       <div class="admin-broadcast-bar__row">
         <input name="message" type="text" placeholder="Mensaje para todos los jugadores" required />
-        <button class="primary-button admin-icon-button" type="submit" aria-label="Enviar anuncio">
-          <span aria-hidden="true">&rarr;</span>
-          <strong>Enviar</strong>
+        <button class="primary-button icon-button" type="submit" aria-label="Enviar anuncio" title="Enviar anuncio">
+          ${renderIcon('send')}
         </button>
       </div>
     </form>
     <div class="admin-players-layout">
-      <section class="admin-players-panel">
+      <section class="admin-players-panel admin-players-panel--wide">
         <div class="players-list-card__header">
           <div>
             <p class="eyebrow">JUGADORES</p>
@@ -1662,16 +1748,6 @@ function renderAdminPlayersTab(playersStatus: PalworldPlayersStatusDto): string 
         </div>
         ${renderAdminPlayersList(playersStatus)}
       </section>
-      <form class="admin-card admin-unban-panel" data-admin-form="unban">
-        <span class="view-kicker">BANEOS</span>
-        <h4>Desbanear por ID</h4>
-        <p>Usa SteamID/UserID exacto cuando el jugador no esta conectado.</p>
-        <input name="manualUserId" type="text" placeholder="steam_7656..." required />
-        <button class="secondary-button admin-icon-button" type="submit">
-          <span aria-hidden="true">&#8634;</span>
-          <strong>Desbanear</strong>
-        </button>
-      </form>
     </div>
   `;
 }
@@ -1698,16 +1774,6 @@ function renderAdminSnapshotCard(
 }
 
 function bindAdminControls(): void {
-  document.querySelectorAll<HTMLButtonElement>('[data-admin-tab-button]').forEach((button) => {
-    button.addEventListener('click', () => {
-      const tab = button.dataset['adminTabButton'];
-      if (tab === 'general' || tab === 'players') {
-        adminActiveTab = tab;
-        void refreshAdminView({ force: true });
-      }
-    });
-  });
-
   document.querySelectorAll<HTMLFormElement>('[data-admin-form]').forEach((form) => {
     form.addEventListener('submit', (event) => {
       event.preventDefault();
@@ -1825,44 +1891,74 @@ function renderAdminPlayersList(summary: PalworldPlayersStatusDto): string {
     return `<p class="empty-state">${escapeHtml(summary.message)}</p>`;
   }
 
-  if (summary.players.length === 0) {
-    return '<p class="empty-state">No hay jugadores conectados en este momento.</p>';
+  const previousPlayers = summary.previousPlayers ?? [];
+
+  if (summary.players.length === 0 && previousPlayers.length === 0) {
+    return '<p class="empty-state">No hay jugadores detectados todavia.</p>';
   }
 
   return `
-    <div class="players-list">
-      ${summary.players.map(renderAdminPlayerRow).join('')}
+    <div class="players-sections">
+      ${renderPlayersSection('En curso', summary.players, 'No hay jugadores conectados en este momento.', true)}
+      ${renderPlayersSection('Vistos anteriormente', previousPlayers, 'Todavia no hay jugadores anteriores.', false)}
     </div>
   `;
 }
 
-function renderAdminPlayerRow(player: PalworldPlayersStatusDto['players'][number]): string {
+function renderPlayersSection(
+  title: string,
+  players: PalworldPlayersStatusDto['players'],
+  emptyMessage: string,
+  allowKick: boolean
+): string {
+  return `
+    <section class="players-section">
+      <div class="players-section__header">
+        <h4>${escapeHtml(title)}</h4>
+        <span>${String(players.length)}</span>
+      </div>
+      ${
+        players.length > 0
+          ? `<div class="players-list">${players.map((player) => renderAdminPlayerRow(player, allowKick)).join('')}</div>`
+          : `<p class="empty-state empty-state--compact">${escapeHtml(emptyMessage)}</p>`
+      }
+    </section>
+  `;
+}
+
+function renderAdminPlayerRow(player: PalworldPlayersStatusDto['players'][number], allowKick: boolean): string {
   const actionId = player.userId ?? player.steamId ?? player.playerId ?? '';
   const identity = actionId || 'ID no informado';
+  const isBanned = player.banState === 'BANNED';
+  const banAction: PalworldAdminAction = isBanned ? 'unban' : 'ban';
   const secondary = [
     player.playerId ? `PlayerUID ${player.playerId}` : null,
     player.userId ? `UserID ${player.userId}` : null,
     player.steamId ? `SteamID ${player.steamId}` : null
   ].filter((value): value is string => value !== null);
+  const statusText = player.online
+    ? 'Conectado'
+    : player.lastSeenAt
+      ? `Visto ${formatDateTime(player.lastSeenAt)}`
+      : 'Visto anteriormente';
 
   return `
-    <article class="player-row">
+    <article class="player-row ${player.online ? 'player-row--online' : 'player-row--previous'}">
       <div>
         <strong>${escapeHtml(player.name)}</strong>
         <span>${escapeHtml(identity)}</span>
       </div>
       <small>${escapeHtml(secondary.join(' - ') || 'Sin identificadores adicionales')}</small>
-      <em>${typeof player.ping === 'number' ? `${formatPing(player.ping)} ms` : 'Ping no informado'}</em>
+      <em>${player.online && typeof player.ping === 'number' ? `${formatPing(player.ping)} ms` : escapeHtml(statusText)}</em>
       <form class="player-row__actions" data-admin-form="player">
         <input name="userId" type="hidden" value="${escapeHtml(actionId)}" />
         <input name="message" type="hidden" value="Accion aplicada desde PSM Console." />
-        <button class="admin-icon-button secondary-button" type="submit" data-player-action="kick" ${actionId ? '' : 'disabled'} title="Expulsar jugador">
-          <span aria-hidden="true">&rarr;</span>
-          <strong>Kick</strong>
+        <button class="admin-icon-button secondary-button icon-button" type="submit" data-player-action="kick" ${actionId && allowKick ? '' : 'disabled'} aria-label="Expulsar jugador" title="${allowKick ? 'Expulsar jugador' : 'Solo disponible para jugadores conectados'}">
+          ${renderIcon('send')}
         </button>
-        <button class="admin-icon-button secondary-button secondary-button--warning" type="submit" data-player-action="ban" ${actionId ? '' : 'disabled'} title="Banear jugador">
-          <span aria-hidden="true">&times;</span>
-          <strong>Ban</strong>
+        <button class="ban-toggle ${isBanned ? 'ban-toggle--active' : ''}" type="submit" data-player-action="${banAction}" ${actionId ? '' : 'disabled'} aria-pressed="${isBanned ? 'true' : 'false'}" aria-label="${isBanned ? 'Desbanear jugador' : 'Banear jugador'}" title="${isBanned ? 'Desbanear jugador' : 'Banear jugador'}">
+          <span class="ban-toggle__track" aria-hidden="true"><span class="ban-toggle__thumb"></span></span>
+          <span>${isBanned ? 'Baneado' : 'Permitido'}</span>
         </button>
       </form>
     </article>
@@ -1881,13 +1977,21 @@ function renderBackupsFooter(): void {
   appFooter.classList.remove('hidden', 'app-footer--confirm');
   appFooter.innerHTML = `
     <span id="backup-footer-message" class="app-footer__message">Selecciona backups para enviarlos a la papelera de Windows.</span>
-    <button id="create-config-backup" class="secondary-button" type="button">Backup INI</button>
-    <button id="create-world-backup" class="primary-button" type="button">Backup mundo</button>
-    <button id="restore-selected-backup" class="secondary-button" type="button" disabled>
-      Restaurar seleccionado
+    <button id="create-config-backup" class="secondary-button button-with-icon" type="button">
+      ${renderIcon('file')}
+      <span>Backup INI</span>
     </button>
-    <button id="delete-selected-backups" class="secondary-button backup-trash-selected" type="button" disabled>
-      Enviar seleccionados a papelera
+    <button id="create-world-backup" class="primary-button button-with-icon" type="button">
+      ${renderIcon('backup')}
+      <span>Backup mundo</span>
+    </button>
+    <button id="restore-selected-backup" class="secondary-button button-with-icon" type="button" disabled>
+      ${renderIcon('undo')}
+      <span>Restaurar</span>
+    </button>
+    <button id="delete-selected-backups" class="secondary-button backup-trash-selected button-with-icon" type="button" disabled>
+      ${renderIcon('trash')}
+      <span id="delete-selected-backups-label">Papelera</span>
     </button>
   `;
   document.querySelector<HTMLButtonElement>('#create-config-backup')?.addEventListener('click', () => {
@@ -1943,10 +2047,20 @@ function updateSelectedBackupsState(): void {
   }
 
   deleteButton.disabled = selectedCount === 0;
-  deleteButton.textContent =
+  deleteButton.setAttribute(
+    'aria-label',
     selectedCount === 0
-      ? 'Enviar seleccionados a papelera'
-      : `Enviar ${String(selectedCount)} a papelera`;
+      ? 'Enviar backups seleccionados a la papelera'
+      : `Enviar ${String(selectedCount)} backup(s) a la papelera`
+  );
+  deleteButton.title =
+    selectedCount === 0
+      ? 'Enviar backups seleccionados a la papelera'
+      : `Enviar ${String(selectedCount)} backup(s) a la papelera`;
+  setText(
+    document.querySelector('#delete-selected-backups-label'),
+    selectedCount === 0 ? 'Papelera' : `Papelera (${String(selectedCount)})`
+  );
   restoreButton.disabled = selectedCount !== 1;
   setText(
     document.querySelector('#backup-footer-message'),
@@ -2181,10 +2295,22 @@ function renderServerFooter(parsed: ParsedPalworldSettings): void {
   appFooter.classList.remove('hidden');
   appFooter.innerHTML = `
     <span id="server-footer-message" class="app-footer__message">Sin cambios pendientes.</span>
-    <button id="restore-default-config" class="secondary-button secondary-button--warning" type="button">Volver a default</button>
-    <button id="update-server" class="secondary-button" type="button" ${isServerUpdateBlocked() ? 'disabled' : ''}>Actualizar servidor</button>
-    <button id="discard-config" class="secondary-button" type="button" disabled>Descartar cambios</button>
-    <button id="save-config" class="primary-button" type="button">Guardar</button>
+    <button id="restore-default-config" class="secondary-button secondary-button--warning button-with-icon" type="button">
+      ${renderIcon('reset')}
+      <span>Default</span>
+    </button>
+    <button id="update-server" class="secondary-button button-with-icon" type="button" ${isServerUpdateBlocked() ? 'disabled' : ''}>
+      ${renderIcon('refresh')}
+      <span>Actualizar</span>
+    </button>
+    <button id="discard-config" class="secondary-button button-with-icon" type="button" disabled>
+      ${renderIcon('undo')}
+      <span>Descartar</span>
+    </button>
+    <button id="save-config" class="primary-button button-with-icon" type="button">
+      ${renderIcon('check')}
+      <span>Guardar</span>
+    </button>
   `;
   document.querySelector<HTMLButtonElement>('#save-config')?.addEventListener('click', () => {
     void saveConfiguration(parsed);
@@ -2300,12 +2426,13 @@ async function renderFirewallView(forceRefresh = false): Promise<void> {
   const activeStep = getFirewallLoadingStep();
   setContent(`
     <div class="view-stack view-stack--scroll">
-      <div class="view-header">
+      <div class="view-header view-header--contained">
         <div>
           <span class="view-kicker">NETWORK & FIREWALL</span>
           <h3>Firewall y acceso externo</h3>
-          <p>Consultando puertos activos y reglas de Windows...</p>
+          <p>Diagnostico local y externo.</p>
         </div>
+        <span class="view-meta-pill">Diagnostico</span>
       </div>
       <section class="firewall-section firewall-section--loading">
         <div class="loading-diagnostic">
@@ -2349,16 +2476,19 @@ async function renderFirewallView(forceRefresh = false): Promise<void> {
 function renderFirewallStatusView(firewall: FirewallStatusDto): void {
   setContent(`
       <div class="view-stack view-stack--scroll">
-        <div class="view-header">
+        <div class="view-header view-header--contained">
           <div>
             <span class="view-kicker">NETWORK & FIREWALL</span>
             <h3>Firewall y acceso externo</h3>
-            <p>Puertos leidos desde la configuracion activa del servidor. ${escapeHtml(formatLastVerification(latestFirewallCheckedAt))}.</p>
+            <p>${escapeHtml(formatLastVerification(latestFirewallCheckedAt))}.</p>
           </div>
           <div class="view-actions">
-            <button id="refresh-firewall" class="secondary-button" type="button">Actualizar</button>
-            <button id="apply-firewall" class="primary-button primary-button--warning" type="button" ${firewall.local.state === 'READY' ? 'disabled' : ''}>
-              Configurar Windows
+            <button id="refresh-firewall" class="secondary-button icon-button" type="button" aria-label="Actualizar diagnostico" title="Actualizar diagnostico">
+              ${renderIcon('refresh')}
+            </button>
+            <button id="apply-firewall" class="primary-button primary-button--warning button-with-icon" type="button" ${firewall.local.state === 'READY' ? 'disabled' : ''}>
+              ${renderIcon('server')}
+              <span>Configurar Windows</span>
             </button>
           </div>
         </div>
@@ -2373,8 +2503,14 @@ function renderFirewallStatusView(firewall: FirewallStatusDto): void {
         </section>
         <div id="firewall-confirmation" class="inline-confirm hidden">
           <span>Se crearan reglas de entrada en el Firewall de Windows para los puertos activos. Windows puede pedir permisos de administrador.</span>
-          <button id="confirm-firewall" class="primary-button primary-button--warning" type="button">Configurar</button>
-          <button id="cancel-firewall" class="secondary-button" type="button">Cancelar</button>
+          <button id="confirm-firewall" class="primary-button primary-button--warning button-with-icon" type="button">
+            ${renderIcon('check')}
+            <span>Configurar</span>
+          </button>
+          <button id="cancel-firewall" class="secondary-button button-with-icon" type="button">
+            ${renderIcon('x')}
+            <span>Cancelar</span>
+          </button>
         </div>
       </div>
     `);
@@ -2391,19 +2527,21 @@ function renderFirewallStatusView(firewall: FirewallStatusDto): void {
 function renderFirewallErrorView(message: string): void {
   setContent(`
     <div class="view-stack view-stack--scroll">
-      <div class="view-header">
+      <div class="view-header view-header--contained">
         <div>
           <span class="view-kicker">NETWORK & FIREWALL</span>
           <h3>Firewall y acceso externo</h3>
-          <p>No se pudo completar el diagnostico.</p>
+          <p>Diagnostico interrumpido.</p>
         </div>
         <div class="view-actions">
-          <button id="refresh-firewall" class="secondary-button" type="button">Reintentar</button>
+          <button id="refresh-firewall" class="secondary-button icon-button" type="button" aria-label="Reintentar diagnostico" title="Reintentar diagnostico">
+            ${renderIcon('refresh')}
+          </button>
         </div>
       </div>
       <section class="firewall-section firewall-section--loading">
         <div class="loading-diagnostic">
-          <span class="summary-card__icon summary-card__icon--error" aria-label="Error">&times;</span>
+          <span class="summary-card__icon summary-card__icon--error" aria-label="Error">${renderIcon('x')}</span>
           <div>
             <h4>Diagnostico interrumpido</h4>
             <p>${escapeHtml(message)}</p>
@@ -2637,7 +2775,7 @@ function renderExternalPortRecommendations(ports: FirewallPortCheckDto[]): strin
           .map(
             (item) => `
               <article class="external-port-item ${item.checked ? 'external-port-item--checked' : ''}">
-                <span>${item.checked ? '&#10003;' : '!'}</span>
+                <span>${renderIcon(item.checked ? 'check' : 'warning')}</span>
                 <strong>${escapeHtml(item.value)}</strong>
                 <small>${escapeHtml(item.label)} - ${escapeHtml(item.detail)}</small>
               </article>
@@ -2673,7 +2811,7 @@ function renderNetworkDiagnostics(network: FirewallStatusDto['external']['networ
         </article>
       </div>
       <div class="network-diagnostics__recommendation">
-        <span class="summary-card__icon" aria-label="${escapeHtml(state.label)}">${state.icon}</span>
+        <span class="summary-card__icon" aria-label="${escapeHtml(state.label)}">${renderIcon(state.icon)}</span>
         <p>${escapeHtml(network.recommendation)}</p>
       </div>
     </section>
@@ -2686,18 +2824,18 @@ function mapNetworkState(status: FirewallStatusDto['external']['network']['cgnat
   label: string;
 } {
   if (status === 'LIKELY') {
-    return { icon: '!', tone: 'warning', label: 'Probable CGNAT' };
+    return { icon: 'warning', tone: 'warning', label: 'Probable CGNAT' };
   }
 
   if (status === 'UNLIKELY') {
-    return { icon: '&#10003;', tone: 'ok', label: 'Sin indicios fuertes' };
+    return { icon: 'check', tone: 'ok', label: 'Sin indicios fuertes' };
   }
 
   if (status === 'NEEDS_ROUTER_CHECK') {
-    return { icon: '?', tone: 'optional', label: 'Comparar con WAN del router' };
+    return { icon: 'help', tone: 'optional', label: 'Comparar con WAN del router' };
   }
 
-  return { icon: '!', tone: 'warning', label: 'No evaluado' };
+  return { icon: 'warning', tone: 'warning', label: 'No evaluado' };
 }
 
 function renderFirewallPortCard(port: FirewallPortCheckDto): string {
@@ -2711,7 +2849,7 @@ function renderFirewallPortCard(port: FirewallPortCheckDto): string {
         <small>${escapeHtml(port.message)}</small>
         <span class="firewall-port__source">${escapeHtml(port.source)}</span>
       </span>
-      <span class="summary-card__icon" aria-label="${escapeHtml(state.label)}">${state.icon}</span>
+      <span class="summary-card__icon" aria-label="${escapeHtml(state.label)}">${renderIcon(state.icon)}</span>
     </article>
   `;
 }
@@ -2791,18 +2929,24 @@ function renderSettingsFilterBar(parsed: ParsedPalworldSettings): string {
 
   return `
     <section class="settings-filter" aria-label="Filtros de parametros del INI">
-      <div class="settings-filter__search">
-        <label for="settings-search">Buscar parametro</label>
-        <input id="settings-search" type="search" placeholder="Nombre, clave o descripcion" autocomplete="off" />
+      <div class="settings-filter__head">
+        <span class="view-kicker">FILTROS</span>
+        <strong>Encontrar parametro</strong>
       </div>
-      <div class="settings-filter__category">
-        <label for="settings-category">Categoria</label>
-        <select id="settings-category">
-          <option value="all">Todas</option>
-          ${categories.map((category) => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`).join('')}
-        </select>
+      <div class="settings-filter__controls">
+        <label class="settings-filter__search" for="settings-search">
+          ${renderIcon('search')}
+          <input id="settings-search" type="search" placeholder="Nombre, clave o descripcion" autocomplete="off" />
+        </label>
+        <label class="settings-filter__category" for="settings-category">
+          <span>Categoria</span>
+          <select id="settings-category">
+            <option value="all">Todas</option>
+            ${categories.map((category) => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`).join('')}
+          </select>
+        </label>
+        <span id="settings-filter-count" class="settings-filter__count">${String(parsed.settings.length)} parametros</span>
       </div>
-      <span id="settings-filter-count" class="settings-filter__count">${String(parsed.settings.length)} parametros</span>
     </section>
   `;
 }

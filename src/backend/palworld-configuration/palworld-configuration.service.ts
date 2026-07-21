@@ -16,6 +16,8 @@ import type {
   PalworldCreateDefaultConfigurationRequestDto
 } from '../../shared/dto/palworld-configuration-status.dto';
 
+const DEFAULT_ADMIN_PASSWORD = 'admin';
+
 @Injectable()
 export class PalworldConfigurationService {
   constructor(
@@ -79,9 +81,11 @@ export class PalworldConfigurationService {
       throw new Error(`ACTIVE_CONFIGURATION_INVALID: ${activePath}`);
     }
 
+    const normalizedContent = await this.ensureAdminPassword(activePath, content);
+
     return {
       path: activePath,
-      content,
+      content: normalizedContent,
       updatedAt: new Date().toISOString()
     };
   }
@@ -167,7 +171,8 @@ export class PalworldConfigurationService {
         message: 'Copiando plantilla oficial como configuracion activa.'
       });
       this.operationManagerService.appendLog(operationId, `copy "${templatePath}" "${activePath}"`);
-      await copyFile(templatePath, activePath);
+      const templateContent = await readFile(templatePath, 'utf8');
+      await writeFile(activePath, normalizeAdminPassword(templateContent), 'utf8');
       this.portableStateService.rememberConfiguration(templatePath, activePath);
 
       this.operationManagerService.update(operationId, {
@@ -219,7 +224,7 @@ export class PalworldConfigurationService {
         percent: 65,
         message: 'Escribiendo configuracion temporal.'
       });
-      await writeFile(tempPath, content, 'utf8');
+      await writeFile(tempPath, normalizeAdminPassword(content), 'utf8');
       this.operationManagerService.appendLog(operationId, `write "${tempPath}"`);
 
       this.operationManagerService.update(operationId, {
@@ -281,7 +286,8 @@ export class PalworldConfigurationService {
         percent: 75,
         message: 'Copiando plantilla default como configuracion activa.'
       });
-      await copyFile(templatePath, activePath);
+      const templateContent = await readFile(templatePath, 'utf8');
+      await writeFile(activePath, normalizeAdminPassword(templateContent), 'utf8');
       this.operationManagerService.appendLog(operationId, `copy "${templatePath}" "${activePath}"`);
 
       this.operationManagerService.update(operationId, {
@@ -337,4 +343,175 @@ export class PalworldConfigurationService {
     const match = content.match(/OptionSettings=\(([\s\S]*)\)/);
     return Boolean(match?.[1]?.includes('='));
   }
+
+  private async ensureAdminPassword(activePath: string, content: string): Promise<string> {
+    const normalizedContent = normalizeAdminPassword(content);
+    if (normalizedContent === content) {
+      return content;
+    }
+
+    const backupPath = join(
+      this.portablePathService.getPortableRoot(),
+      'backups',
+      'configuration',
+      `PalWorldSettings.before-admin-password.${new Date().toISOString().replace(/[:.]/g, '-')}.ini`
+    );
+
+    await mkdir(dirname(backupPath), { recursive: true });
+    await copyFile(activePath, backupPath);
+    await writeFile(activePath, normalizedContent, 'utf8');
+
+    return normalizedContent;
+  }
+}
+
+function normalizeAdminPassword(content: string): string {
+  const settings = parseOptionSettings(content);
+  const currentValue = settings.get('AdminPassword');
+
+  if (currentValue !== undefined && unquoteSetting(currentValue).trim().length > 0) {
+    return content;
+  }
+
+  return upsertOptionSettings(content, new Map([['AdminPassword', `"${DEFAULT_ADMIN_PASSWORD}"`]]));
+}
+
+function parseOptionSettings(content: string): Map<string, string> {
+  const marker = 'OptionSettings=(';
+  const start = content.indexOf(marker);
+  if (start < 0) {
+    return new Map();
+  }
+
+  const valueStart = start + marker.length;
+  const valueEnd = findOptionSettingsEnd(content, valueStart);
+  if (valueEnd < valueStart) {
+    return new Map();
+  }
+
+  return splitTopLevel(content.slice(valueStart, valueEnd)).reduce((settings, entry) => {
+    const separator = entry.indexOf('=');
+    if (separator <= 0) {
+      return settings;
+    }
+
+    settings.set(entry.slice(0, separator).trim(), entry.slice(separator + 1).trim());
+    return settings;
+  }, new Map<string, string>());
+}
+
+function upsertOptionSettings(content: string, updates: Map<string, string>): string {
+  const marker = 'OptionSettings=(';
+  const start = content.indexOf(marker);
+  if (start < 0) {
+    throw new Error('CONFIGURATION_CONTENT_INVALID: falta OptionSettings.');
+  }
+
+  const valueStart = start + marker.length;
+  const valueEnd = findOptionSettingsEnd(content, valueStart);
+  if (valueEnd < valueStart) {
+    throw new Error('CONFIGURATION_CONTENT_INVALID: OptionSettings incompleto.');
+  }
+
+  const entries = splitTopLevel(content.slice(valueStart, valueEnd));
+  const seen = new Set<string>();
+  const nextEntries = entries.map((entry) => {
+    const separator = entry.indexOf('=');
+    if (separator <= 0) {
+      return entry;
+    }
+
+    const key = entry.slice(0, separator).trim();
+    const update = updates.get(key);
+    if (update === undefined) {
+      return entry;
+    }
+
+    seen.add(key);
+    return `${key}=${update}`;
+  });
+
+  updates.forEach((value, key) => {
+    if (!seen.has(key)) {
+      nextEntries.push(`${key}=${value}`);
+    }
+  });
+
+  return `${content.slice(0, valueStart)}${nextEntries.join(',')}${content.slice(valueEnd)}`;
+}
+
+function findOptionSettingsEnd(content: string, valueStart: number): number {
+  let isQuoted = false;
+  let depth = 0;
+
+  for (let index = valueStart; index < content.length; index += 1) {
+    const char = content[index];
+
+    if (char === '"' && content[index - 1] !== '\\') {
+      isQuoted = !isQuoted;
+      continue;
+    }
+
+    if (!isQuoted && char === '(') {
+      depth += 1;
+      continue;
+    }
+
+    if (!isQuoted && char === ')' && depth > 0) {
+      depth -= 1;
+      continue;
+    }
+
+    if (!isQuoted && char === ')') {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
+function splitTopLevel(value: string): string[] {
+  const result: string[] = [];
+  let current = '';
+  let isQuoted = false;
+  let depth = 0;
+
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index] ?? '';
+
+    if (char === '"' && value[index - 1] !== '\\') {
+      isQuoted = !isQuoted;
+    }
+
+    if (!isQuoted && char === '(') {
+      depth += 1;
+    }
+
+    if (!isQuoted && char === ')') {
+      depth -= 1;
+    }
+
+    if (char === ',' && !isQuoted && depth === 0) {
+      result.push(current.trim());
+      current = '';
+      continue;
+    }
+
+    current += char;
+  }
+
+  if (current.trim()) {
+    result.push(current.trim());
+  }
+
+  return result;
+}
+
+function unquoteSetting(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+    return trimmed.slice(1, -1);
+  }
+
+  return trimmed;
 }

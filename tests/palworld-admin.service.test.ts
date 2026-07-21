@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage } from 'node:http';
 import { afterEach, describe, expect, it } from 'vitest';
 import { PalworldAdminService } from '../src/backend/palworld-admin/palworld-admin.service';
 import type { PalworldConfigurationService } from '../src/backend/palworld-configuration/palworld-configuration.service';
+import type { PalworldPlayersService } from '../src/backend/palworld-players/palworld-players.service';
 import type { PalworldProcessService } from '../src/backend/palworld-process/palworld-process.service';
 
 let closeServer: (() => Promise<void>) | null = null;
@@ -189,6 +190,9 @@ function createService(runtimeState: 'STOPPED' | 'RUNNING', content: string): Pa
         message: runtimeState,
         logs: []
       })
-    } as unknown as PalworldProcessService
+    } as unknown as PalworldProcessService,
+    {
+      markBanState: () => undefined
+    } as unknown as PalworldPlayersService
   );
 }
