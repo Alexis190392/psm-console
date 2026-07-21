@@ -20,5 +20,10 @@ describe('IPC channel surface', () => {
     expect(ipcChannels.backupGetSummary).toBe('backup:get-summary');
     expect(ipcChannels.backupCreateConfiguration).toBe('backup:create-configuration');
     expect(ipcChannels.backupCreateWorld).toBe('backup:create-world');
+    expect(ipcChannels.backupDelete).toBe('backup:delete');
+  });
+
+  it('keeps log reading behind a concrete readonly domain channel', () => {
+    expect(ipcChannels.logsGetRecent).toBe('logs:get-recent');
   });
 });

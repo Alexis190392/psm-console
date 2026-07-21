@@ -172,6 +172,7 @@ let latestConfiguredPort: string | null = null;
 let latestBackupSummary: BackupSummaryDto | null = null;
 let consoleSearchTerm = '';
 let consolePaused = false;
+let latestPersistentLogsSignature = '';
 let settingInfoDismissBound = false;
 let latestServerSettings: ParsedPalworldSettings | null = null;
 let configurationAutoCreateAttempted = false;
@@ -814,6 +815,10 @@ function renderActiveView(): void {
     return;
   }
 
+  if (navigationState.is('logs')) {
+    void loadPersistentLogs();
+  }
+
 }
 
 async function renderGeneralView(): Promise<void> {
@@ -1307,6 +1312,11 @@ async function renderBackupsView(): Promise<void> {
     document.querySelector<HTMLButtonElement>('#create-world-backup')?.addEventListener('click', () => {
       showBackupConfirmation('world');
     });
+    document.querySelectorAll<HTMLButtonElement>('[data-backup-delete]').forEach((button) => {
+      button.addEventListener('click', () => {
+        showBackupDeleteConfirmation(button.dataset['backupDelete'] ?? '');
+      });
+    });
     document.querySelector<HTMLButtonElement>('#cancel-backup')?.addEventListener('click', hideBackupConfirmation);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -1333,6 +1343,22 @@ function showBackupConfirmation(kind: 'configuration' | 'world'): void {
   };
 }
 
+function showBackupDeleteConfirmation(backupId: string): void {
+  const confirmation = document.querySelector<HTMLDivElement>('#backup-confirmation');
+  const message = document.querySelector<HTMLElement>('#backup-confirmation-message');
+  const confirm = document.querySelector<HTMLButtonElement>('#confirm-backup');
+
+  if (!confirmation || !message || !confirm || backupId.length === 0) {
+    return;
+  }
+
+  message.textContent = 'El backup se enviara a la papelera de Windows. Podras recuperarlo desde ahi si fue un error.';
+  confirmation.classList.remove('hidden');
+  confirm.onclick = () => {
+    void deleteBackup(backupId);
+  };
+}
+
 function hideBackupConfirmation(): void {
   document.querySelector('#backup-confirmation')?.classList.add('hidden');
 }
@@ -1355,6 +1381,55 @@ async function createBackup(kind: 'configuration' | 'world'): Promise<void> {
   latestBackupSummary = null;
   navigationState.set('backups');
   await refreshState();
+}
+
+async function deleteBackup(backupId: string): Promise<void> {
+  if (!palcmApi) {
+    return;
+  }
+
+  appendConsoleLine(`Confirmado: enviar backup a la papelera. ${backupId}`);
+  navigationState.set('logs');
+  renderActiveView();
+
+  const accepted = await palcmApi.backup.delete({
+    confirmed: true,
+    backupId
+  });
+
+  await pollOperation(accepted.operationId);
+  latestBackupSummary = null;
+  showToast('Backup enviado a la papelera');
+  navigationState.set('backups');
+  await refreshState();
+}
+
+async function loadPersistentLogs(): Promise<void> {
+  if (!palcmApi) {
+    return;
+  }
+
+  try {
+    const logs = await palcmApi.logs.getRecent({ maxLines: 80 });
+    const lines = logs.entries.flatMap((entry) =>
+      entry.lines.length > 0
+        ? [`--- ${entry.module}.log ---`, ...entry.lines]
+        : [`--- ${entry.module}.log sin entradas ---`]
+    );
+    const signature = lines.join('\n');
+
+    if (signature === latestPersistentLogsSignature) {
+      return;
+    }
+
+    latestPersistentLogsSignature = signature;
+    appendConsoleLine('Logs persistentes cargados desde la carpeta portable.');
+    lines.forEach((line) => {
+      appendConsoleLine(line, false);
+    });
+  } catch (error) {
+    appendConsoleLine(`No se pudieron leer logs persistentes: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 function hideRestoreDefaultConfirmation(): void {

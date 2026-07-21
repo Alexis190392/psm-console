@@ -79,6 +79,33 @@ describe('BackupService', () => {
     expect(summary.worldBackups[0]?.path).toContain(join('backups', 'world'));
     expect(existsSync(worldFile)).toBe(true);
   });
+
+  it('sends a selected backup to trash by validated backup id', async () => {
+    await mkdir(dirname(activeConfigurationPath), { recursive: true });
+    await writeFile(activeConfigurationPath, '[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(Difficulty=None)');
+
+    const accepted = service.createConfigurationBackup({ confirmed: true });
+    await waitForOperation(accepted.operationId, operationManager);
+    const summary = await service.getSummary();
+    const backup = summary.configurationBackups[0];
+    const trashedPaths: string[] = [];
+
+    expect(backup).toBeDefined();
+
+    const deleteAccepted = service.deleteBackup(
+      {
+        confirmed: true,
+        backupId: backup?.id ?? ''
+      },
+      (path) => {
+        trashedPaths.push(path);
+        return Promise.resolve();
+      }
+    );
+    await waitForOperation(deleteAccepted.operationId, operationManager);
+
+    expect(trashedPaths).toEqual([backup?.path]);
+  });
 });
 
 async function waitForOperation(operationId: string, operationManager: OperationManagerService): Promise<void> {

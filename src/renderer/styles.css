@@ -1042,13 +1042,29 @@ button {
 
 .backup-item {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 12px;
   padding: 12px;
   border: 1px solid rgba(186, 201, 204, 0.12);
   border-radius: 8px;
   background: rgba(16, 20, 24, 0.62);
+}
+
+.backup-delete-button {
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 204, 84, 0.32);
+  border-radius: 7px;
+  background: rgba(255, 204, 84, 0.08);
+  color: #ffe2a0;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.backup-delete-button:hover {
+  border-color: rgba(255, 204, 84, 0.5);
+  background: rgba(255, 204, 84, 0.13);
 }
 
 .backup-item strong {

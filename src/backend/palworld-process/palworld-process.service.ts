@@ -1,9 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { spawn, spawnSync, type ChildProcess, type SpawnOptions } from 'node:child_process';
 import { createSocket } from 'node:dgram';
 import { existsSync } from 'node:fs';
 import { dirname, join, normalize } from 'node:path';
 import { OperationManagerService } from '../operations/operation-manager.service';
+import { LoggingService } from '../logging/logging.service';
 import { PalworldInstallationService } from '../palworld-installation/palworld-installation.service';
 import type { OperationAcceptedDto } from '../../shared/dto/operation-progress.dto';
 import type {
@@ -39,7 +40,8 @@ export class PalworldProcessService {
 
   constructor(
     private readonly palworldInstallationService: PalworldInstallationService,
-    private readonly operationManagerService: OperationManagerService
+    private readonly operationManagerService: OperationManagerService,
+    @Optional() private readonly loggingService?: LoggingService
   ) {}
 
   getRuntimeStatus(): PalworldRuntimeStatusDto {
@@ -343,6 +345,7 @@ export class PalworldProcessService {
     }
 
     this.operationManagerService.appendLog(operationId, line);
+    void this.loggingService?.write('palserver', 'INFO', line);
   }
 
   private setRuntimeState(state: PalworldRuntimeState, message: string): void {
@@ -352,6 +355,7 @@ export class PalworldProcessService {
 
     if (this.activeOperationId) {
       this.logs.push(message);
+      void this.loggingService?.write('palserver', state === 'ERROR' ? 'ERROR' : 'INFO', message);
     }
   }
 }

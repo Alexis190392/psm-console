@@ -1,9 +1,10 @@
 import type { INestApplicationContext } from '@nestjs/common';
-import { BrowserWindow, type IpcMain, type IpcMainInvokeEvent } from 'electron';
+import { BrowserWindow, shell, type IpcMain, type IpcMainInvokeEvent } from 'electron';
 import { ApplicationStateService } from '../../backend/application-state/application-state.service';
 import { BackupService } from '../../backend/backup/backup.service';
 import { FirewallService } from '../../backend/firewall/firewall.service';
 import { NetworkService } from '../../backend/network/network.service';
+import { LoggingService } from '../../backend/logging/logging.service';
 import { OperationManagerService } from '../../backend/operations/operation-manager.service';
 import { PalworldConfigurationService } from '../../backend/palworld-configuration/palworld-configuration.service';
 import { PalworldInstallationService } from '../../backend/palworld-installation/palworld-installation.service';
@@ -22,7 +23,8 @@ import type {
 } from '../../shared/dto/palworld-runtime-status.dto';
 import type { SteamCmdInstallRequestDto } from '../../shared/dto/steamcmd-status.dto';
 import type { FirewallApplyRulesRequestDto } from '../../shared/dto/firewall-status.dto';
-import type { BackupCreateRequestDto } from '../../shared/dto/backup-status.dto';
+import type { BackupCreateRequestDto, BackupDeleteRequestDto } from '../../shared/dto/backup-status.dto';
+import type { LogsRecentRequestDto } from '../../shared/dto/log-status.dto';
 
 export function registerIpcHandlers(
   ipcMain: Pick<IpcMain, 'handle'>,
@@ -37,6 +39,7 @@ export function registerIpcHandlers(
   const firewallService = nestContext.get(FirewallService);
   const networkService = nestContext.get(NetworkService);
   const backupService = nestContext.get(BackupService);
+  const loggingService = nestContext.get(LoggingService);
 
   ipcMain.handle(ipcChannels.appGetStatus, () =>
     applicationStateService.getStatus()
@@ -108,6 +111,14 @@ export function registerIpcHandlers(
 
   ipcMain.handle(ipcChannels.backupCreateWorld, (_event, request: BackupCreateRequestDto) =>
     backupService.createWorldBackup(request)
+  );
+
+  ipcMain.handle(ipcChannels.backupDelete, (_event, request: BackupDeleteRequestDto) =>
+    backupService.deleteBackup(request, (path) => shell.trashItem(path))
+  );
+
+  ipcMain.handle(ipcChannels.logsGetRecent, (_event, request: LogsRecentRequestDto | undefined) =>
+    loggingService.readRecent(request)
   );
 
   ipcMain.handle(ipcChannels.windowMinimize, (event) => {

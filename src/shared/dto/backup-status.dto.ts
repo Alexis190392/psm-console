@@ -20,3 +20,8 @@ export interface BackupSummaryDto {
 export interface BackupCreateRequestDto {
   confirmed: boolean;
 }
+
+export interface BackupDeleteRequestDto {
+  confirmed: boolean;
+  backupId: string;
+}

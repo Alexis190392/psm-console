@@ -71,6 +71,7 @@ function renderBackupItem(backup: BackupSummaryDto['configurationBackups'][numbe
         <small>${escapeHtml(formatDateTime(backup.createdAt))}</small>
       </span>
       <span class="backup-item__meta">${escapeHtml(formatBytes(backup.sizeBytes))}</span>
+      <button class="backup-delete-button" data-backup-delete="${escapeHtml(backup.id)}" type="button">Enviar a papelera</button>
     </article>
   `;
 }

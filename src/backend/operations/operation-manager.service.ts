@@ -1,10 +1,13 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
+import { LoggingService } from '../logging/logging.service';
 import type { OperationProgressDto, OperationStatus } from '../../shared/dto/operation-progress.dto';
 
 @Injectable()
 export class OperationManagerService {
   private readonly operations = new Map<string, OperationProgressDto>();
+
+  constructor(@Optional() private readonly loggingService?: LoggingService) {}
 
   create(title: string, message: string): OperationProgressDto {
     const operation: OperationProgressDto = {
@@ -19,6 +22,7 @@ export class OperationManagerService {
     };
 
     this.operations.set(operation.operationId, operation);
+    void this.loggingService?.write('manager', 'INFO', `${title}: ${message}`);
     return operation;
   }
 
@@ -65,11 +69,15 @@ export class OperationManagerService {
     };
 
     this.operations.set(operationId, next);
+    if (hasNewMessage) {
+      void this.loggingService?.write(patch.status === 'FAILED' ? 'error' : 'manager', patch.status === 'FAILED' ? 'ERROR' : 'INFO', `${next.title}: ${operationPatch.message ?? ''}`);
+    }
     return next;
   }
 
   appendLog(operationId: string, line: string): OperationProgressDto {
     const current = this.get(operationId);
+    void this.loggingService?.write('manager', 'INFO', `${current.title}: ${line}`);
     return this.update(operationId, {
       logs: [...current.logs, formatLogLine(line)]
     });

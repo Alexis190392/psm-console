@@ -27,6 +27,7 @@ describe('backups view', () => {
     expect(html).toContain('D:\\Pal\\PalWorldSettings.ini');
     expect(html).toContain('config-1.ini');
     expect(html).toContain('2.0 KB');
+    expect(html).toContain('data-backup-delete="configuration:config-1.ini"');
     expect(html).toContain('Todavia no hay backups de este tipo.');
   });
 });

@@ -5,7 +5,12 @@ import { dirname, join } from 'node:path';
 import { OperationManagerService } from '../operations/operation-manager.service';
 import { PalworldConfigurationService } from '../palworld-configuration/palworld-configuration.service';
 import { PortablePathService } from '../portable-path/portable-path.service';
-import type { BackupCreateRequestDto, BackupEntryDto, BackupSummaryDto } from '../../shared/dto/backup-status.dto';
+import type {
+  BackupCreateRequestDto,
+  BackupDeleteRequestDto,
+  BackupEntryDto,
+  BackupSummaryDto
+} from '../../shared/dto/backup-status.dto';
 import type { OperationAcceptedDto } from '../../shared/dto/operation-progress.dto';
 
 @Injectable()
@@ -62,6 +67,26 @@ export class BackupService {
     );
 
     void this.createWorldBackupAsync(operation.operationId);
+
+    return {
+      operationId: operation.operationId
+    };
+  }
+
+  deleteBackup(
+    request: BackupDeleteRequestDto,
+    moveToTrash: (path: string) => Promise<void>
+  ): OperationAcceptedDto {
+    if (!request.confirmed) {
+      throw new Error('BACKUP_DELETE_REQUIRES_CONFIRMATION');
+    }
+
+    const operation = this.operationManagerService.create(
+      'Eliminar backup',
+      'Preparando envio del backup a la papelera.'
+    );
+
+    void this.deleteBackupAsync(operation.operationId, request.backupId, moveToTrash);
 
     return {
       operationId: operation.operationId
@@ -178,6 +203,49 @@ export class BackupService {
     );
 
     return backups.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  }
+
+  private async deleteBackupAsync(
+    operationId: string,
+    backupId: string,
+    moveToTrash: (path: string) => Promise<void>
+  ): Promise<void> {
+    try {
+      const backup = await this.findBackupById(backupId);
+
+      if (!backup) {
+        throw new Error(`BACKUP_NOT_FOUND: ${backupId}`);
+      }
+
+      this.operationManagerService.update(operationId, {
+        status: 'RUNNING',
+        percent: 50,
+        message: `Enviando backup a la papelera: ${backup.name}.`
+      });
+      await moveToTrash(backup.path);
+      this.operationManagerService.appendLog(operationId, `trash "${backup.path}"`);
+      this.operationManagerService.update(operationId, {
+        status: 'COMPLETED',
+        percent: 100,
+        message: 'Backup enviado a la papelera.'
+      });
+    } catch (error) {
+      this.operationManagerService.update(operationId, {
+        status: 'FAILED',
+        percent: 100,
+        message: 'No se pudo enviar el backup a la papelera.',
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  private async findBackupById(backupId: string): Promise<BackupEntryDto | null> {
+    const [configurationBackups, worldBackups] = await Promise.all([
+      this.listBackupEntries('configuration'),
+      this.listBackupEntries('world')
+    ]);
+
+    return [...configurationBackups, ...worldBackups].find((backup) => backup.id === backupId) ?? null;
   }
 
   private getBackupDirectory(kind: 'configuration' | 'world'): string {

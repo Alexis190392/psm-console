@@ -28,6 +28,8 @@ export const ipcChannels = {
   backupGetSummary: 'backup:get-summary',
   backupCreateConfiguration: 'backup:create-configuration',
   backupCreateWorld: 'backup:create-world',
+  backupDelete: 'backup:delete',
+  logsGetRecent: 'logs:get-recent',
   logsSubscribe: 'logs:subscribe',
   logsUnsubscribe: 'logs:unsubscribe',
   windowMinimize: 'window:minimize',

@@ -3,6 +3,7 @@ import { ApplicationStateService } from './application-state/application-state.s
 import { BackupService } from './backup/backup.service';
 import { FirewallService } from './firewall/firewall.service';
 import { NetworkService } from './network/network.service';
+import { LoggingService } from './logging/logging.service';
 import { OperationManagerService } from './operations/operation-manager.service';
 import { PalworldConfigurationService } from './palworld-configuration/palworld-configuration.service';
 import { PalworldInstallationService } from './palworld-installation/palworld-installation.service';
@@ -23,7 +24,8 @@ import { SteamCmdService } from './steamcmd/steamcmd.service';
     PalworldProcessService,
     PalworldConfigurationService,
     NetworkService,
-    FirewallService
+    FirewallService,
+    LoggingService
   ],
   exports: [
     PortablePathService,
@@ -36,7 +38,8 @@ import { SteamCmdService } from './steamcmd/steamcmd.service';
     PalworldProcessService,
     PalworldConfigurationService,
     NetworkService,
-    FirewallService
+    FirewallService,
+    LoggingService
   ]
 })
 export class AppModule {}
