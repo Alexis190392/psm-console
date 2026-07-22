@@ -36,7 +36,7 @@ import type {
 } from '../../shared/dto/palworld-admin.dto';
 import type { PalworldPlayersStatusDto } from '../../shared/dto/palworld-players-status.dto';
 import type { SteamCmdInstallRequestDto, SteamCmdStatusDto } from '../../shared/dto/steamcmd-status.dto';
-import type { NetworkDiagnosticsDto } from '../../shared/dto/network-diagnostics.dto';
+import type { NetworkDiagnosticsDto, PublicAddressRequestDto } from '../../shared/dto/network-diagnostics.dto';
 
 const ipcChannels = {
   appGetStatus: 'app:get-status',
@@ -113,7 +113,7 @@ export interface PalcmApi {
   };
   network: {
     getLocalAddresses: () => Promise<string[]>;
-    getPublicAddress: () => Promise<NetworkDiagnosticsDto>;
+    getPublicAddress: (request?: PublicAddressRequestDto) => Promise<NetworkDiagnosticsDto>;
   };
   backup: {
     getSummary: () => Promise<BackupSummaryDto>;
@@ -184,7 +184,8 @@ const api: PalcmApi = {
   },
   network: {
     getLocalAddresses: () => ipcRenderer.invoke(ipcChannels.networkGetLocalAddresses) as Promise<string[]>,
-    getPublicAddress: () => ipcRenderer.invoke(ipcChannels.networkGetPublicAddress) as Promise<NetworkDiagnosticsDto>
+    getPublicAddress: (request) =>
+      ipcRenderer.invoke(ipcChannels.networkGetPublicAddress, request) as Promise<NetworkDiagnosticsDto>
   },
   backup: {
     getSummary: () => ipcRenderer.invoke(ipcChannels.backupGetSummary) as Promise<BackupSummaryDto>,

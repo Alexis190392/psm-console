@@ -1,7 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { networkInterfaces } from 'node:os';
 import { get } from 'node:https';
-import type { NetworkDiagnosticsDto } from '../../shared/dto/network-diagnostics.dto';
+import { get as httpGet } from 'node:http';
+import type {
+  NetworkDiagnosticsDto,
+  PublicAddressRequestDto,
+  PublicPortProbeDto,
+  PublicPortProbeState
+} from '../../shared/dto/network-diagnostics.dto';
 
 const PUBLIC_IP_CACHE_MS = 60_000;
 const PUBLIC_IP_TIMEOUT_MS = 900;
@@ -23,6 +29,7 @@ const PUBLIC_IP_ENDPOINTS = [
       .trim() ?? ''
   }
 ];
+const PUBLIC_PORT_PROBE_TIMEOUT_MS = 3_600;
 
 let publicIpCache: { ip: string; expiresAt: number } | null = null;
 
@@ -32,15 +39,19 @@ export class NetworkService {
     return getLocalIpv4Addresses();
   }
 
-  async getPublicAddress(): Promise<NetworkDiagnosticsDto> {
+  async getPublicAddress(request: PublicAddressRequestDto = {}): Promise<NetworkDiagnosticsDto> {
     const localIpv4 = getLocalIpv4Addresses();
     const publicIp = await getPublicIp().catch(() => null);
     const cgnatStatus = resolveCgnatStatus(publicIp, localIpv4);
+    const publicPortProbe = publicIp && request.port
+      ? await checkPublicPort(publicIp, request.port).catch(() => undefined)
+      : undefined;
 
     return {
       publicIp,
       localIpv4,
       cgnatStatus,
+      ...(publicPortProbe ? { publicPortProbe } : {}),
       message: createCgnatMessage(cgnatStatus),
       recommendation: createCgnatRecommendation(cgnatStatus, publicIp),
       updatedAt: new Date().toISOString()
@@ -114,6 +125,113 @@ async function getPublicIpFromEndpoint(url: string, parser: (body: string) => st
     });
     request.on('error', reject);
   });
+}
+
+async function checkPublicPort(publicIp: string, port: number): Promise<PublicPortProbeDto> {
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error('PUBLIC_PORT_INVALID');
+  }
+
+  const query = `http://starrupture-utilities.com/port_check/index.php?ip=${encodeURIComponent(publicIp)}&port=${String(port)}&format=json`;
+  const response = await getJson(query, PUBLIC_PORT_PROBE_TIMEOUT_MS);
+  const tcp = parseProbeState(response, 'tcp');
+  const udp = parseProbeState(response, 'udp');
+
+  return {
+    port,
+    tcp,
+    udp,
+    provider: 'starrupture-utilities',
+    checkedAt: new Date().toISOString(),
+    message: createPublicPortProbeMessage(udp, tcp)
+  };
+}
+
+async function getJson(url: string, timeoutMs: number): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    const request = httpGet(url, { timeout: timeoutMs }, (response) => {
+      let body = '';
+
+      response.setEncoding('utf8');
+      response.on('data', (chunk: string) => {
+        body += chunk;
+      });
+      response.on('end', () => {
+        try {
+          resolve(JSON.parse(body) as unknown);
+        } catch {
+          reject(new Error('PUBLIC_PORT_INVALID_RESPONSE'));
+        }
+      });
+    });
+
+    request.on('timeout', () => {
+      request.destroy(new Error('PUBLIC_PORT_TIMEOUT'));
+    });
+    request.on('error', reject);
+  });
+}
+
+function parseProbeState(response: unknown, protocol: 'tcp' | 'udp'): PublicPortProbeState {
+  const values = collectProtocolValues(response, protocol);
+
+  if (values.some((value) => ['open', 'opened', 'true', 'reachable', 'success'].includes(value))) {
+    return 'OPEN';
+  }
+
+  if (values.some((value) => ['closed', 'close', 'false', 'refused'].includes(value))) {
+    return 'CLOSED';
+  }
+
+  if (values.some((value) => ['filtered', 'timeout', 'timed_out', 'inconclusive', 'unknown'].includes(value))) {
+    return 'FILTERED';
+  }
+
+  return 'UNKNOWN';
+}
+
+function collectProtocolValues(value: unknown, protocol: 'tcp' | 'udp'): string[] {
+  if (value === null || value === undefined) {
+    return [];
+  }
+
+  if (typeof value === 'boolean' || typeof value === 'number' || typeof value === 'string') {
+    return [String(value).trim().toLowerCase()];
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => collectProtocolValues(item, protocol));
+  }
+
+  if (typeof value === 'object') {
+    return Object.entries(value).flatMap(([key, nested]) => {
+      const normalizedKey = key.toLowerCase();
+
+      if (normalizedKey === protocol || normalizedKey.includes(protocol)) {
+        return collectProtocolValues(nested, protocol);
+      }
+
+      return [];
+    });
+  }
+
+  return [];
+}
+
+function createPublicPortProbeMessage(udp: PublicPortProbeState, tcp: PublicPortProbeState): string {
+  if (udp === 'OPEN') {
+    return 'UDP abierto desde Internet. El puerto publico responde desde una red externa.';
+  }
+
+  if (udp === 'CLOSED') {
+    return 'UDP cerrado desde Internet. Revisa servidor, firewall, router, NAT o CGNAT.';
+  }
+
+  if (tcp === 'OPEN') {
+    return 'TCP abierto, pero Palworld usa UDP para jugadores. Revisa especificamente UDP.';
+  }
+
+  return 'UDP no confirmado desde Internet. En UDP esto puede ser inconcluso si el servidor no responde a la sonda.';
 }
 
 function resolveCgnatStatus(publicIp: string | null, localIpv4: string[]): NetworkDiagnosticsDto['cgnatStatus'] {

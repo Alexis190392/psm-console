@@ -35,6 +35,7 @@ import type {
   BackupRestoreRequestDto
 } from '../../shared/dto/backup-status.dto';
 import type { LogsRecentRequestDto } from '../../shared/dto/log-status.dto';
+import type { PublicAddressRequestDto } from '../../shared/dto/network-diagnostics.dto';
 
 export function registerIpcHandlers(
   ipcMain: Pick<IpcMain, 'handle'>,
@@ -131,7 +132,9 @@ export function registerIpcHandlers(
 
   ipcMain.handle(ipcChannels.networkGetLocalAddresses, () => networkService.getLocalAddresses());
 
-  ipcMain.handle(ipcChannels.networkGetPublicAddress, () => networkService.getPublicAddress());
+  ipcMain.handle(ipcChannels.networkGetPublicAddress, (_event, request: PublicAddressRequestDto | undefined) =>
+    networkService.getPublicAddress(request)
+  );
 
   ipcMain.handle(ipcChannels.backupGetSummary, () => backupService.getSummary());
 

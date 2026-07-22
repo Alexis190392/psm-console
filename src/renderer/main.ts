@@ -230,6 +230,8 @@ let latestLocalAddresses: string[] = [];
 let latestPublicNetwork: NetworkDiagnosticsDto | null = null;
 let latestPublicNetworkError: string | null = null;
 let publicNetworkRequest: Promise<NetworkDiagnosticsDto> | null = null;
+let latestPublicNetworkPort: string | null = null;
+let publicNetworkRequestPort: string | null = null;
 let latestConfiguredPort: string | null = null;
 let latestBackupSummary: BackupSummaryDto | null = null;
 let adminRefreshTimer: number | null = null;
@@ -962,7 +964,7 @@ async function renderGeneralView(): Promise<void> {
   const isNetworkLoading = !latestFirewallStatus && !latestFirewallError;
   const localPlay = createLocalPlaySummary(latestFirewallStatus, port, isNetworkLoading, latestLocalAddresses);
   const isPublicNetworkLoading = !latestFirewallStatus && !latestFirewallError && !latestPublicNetwork && !latestPublicNetworkError;
-  const publicPlay = createPublicPlaySummary(latestFirewallStatus, isPublicNetworkLoading, latestPublicNetwork);
+  const publicPlay = createPublicPlaySummary(latestFirewallStatus, isPublicNetworkLoading, latestPublicNetwork, port);
   const backupSummary = await readBackupSummaryForGeneral();
   const backupState = createBackupSummaryCard(backupSummary);
   const serverRuntime = await readServerRuntimeForGeneral();
@@ -1251,7 +1253,7 @@ async function hydrateGeneralNetworkSummary(port: string | null): Promise<void> 
   }
 
   const localPlay = createLocalPlaySummary(firewall, port, false, latestLocalAddresses);
-  const publicPlay = createPublicPlaySummary(firewall, false, latestPublicNetwork);
+  const publicPlay = createPublicPlaySummary(firewall, false, latestPublicNetwork, port);
   replaceSummaryCard(
     'general-local-play-card',
     renderSummaryCard({
@@ -1280,7 +1282,7 @@ async function hydrateGeneralNetworkSummary(port: string | null): Promise<void> 
 }
 
 async function hydrateGeneralPublicPreview(port: string | null): Promise<void> {
-  const publicNetwork = await readPublicNetworkForGeneral();
+  const publicNetwork = await readPublicNetworkForGeneral(port);
 
   if (!navigationState.is('home') || !isOperationalStatus(latestStatus) || latestFirewallStatus) {
     return;
@@ -1324,29 +1326,32 @@ async function readLocalAddressesForGeneral(): Promise<string[]> {
   }
 }
 
-async function readPublicNetworkForGeneral(): Promise<NetworkDiagnosticsDto | null> {
+async function readPublicNetworkForGeneral(port: string | null = latestConfiguredPort): Promise<NetworkDiagnosticsDto | null> {
   if (!palcmApi) {
     return null;
   }
 
-  if (latestPublicNetwork) {
+  if (latestPublicNetwork && latestPublicNetworkPort === port) {
     return latestPublicNetwork;
   }
 
-  if (publicNetworkRequest) {
+  if (publicNetworkRequest && publicNetworkRequestPort === port) {
     return publicNetworkRequest;
   }
 
   latestPublicNetworkError = null;
+  publicNetworkRequestPort = port;
   publicNetworkRequest = palcmApi.network
-    .getPublicAddress()
+    .getPublicAddress(port ? { port: Number(port) } : undefined)
     .then((network) => {
       latestPublicNetwork = network;
+      latestPublicNetworkPort = port;
       latestPublicNetworkError = null;
       return network;
     })
     .finally(() => {
       publicNetworkRequest = null;
+      publicNetworkRequestPort = null;
     });
 
   try {
@@ -1464,11 +1469,16 @@ function createPublicPlaySummary(
   if (network.cgnatStatus === 'UNLIKELY') {
     const port = getPublicPortFromFirewall(firewall);
     const copyValue = network.publicIp && port ? `${network.publicIp}:${port}` : undefined;
+    const probeSummary = createPublicPortProbeSummary(network, copyValue);
+
+    if (probeSummary) {
+      return probeSummary;
+    }
 
     return {
       value: copyValue ?? network.publicIp ?? 'Posible',
-      detail: 'Sin indicios fuertes de CGNAT; falta validar router y puerto desde otra red.',
-      state: createSummaryCardState('ok'),
+      detail: 'IP publica detectada. Verificando puerto externo.',
+      state: createSummaryCardState(copyValue ? 'warning' : 'loading'),
       copyValue
     };
   }
@@ -1502,20 +1512,33 @@ function createPublicPlaySummaryFromNetwork(
 
   if (network.cgnatStatus === 'UNLIKELY') {
     const copyValue = network.publicIp && port ? `${network.publicIp}:${port}` : undefined;
+    const probeSummary = createPublicPortProbeSummary(network, copyValue);
+
+    if (probeSummary) {
+      return probeSummary;
+    }
 
     return {
       value: copyValue ?? network.publicIp ?? 'Posible',
-      detail: copyValue ? 'IP publica detectada. Click para copiar.' : 'IP publica detectada. Falta leer puerto publico.',
-      state: createSummaryCardState('ok'),
+      detail: copyValue ? 'IP publica detectada. Verificando puerto externo.' : 'IP publica detectada. Falta leer puerto publico.',
+      state: createSummaryCardState(copyValue ? 'warning' : 'loading'),
       copyValue
     };
   }
 
   if (network.cgnatStatus === 'NEEDS_ROUTER_CHECK') {
+    const copyValue = network.publicIp && port ? `${network.publicIp}:${port}` : undefined;
+    const probeSummary = createPublicPortProbeSummary(network, copyValue);
+
+    if (probeSummary) {
+      return probeSummary;
+    }
+
     return {
-      value: network.publicIp ?? 'Requiere prueba',
+      value: copyValue ?? network.publicIp ?? 'Requiere prueba',
       detail: 'IP publica detectada. Falta comparar con WAN del router y probar el puerto.',
-      state: createSummaryCardState('warning')
+      state: createSummaryCardState('warning'),
+      copyValue
     };
   }
 
@@ -1523,6 +1546,42 @@ function createPublicPlaySummaryFromNetwork(
     value: 'Sin Internet',
     detail: 'No se pudo consultar la IP publica rapidamente.',
     state: createSummaryCardState('optional')
+  };
+}
+
+function createPublicPortProbeSummary(
+  network: NetworkDiagnosticsDto,
+  copyValue: string | undefined
+): SummaryCardViewModel | null {
+  const probe = network.publicPortProbe;
+
+  if (!probe) {
+    return null;
+  }
+
+  if (probe.udp === 'OPEN') {
+    return {
+      value: copyValue ?? network.publicIp ?? 'Abierto',
+      detail: 'UDP abierto desde Internet. Click para copiar.',
+      state: createSummaryCardState('ok'),
+      copyValue
+    };
+  }
+
+  if (probe.udp === 'CLOSED') {
+    return {
+      value: copyValue ?? network.publicIp ?? 'Cerrado',
+      detail: 'IP detectada, pero el puerto UDP no responde desde Internet.',
+      state: createSummaryCardState('error'),
+      copyValue
+    };
+  }
+
+  return {
+    value: copyValue ?? network.publicIp ?? 'No confirmado',
+    detail: probe.message,
+    state: createSummaryCardState('warning'),
+    copyValue
   };
 }
 
@@ -2495,6 +2554,8 @@ async function getFirewallStatus(forceRefresh = false): Promise<FirewallStatusDt
   if (forceRefresh) {
     latestFirewallStatus = null;
     latestPublicNetwork = null;
+    latestPublicNetworkPort = null;
+    publicNetworkRequestPort = null;
     latestPublicNetworkError = null;
   }
 
@@ -2741,32 +2802,39 @@ function createWindowsLocalSummary(firewall: FirewallStatusDto): SummaryCardView
 
 function createExternalAccessSummary(firewall: FirewallStatusDto): SummaryCardViewModel {
   const network = firewall.external.network;
+  const port = getPublicPortFromFirewall(firewall);
+  const copyValue = network.publicIp && port ? `${network.publicIp}:${port}` : undefined;
+  const probeNetwork = latestPublicNetwork && latestPublicNetworkPort === port ? latestPublicNetwork : network;
+  const probeSummary = createPublicPortProbeSummary(probeNetwork, copyValue);
+
+  if (probeSummary) {
+    return probeSummary;
+  }
 
   if (network.cgnatStatus === 'LIKELY') {
     return {
-      value: 'Bloqueado directo',
+      value: copyValue ?? network.publicIp ?? 'Bloqueado directo',
       detail: 'Probable CGNAT o NAT del ISP. El puerto publico no sera directo sin alternativa externa.',
-      state: createSummaryCardState('warning')
+      state: createSummaryCardState('warning'),
+      copyValue
     };
   }
 
   if (network.cgnatStatus === 'UNLIKELY') {
-    const port = getPublicPortFromFirewall(firewall);
-    const copyValue = network.publicIp && port ? `${network.publicIp}:${port}` : undefined;
-
     return {
       value: copyValue ?? 'Posible',
-      detail: copyValue ? 'Click para copiar la direccion publica.' : 'Sin indicios fuertes de CGNAT; falta probar el puerto desde otra red.',
-      state: createSummaryCardState('ok'),
+      detail: copyValue ? 'IP publica detectada. Verificando puerto externo.' : 'Sin indicios fuertes de CGNAT; falta probar el puerto desde otra red.',
+      state: createSummaryCardState(copyValue ? 'warning' : 'ok'),
       copyValue
     };
   }
 
   if (network.cgnatStatus === 'NEEDS_ROUTER_CHECK') {
     return {
-      value: 'Configurar router',
+      value: copyValue ?? network.publicIp ?? 'Configurar router',
       detail: 'Compara WAN del router con IP publica y crea port forwarding si coinciden.',
-      state: createSummaryCardState('configuration')
+      state: createSummaryCardState('configuration'),
+      copyValue
     };
   }
 
@@ -3001,6 +3069,8 @@ async function applyFirewallRules(): Promise<void> {
   latestFirewallStatus = null;
   latestFirewallCheckedAt = null;
   latestPublicNetwork = null;
+  latestPublicNetworkPort = null;
+  publicNetworkRequestPort = null;
   latestPublicNetworkError = null;
   showToast('Reglas de Firewall actualizadas');
   navigationState.set('network');
