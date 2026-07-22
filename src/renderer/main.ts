@@ -3131,8 +3131,22 @@ function renderSettingsFilterBar(parsed: ParsedPalworldSettings): string {
 
 function bindSummaryCards(): void {
   document.querySelectorAll<HTMLButtonElement>('.summary-card[data-target]').forEach((card) => {
-    card.addEventListener('click', () => {
+    card.addEventListener('click', (event) => {
       const copyValue = card.dataset['copyValue'];
+      const clickedElement = event.target instanceof Element ? event.target : null;
+      const clickedTargetIcon = clickedElement
+        ?.closest<HTMLElement>('.summary-card__icon[data-summary-icon="target"]');
+
+      if (clickedTargetIcon) {
+        const adminTab = card.dataset['adminTab'];
+        if (adminTab === 'general' || adminTab === 'players') {
+          adminActiveTab = adminTab;
+        }
+
+        navigationState.set(card.dataset['target']);
+        renderActiveView();
+        return;
+      }
 
       if (copyValue) {
         void copyToClipboard(copyValue, card);

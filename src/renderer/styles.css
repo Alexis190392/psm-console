@@ -1402,6 +1402,15 @@ button {
   font-weight: 800;
 }
 
+.summary-card__icon--action {
+  cursor: pointer;
+}
+
+.summary-card__icon--action:hover {
+  outline: 1px solid currentColor;
+  outline-offset: 2px;
+}
+
 .summary-card--ok .summary-card__icon {
   background: rgba(0, 229, 255, 0.14);
   color: var(--color-primary);
