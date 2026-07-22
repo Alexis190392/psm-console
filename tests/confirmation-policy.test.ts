@@ -16,5 +16,6 @@ describe('confirmation policy', () => {
     expect(requiresUserConfirmation('app:get-status')).toBe(false);
     expect(requiresUserConfirmation('firewall:get-status')).toBe(false);
     expect(requiresUserConfirmation('network:get-local-addresses')).toBe(false);
+    expect(requiresUserConfirmation('network:get-public-address')).toBe(false);
   });
 });

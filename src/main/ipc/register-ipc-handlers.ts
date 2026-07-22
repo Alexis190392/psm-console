@@ -131,6 +131,8 @@ export function registerIpcHandlers(
 
   ipcMain.handle(ipcChannels.networkGetLocalAddresses, () => networkService.getLocalAddresses());
 
+  ipcMain.handle(ipcChannels.networkGetPublicAddress, () => networkService.getPublicAddress());
+
   ipcMain.handle(ipcChannels.backupGetSummary, () => backupService.getSummary());
 
   ipcMain.handle(ipcChannels.backupCreateConfiguration, (_event, request: BackupCreateRequestDto) =>

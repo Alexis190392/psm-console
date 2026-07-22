@@ -32,6 +32,11 @@ describe('IPC channel surface', () => {
     expect(ipcChannels.logsGetRecent).toBe('logs:get-recent');
   });
 
+  it('keeps network diagnostics behind concrete readonly domain channels', () => {
+    expect(ipcChannels.networkGetLocalAddresses).toBe('network:get-local-addresses');
+    expect(ipcChannels.networkGetPublicAddress).toBe('network:get-public-address');
+  });
+
   it('keeps player monitoring behind a concrete readonly domain channel', () => {
     expect(ipcChannels.playersGetStatus).toBe('players:get-status');
   });

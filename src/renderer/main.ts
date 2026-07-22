@@ -5,6 +5,7 @@ import { ApplicationStatus } from '../shared/enums/application-status';
 import type { AllowedActionsDto } from '../shared/dto/allowed-actions.dto';
 import type { BackupSummaryDto } from '../shared/dto/backup-status.dto';
 import type { FirewallPortCheckDto, FirewallStatusDto } from '../shared/dto/firewall-status.dto';
+import type { NetworkDiagnosticsDto } from '../shared/dto/network-diagnostics.dto';
 import type { LogModule } from '../shared/dto/log-status.dto';
 import type { OperationProgressDto } from '../shared/dto/operation-progress.dto';
 import type { PalworldAdminAction, PalworldAdminStatusDto } from '../shared/dto/palworld-admin.dto';
@@ -226,6 +227,9 @@ let latestFirewallError: string | null = null;
 let firewallRequestStartedAt = 0;
 let latestFirewallCheckedAt: Date | null = null;
 let latestLocalAddresses: string[] = [];
+let latestPublicNetwork: NetworkDiagnosticsDto | null = null;
+let latestPublicNetworkError: string | null = null;
+let publicNetworkRequest: Promise<NetworkDiagnosticsDto> | null = null;
 let latestConfiguredPort: string | null = null;
 let latestBackupSummary: BackupSummaryDto | null = null;
 let adminRefreshTimer: number | null = null;
@@ -957,7 +961,8 @@ async function renderGeneralView(): Promise<void> {
   const portState = port ? createSummaryCardState('ok') : createSummaryCardState('warning');
   const isNetworkLoading = !latestFirewallStatus && !latestFirewallError;
   const localPlay = createLocalPlaySummary(latestFirewallStatus, port, isNetworkLoading, latestLocalAddresses);
-  const publicPlay = createPublicPlaySummary(latestFirewallStatus, isNetworkLoading);
+  const isPublicNetworkLoading = !latestFirewallStatus && !latestFirewallError && !latestPublicNetwork && !latestPublicNetworkError;
+  const publicPlay = createPublicPlaySummary(latestFirewallStatus, isPublicNetworkLoading, latestPublicNetwork);
   const backupSummary = await readBackupSummaryForGeneral();
   const backupState = createBackupSummaryCard(backupSummary);
   const serverRuntime = await readServerRuntimeForGeneral();
@@ -1034,6 +1039,7 @@ async function renderGeneralView(): Promise<void> {
   }));
   bindSummaryCards();
   void hydrateGeneralLocalPreview(port);
+  void hydrateGeneralPublicPreview(port);
   void hydrateGeneralNetworkSummary(port);
 }
 
@@ -1245,7 +1251,7 @@ async function hydrateGeneralNetworkSummary(port: string | null): Promise<void> 
   }
 
   const localPlay = createLocalPlaySummary(firewall, port, false, latestLocalAddresses);
-  const publicPlay = createPublicPlaySummary(firewall, false);
+  const publicPlay = createPublicPlaySummary(firewall, false, latestPublicNetwork);
   replaceSummaryCard(
     'general-local-play-card',
     renderSummaryCard({
@@ -1258,6 +1264,29 @@ async function hydrateGeneralNetworkSummary(port: string | null): Promise<void> 
       ...localPlay.state
     })
   );
+  replaceSummaryCard(
+    'general-public-play-card',
+    renderSummaryCard({
+      id: 'general-public-play-card',
+      title: 'Juego publico',
+      value: publicPlay.value,
+      detail: publicPlay.detail,
+      copyValue: publicPlay.copyValue,
+      target: 'network',
+      ...publicPlay.state
+    })
+  );
+  bindSummaryCards();
+}
+
+async function hydrateGeneralPublicPreview(port: string | null): Promise<void> {
+  const publicNetwork = await readPublicNetworkForGeneral();
+
+  if (!navigationState.is('home') || !isOperationalStatus(latestStatus) || latestFirewallStatus) {
+    return;
+  }
+
+  const publicPlay = createPublicPlaySummary(null, false, publicNetwork, port);
   replaceSummaryCard(
     'general-public-play-card',
     renderSummaryCard({
@@ -1292,6 +1321,40 @@ async function readLocalAddressesForGeneral(): Promise<string[]> {
   } catch (error) {
     appendConsoleLine(`No se pudo leer la IP local: ${error instanceof Error ? error.message : String(error)}`);
     return [];
+  }
+}
+
+async function readPublicNetworkForGeneral(): Promise<NetworkDiagnosticsDto | null> {
+  if (!palcmApi) {
+    return null;
+  }
+
+  if (latestPublicNetwork) {
+    return latestPublicNetwork;
+  }
+
+  if (publicNetworkRequest) {
+    return publicNetworkRequest;
+  }
+
+  latestPublicNetworkError = null;
+  publicNetworkRequest = palcmApi.network
+    .getPublicAddress()
+    .then((network) => {
+      latestPublicNetwork = network;
+      latestPublicNetworkError = null;
+      return network;
+    })
+    .finally(() => {
+      publicNetworkRequest = null;
+    });
+
+  try {
+    return await publicNetworkRequest;
+  } catch (error) {
+      latestPublicNetworkError = error instanceof Error ? error.message : String(error);
+      appendConsoleLine(`No se pudo leer la IP publica rapida: ${latestPublicNetworkError}`);
+      return null;
   }
 }
 
@@ -1362,16 +1425,25 @@ function createLocalPlaySummary(
   };
 }
 
-function createPublicPlaySummary(firewall: FirewallStatusDto | null, isLoading: boolean): SummaryCardViewModel {
+function createPublicPlaySummary(
+  firewall: FirewallStatusDto | null,
+  isLoading: boolean,
+  fastNetwork: NetworkDiagnosticsDto | null = latestPublicNetwork,
+  fallbackPort: string | null = latestConfiguredPort
+): SummaryCardViewModel {
   if (isLoading) {
     return {
       value: 'Analizando',
-      detail: 'Consultando IP publica y separando router, NAT y CGNAT.',
+      detail: 'Consultando IP publica rapida.',
       state: createSummaryCardState('loading')
     };
   }
 
   if (!firewall) {
+    if (fastNetwork) {
+      return createPublicPlaySummaryFromNetwork(fastNetwork, fallbackPort);
+    }
+
     return {
       value: latestFirewallError ? 'Error' : 'Pendiente',
       detail: 'Abre Red y Firewall para diagnosticar IP publica, router y CGNAT.',
@@ -1412,6 +1484,44 @@ function createPublicPlaySummary(firewall: FirewallStatusDto | null, isLoading: 
   return {
     value: 'Sin Internet',
     detail: 'No se pudo consultar la IP publica para evaluar acceso externo.',
+    state: createSummaryCardState('optional')
+  };
+}
+
+function createPublicPlaySummaryFromNetwork(
+  network: NetworkDiagnosticsDto,
+  port: string | null
+): SummaryCardViewModel {
+  if (network.cgnatStatus === 'LIKELY') {
+    return {
+      value: 'No directo',
+      detail: 'Probable CGNAT. Haria falta IP publica real o alternativa externa.',
+      state: createSummaryCardState('warning')
+    };
+  }
+
+  if (network.cgnatStatus === 'UNLIKELY') {
+    const copyValue = network.publicIp && port ? `${network.publicIp}:${port}` : undefined;
+
+    return {
+      value: copyValue ?? network.publicIp ?? 'Posible',
+      detail: copyValue ? 'IP publica detectada. Click para copiar.' : 'IP publica detectada. Falta leer puerto publico.',
+      state: createSummaryCardState('ok'),
+      copyValue
+    };
+  }
+
+  if (network.cgnatStatus === 'NEEDS_ROUTER_CHECK') {
+    return {
+      value: network.publicIp ?? 'Requiere prueba',
+      detail: 'IP publica detectada. Falta comparar con WAN del router y probar el puerto.',
+      state: createSummaryCardState('warning')
+    };
+  }
+
+  return {
+    value: 'Sin Internet',
+    detail: 'No se pudo consultar la IP publica rapidamente.',
     state: createSummaryCardState('optional')
   };
 }
@@ -2384,6 +2494,8 @@ async function getFirewallStatus(forceRefresh = false): Promise<FirewallStatusDt
 
   if (forceRefresh) {
     latestFirewallStatus = null;
+    latestPublicNetwork = null;
+    latestPublicNetworkError = null;
   }
 
   latestFirewallError = null;
@@ -2888,6 +3000,8 @@ async function applyFirewallRules(): Promise<void> {
   await pollOperation(accepted.operationId);
   latestFirewallStatus = null;
   latestFirewallCheckedAt = null;
+  latestPublicNetwork = null;
+  latestPublicNetworkError = null;
   showToast('Reglas de Firewall actualizadas');
   navigationState.set('network');
   await refreshState();

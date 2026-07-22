@@ -3,10 +3,48 @@ import { networkInterfaces } from 'node:os';
 import { get } from 'node:https';
 import type { NetworkDiagnosticsDto } from '../../shared/dto/network-diagnostics.dto';
 
+const PUBLIC_IP_CACHE_MS = 60_000;
+const PUBLIC_IP_TIMEOUT_MS = 900;
+const PUBLIC_IP_ENDPOINTS = [
+  {
+    url: 'https://api.ipify.org',
+    parser: (body: string) => body.trim()
+  },
+  {
+    url: 'https://icanhazip.com',
+    parser: (body: string) => body.trim()
+  },
+  {
+    url: 'https://www.cloudflare.com/cdn-cgi/trace',
+    parser: (body: string) => body
+      .split('\n')
+      .find((line) => line.startsWith('ip='))
+      ?.slice(3)
+      .trim() ?? ''
+  }
+];
+
+let publicIpCache: { ip: string; expiresAt: number } | null = null;
+
 @Injectable()
 export class NetworkService {
   getLocalAddresses(): string[] {
     return getLocalIpv4Addresses();
+  }
+
+  async getPublicAddress(): Promise<NetworkDiagnosticsDto> {
+    const localIpv4 = getLocalIpv4Addresses();
+    const publicIp = await getPublicIp().catch(() => null);
+    const cgnatStatus = resolveCgnatStatus(publicIp, localIpv4);
+
+    return {
+      publicIp,
+      localIpv4,
+      cgnatStatus,
+      message: createCgnatMessage(cgnatStatus),
+      recommendation: createCgnatRecommendation(cgnatStatus, publicIp),
+      updatedAt: new Date().toISOString()
+    };
   }
 
   async getDiagnostics(): Promise<NetworkDiagnosticsDto> {
@@ -33,8 +71,26 @@ function getLocalIpv4Addresses(): string[] {
 }
 
 async function getPublicIp(): Promise<string> {
+  if (publicIpCache && publicIpCache.expiresAt > Date.now()) {
+    return publicIpCache.ip;
+  }
+
+  const ip = await Promise.any(
+    PUBLIC_IP_ENDPOINTS.map((endpoint) =>
+      getPublicIpFromEndpoint(endpoint.url, endpoint.parser)
+    )
+  );
+  publicIpCache = {
+    ip,
+    expiresAt: Date.now() + PUBLIC_IP_CACHE_MS
+  };
+
+  return ip;
+}
+
+async function getPublicIpFromEndpoint(url: string, parser: (body: string) => string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const request = get('https://api.ipify.org', { timeout: 1800 }, (response) => {
+    const request = get(url, { timeout: PUBLIC_IP_TIMEOUT_MS }, (response) => {
       let body = '';
 
       response.setEncoding('utf8');
@@ -42,7 +98,7 @@ async function getPublicIp(): Promise<string> {
         body += chunk;
       });
       response.on('end', () => {
-        const ip = body.trim();
+        const ip = parser(body);
 
         if (/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) {
           resolve(ip);
