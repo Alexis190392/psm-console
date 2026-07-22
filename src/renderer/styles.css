@@ -2646,6 +2646,7 @@ button {
   gap: 12px;
   min-width: 0;
   opacity: 0.62;
+  animation: diagnostic-step-in 0.18s ease-out;
 }
 
 .diagnostic-step--done,
@@ -2700,14 +2701,6 @@ button {
   animation: spin 0.9s linear infinite;
 }
 
-.diagnostic-step--pending .diagnostic-step__icon {
-  width: 9px;
-  height: 9px;
-  margin: 5px 4px 0;
-  border: 0;
-  background: rgba(0, 229, 255, 0.34);
-}
-
 .diagnostic-step__body {
   display: grid;
   gap: 3px;
@@ -2724,10 +2717,6 @@ button {
   font-size: 12px;
   font-weight: 400;
   line-height: 1.35;
-}
-
-.diagnostic-step--pending .diagnostic-step__body small {
-  display: none;
 }
 
 .firewall-section__header h4 {
@@ -2990,6 +2979,18 @@ button {
 @keyframes spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes diagnostic-step-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 

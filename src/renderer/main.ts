@@ -257,6 +257,42 @@ let latestSummary: {
   serverPath: string;
 } | null = null;
 
+type DiagnosticStepState = 'done' | 'active' | 'pending' | 'error';
+
+interface DiagnosticStepDefinition {
+  title: string;
+  detail: string;
+  activeDetail: string;
+}
+
+const FIREWALL_DIAGNOSTIC_STEPS: DiagnosticStepDefinition[] = [
+  {
+    title: 'Leyendo configuracion del servidor',
+    detail: 'Se leyo PalWorldSettings.ini y se ubicaron los puertos activos.',
+    activeDetail: 'Abriendo PalWorldSettings.ini para leer PublicPort, RCON y REST API.'
+  },
+  {
+    title: 'Detectando direcciones y puertos',
+    detail: 'Se detectaron las IP LAN disponibles y los puertos que debe usar el servidor.',
+    activeDetail: 'Buscando IP LAN disponible y preparando la validacion de UDP/TCP configurada.'
+  },
+  {
+    title: 'Revisando Firewall de Windows',
+    detail: 'Se consultaron reglas de entrada asociadas a PalServer.exe y a los puertos activos.',
+    activeDetail: 'Consultando reglas locales de entrada para saber si Windows permite conexiones al servidor.'
+  },
+  {
+    title: 'Comprobando acceso externo',
+    detail: 'Se consulto IP publica, posible NAT/CGNAT y respuesta externa del puerto.',
+    activeDetail: 'Consultando IP publica y probando el puerto desde fuera para diferenciar router, NAT o CGNAT.'
+  }
+];
+const DEFAULT_FIREWALL_DIAGNOSTIC_STEP: DiagnosticStepDefinition = FIREWALL_DIAGNOSTIC_STEPS[0] ?? {
+  title: 'Preparando diagnostico',
+  detail: 'Diagnostico inicializado.',
+  activeDetail: 'Preparando lectura de red y firewall.'
+};
+
 if (!palcmApi) {
   showIpcError('El preload seguro no expuso window.palcm. Revisar preload, sandbox y build.');
 } else {
@@ -2595,6 +2631,7 @@ async function renderFirewallView(forceRefresh = false): Promise<void> {
   updateReadyChrome();
   clearFirewallLoadingTimers();
   const activeStep = getFirewallLoadingStep();
+  const activeDiagnostic = getFirewallDiagnosticStep(activeStep);
   setContent(`
     <div class="view-stack view-stack--scroll">
       <div class="view-header view-header--contained">
@@ -2608,14 +2645,11 @@ async function renderFirewallView(forceRefresh = false): Promise<void> {
           <span class="loading-diagnostic__spinner" aria-hidden="true"></span>
           <div>
             <h4>Diagnostico en curso</h4>
-            <p>Verificando la configuracion, los puertos activos y las reglas locales de Windows.</p>
+            <p id="firewall-diagnostic-current">${escapeHtml(activeDiagnostic.activeDetail)}</p>
           </div>
         </div>
-        <ol class="diagnostic-steps" aria-label="Pasos de verificacion">
-          ${renderDiagnosticStep(0, getDiagnosticStepState(0, activeStep), 'Leyendo PalWorldSettings.ini', 'Abriendo la configuracion activa del servidor.')}
-          ${renderDiagnosticStep(1, getDiagnosticStepState(1, activeStep), 'Detectando puertos activos', 'Revisando PublicPort, RCON y REST API.')}
-          ${renderDiagnosticStep(2, getDiagnosticStepState(2, activeStep), 'Consultando reglas de Firewall de Windows', 'Buscando reglas entrantes para PalServer.exe.')}
-          ${renderDiagnosticStep(3, getDiagnosticStepState(3, activeStep), 'Verificando acceso externo', 'Consultando IP publica y estado de router/NAT/CGNAT.')}
+        <ol id="firewall-diagnostic-steps" class="diagnostic-steps" aria-label="Pasos de verificacion">
+          ${renderFirewallLoadingSteps(activeStep)}
         </ol>
       </section>
     </div>
@@ -2715,10 +2749,9 @@ function renderFirewallErrorView(message: string): void {
           </div>
         </div>
         <ol class="diagnostic-steps" aria-label="Pasos de verificacion">
-          ${renderDiagnosticStep(0, 'done', 'Leyendo PalWorldSettings.ini', 'Configuracion activa consultada o intento realizado.')}
-          ${renderDiagnosticStep(1, 'done', 'Detectando puertos activos', 'Puertos leidos desde la configuracion disponible.')}
-          ${renderDiagnosticStep(2, 'error', 'Consultando reglas de Firewall de Windows', 'La verificacion local no pudo finalizar.')}
-          ${renderDiagnosticStep(3, 'pending', 'Verificando acceso externo', 'Pendiente hasta resolver el error anterior.')}
+          ${renderDiagnosticStep(0, 'done', getFirewallDiagnosticStep(0).title, getFirewallDiagnosticStep(0).detail)}
+          ${renderDiagnosticStep(1, 'done', getFirewallDiagnosticStep(1).title, getFirewallDiagnosticStep(1).detail)}
+          ${renderDiagnosticStep(2, 'error', 'Diagnostico interrumpido', 'No se pudo completar la consulta local. Reintenta para continuar con acceso externo.')}
         </ol>
       </section>
     </div>
@@ -2847,7 +2880,7 @@ function createExternalAccessSummary(firewall: FirewallStatusDto): SummaryCardVi
 
 function renderDiagnosticStep(
   index: number,
-  state: 'done' | 'active' | 'pending' | 'error',
+  state: DiagnosticStepState,
   title: string,
   detail: string
 ): string {
@@ -2862,6 +2895,25 @@ function renderDiagnosticStep(
   `;
 }
 
+function getFirewallDiagnosticStep(index: number): DiagnosticStepDefinition {
+  return FIREWALL_DIAGNOSTIC_STEPS[index] ?? DEFAULT_FIREWALL_DIAGNOSTIC_STEP;
+}
+
+function renderFirewallLoadingSteps(activeIndex: number): string {
+  const visibleSteps = FIREWALL_DIAGNOSTIC_STEPS.slice(0, Math.min(activeIndex + 1, FIREWALL_DIAGNOSTIC_STEPS.length));
+
+  return visibleSteps
+    .map((step, index) =>
+      renderDiagnosticStep(
+        index,
+        getDiagnosticStepState(index, activeIndex),
+        step.title,
+        index === activeIndex ? step.activeDetail : step.detail
+      )
+    )
+    .join('');
+}
+
 function getFirewallLoadingStep(): number {
   if (!firewallStatusRequest || firewallRequestStartedAt === 0) {
     return 0;
@@ -2870,7 +2922,7 @@ function getFirewallLoadingStep(): number {
   return Math.min(3, Math.floor((Date.now() - firewallRequestStartedAt) / 700));
 }
 
-function getDiagnosticStepState(index: number, activeIndex: number): 'done' | 'active' | 'pending' {
+function getDiagnosticStepState(index: number, activeIndex: number): DiagnosticStepState {
   if (index < activeIndex) {
     return 'done';
   }
@@ -2883,14 +2935,7 @@ function getDiagnosticStepState(index: number, activeIndex: number): 'done' | 'a
 }
 
 function startFirewallLoadingTimeline(startIndex = 0): void {
-  const steps = [
-    'Leyendo PalWorldSettings.ini',
-    'Detectando puertos activos',
-    'Consultando reglas de Firewall de Windows',
-    'Preparando resumen local y externo'
-  ];
-
-  steps.forEach((_step, index) => {
+  FIREWALL_DIAGNOSTIC_STEPS.forEach((_step, index) => {
     if (index < startIndex) {
       return;
     }
@@ -2903,12 +2948,18 @@ function startFirewallLoadingTimeline(startIndex = 0): void {
 }
 
 function updateDiagnosticSteps(activeIndex: number): void {
-  document.querySelectorAll<HTMLElement>('.diagnostic-step[data-step]').forEach((step) => {
-    const index = Number(step.dataset['step']);
-    step.classList.toggle('diagnostic-step--done', index < activeIndex);
-    step.classList.toggle('diagnostic-step--active', index === activeIndex);
-    step.classList.toggle('diagnostic-step--pending', index > activeIndex);
-  });
+  const clampedIndex = Math.min(activeIndex, FIREWALL_DIAGNOSTIC_STEPS.length - 1);
+  const currentStep = getFirewallDiagnosticStep(clampedIndex);
+  const currentDetail = document.querySelector<HTMLElement>('#firewall-diagnostic-current');
+  const stepList = document.querySelector<HTMLElement>('#firewall-diagnostic-steps');
+
+  if (currentDetail) {
+    currentDetail.textContent = currentStep.activeDetail;
+  }
+
+  if (stepList) {
+    stepList.innerHTML = renderFirewallLoadingSteps(clampedIndex);
+  }
 }
 
 function clearFirewallLoadingTimers(): void {
