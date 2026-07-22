@@ -1,6 +1,6 @@
 {
   "name": "palcm",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "private": true,
   "description": "PSM Console by >GR477< - Palworld Server Manager",
   "author": "Alexis Joel Dávila (>GR477<)",
@@ -67,7 +67,6 @@
     "win": {
       "executableName": "PSM Console by GR477",
       "icon": "build/palcm-logo.ico",
-      "publisherName": "Alexis Joel Davila",
       "legalTrademarks": "PSM Console by GR477",
       "target": [
         "nsis",
