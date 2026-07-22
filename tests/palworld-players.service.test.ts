@@ -83,8 +83,28 @@ describe('PalworldPlayersService', () => {
     const responses = [
       {
         players: [
-          { name: 'Alex', userId: 'steam_a', playerId: 'player_a', ping: 24.2 },
-          { name: 'Bruno', userId: 'steam_b', playerId: 'player_b', ping: 30 }
+          {
+            name: 'Alex',
+            userId: 'steam_a',
+            playerId: 'player_a',
+            ping: 24.2,
+            location_x: 100,
+            location_y: 200,
+            location_z: 30,
+            level: 12,
+            building_count: 3
+          },
+          {
+            name: 'Bruno',
+            userId: 'steam_b',
+            playerId: 'player_b',
+            ping: 30,
+            LocationX: -50,
+            LocationY: 80,
+            LocationZ: 12,
+            Level: 9,
+            BuildingCount: 1
+          }
         ]
       },
       {
@@ -108,8 +128,8 @@ describe('PalworldPlayersService', () => {
     await expect(service.getStatus()).resolves.toMatchObject({
       status: 'READY',
       currentPlayers: 1,
-      players: [expect.objectContaining({ userId: 'steam_a', online: true })],
-      previousPlayers: [expect.objectContaining({ userId: 'steam_b', online: false, banState: 'BANNED' })]
+      players: [expect.objectContaining({ userId: 'steam_a', online: true, locationX: 100, locationY: 200, level: 12 })],
+      previousPlayers: [expect.objectContaining({ userId: 'steam_b', online: false, banState: 'BANNED', locationX: -50, locationY: 80, level: 9 })]
     });
   });
 });

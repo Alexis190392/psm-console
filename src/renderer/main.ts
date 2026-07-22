@@ -95,6 +95,9 @@ rootElement.innerHTML = `
           <a class="sidebar__sublink sidebar__link--locked" data-nav="admin" data-admin-sidebar-tab="players" href="#">
             <span>Jugadores</span>
           </a>
+          <a class="sidebar__sublink sidebar__link--locked" data-nav="admin" data-admin-sidebar-tab="map" href="#">
+            <span>Mapa</span>
+          </a>
         </div>
       </div>
       <a class="sidebar__link sidebar__link--locked" data-nav="network" href="#">
@@ -236,7 +239,7 @@ let latestConfiguredPort: string | null = null;
 let latestBackupSummary: BackupSummaryDto | null = null;
 let adminRefreshTimer: number | null = null;
 let adminRefreshInFlight = false;
-let adminActiveTab: 'general' | 'players' = 'general';
+let adminActiveTab: 'general' | 'players' | 'map' = 'general';
 let adminMenuOpen = false;
 let consoleSearchTerm = '';
 let consoleSelectedModule: LogModule | 'all' = 'all';
@@ -355,7 +358,7 @@ if (!palcmApi) {
       if (nextView === 'admin') {
         adminMenuOpen = true;
         const requestedAdminTab = link.dataset['adminSidebarTab'];
-        if (requestedAdminTab === 'general' || requestedAdminTab === 'players') {
+        if (isAdminTab(requestedAdminTab)) {
           adminActiveTab = requestedAdminTab;
         }
       }
@@ -852,7 +855,11 @@ function isSidebarNavActive(link: HTMLAnchorElement): boolean {
     return true;
   }
 
-  return requestedAdminTab === adminActiveTab;
+  return isAdminTab(requestedAdminTab) && requestedAdminTab === adminActiveTab;
+}
+
+function isAdminTab(value: string | undefined): value is 'general' | 'players' | 'map' {
+  return value === 'general' || value === 'players' || value === 'map';
 }
 
 function updateStartServerButton(actions: AllowedActionsDto): void {
@@ -1905,13 +1912,31 @@ function renderAdminStatus(adminStatus: PalworldAdminStatusDto, playersStatus: P
 }
 
 function renderAdminTabs(adminStatus: PalworldAdminStatusDto, playersStatus: PalworldPlayersStatusDto): string {
+  const tabLabel: Record<typeof adminActiveTab, string> = {
+    general: 'SERVIDOR',
+    players: 'JUGADORES',
+    map: 'MAPA'
+  };
+
   return `
     <div class="admin-toolbar">
-      <span class="view-kicker">ADMINISTRACION / ${adminActiveTab === 'players' ? 'JUGADORES' : 'SERVIDOR'}</span>
+      <span class="view-kicker">ADMINISTRACION / ${tabLabel[adminActiveTab]}</span>
       <span class="view-meta-pill">${escapeHtml(adminStatus.message)}</span>
     </div>
-    ${adminActiveTab === 'players' ? renderAdminPlayersTab(playersStatus) : renderAdminGeneralTab(adminStatus)}
+    ${renderAdminActiveTab(adminStatus, playersStatus)}
   `;
+}
+
+function renderAdminActiveTab(adminStatus: PalworldAdminStatusDto, playersStatus: PalworldPlayersStatusDto): string {
+  if (adminActiveTab === 'players') {
+    return renderAdminPlayersTab(playersStatus);
+  }
+
+  if (adminActiveTab === 'map') {
+    return renderAdminMapTab(playersStatus);
+  }
+
+  return renderAdminGeneralTab(adminStatus);
 }
 
 function renderAdminGeneralTab(adminStatus: PalworldAdminStatusDto): string {
@@ -1977,6 +2002,57 @@ function renderAdminPlayersTab(playersStatus: PalworldPlayersStatusDto): string 
         ${renderAdminPlayersList(playersStatus)}
       </section>
     </div>
+  `;
+}
+
+function renderAdminMapTab(playersStatus: PalworldPlayersStatusDto): string {
+  if (playersStatus.status !== 'READY') {
+    return `
+      <section class="admin-map-panel">
+        <p class="empty-state">${escapeHtml(playersStatus.message)}</p>
+      </section>
+    `;
+  }
+
+  const locatedPlayers = playersStatus.players.filter(hasPlayerLocation);
+
+  if (locatedPlayers.length === 0) {
+    return `
+      <section class="admin-map-panel">
+        <div class="admin-map__header">
+          <div>
+            <span class="view-kicker">MAPA</span>
+            <h3>Ubicacion de jugadores</h3>
+          </div>
+          <span class="view-meta-pill">${escapeHtml(formatDateTime(playersStatus.updatedAt))}</span>
+        </div>
+        <p class="empty-state">No hay jugadores conectados con coordenadas reportadas por la REST API.</p>
+      </section>
+    `;
+  }
+
+  const bounds = getPlayerMapBounds(locatedPlayers);
+
+  return `
+    <section class="admin-map-panel">
+      <div class="admin-map__header">
+        <div>
+          <span class="view-kicker">MAPA</span>
+          <h3>Ubicacion de jugadores</h3>
+        </div>
+        <span class="view-meta-pill">${String(locatedPlayers.length)} activos</span>
+      </div>
+      <div class="admin-map-layout">
+        <div class="admin-map-stage" role="img" aria-label="Mapa relativo de jugadores conectados">
+          <div class="admin-map-stage__axis admin-map-stage__axis--x">X</div>
+          <div class="admin-map-stage__axis admin-map-stage__axis--y">Y</div>
+          ${locatedPlayers.map((player, index) => renderPlayerMapMarker(player, bounds, index)).join('')}
+        </div>
+        <div class="admin-map-list">
+          ${locatedPlayers.map(renderPlayerMapListItem).join('')}
+        </div>
+      </div>
+    </section>
   `;
 }
 
@@ -2159,10 +2235,14 @@ function renderAdminPlayerRow(player: PalworldPlayersStatusDto['players'][number
   const identity = actionId || 'ID no informado';
   const isBanned = player.banState === 'BANNED';
   const banAction: PalworldAdminAction = isBanned ? 'unban' : 'ban';
+  const locationText = hasPlayerLocation(player)
+    ? `X ${formatCoordinate(player.locationX)}, Y ${formatCoordinate(player.locationY)}`
+    : null;
   const secondary = [
     player.playerId ? `PlayerUID ${player.playerId}` : null,
     player.userId ? `UserID ${player.userId}` : null,
-    player.steamId ? `SteamID ${player.steamId}` : null
+    player.steamId ? `SteamID ${player.steamId}` : null,
+    locationText
   ].filter((value): value is string => value !== null);
   const statusText = player.online
     ? 'Conectado'
@@ -2191,6 +2271,101 @@ function renderAdminPlayerRow(player: PalworldPlayersStatusDto['players'][number
       </form>
     </article>
   `;
+}
+
+interface PlayerMapBounds {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+}
+
+function hasPlayerLocation(
+  player: PalworldPlayersStatusDto['players'][number]
+): player is PalworldPlayersStatusDto['players'][number] & { locationX: number; locationY: number } {
+  return typeof player.locationX === 'number' &&
+    Number.isFinite(player.locationX) &&
+    typeof player.locationY === 'number' &&
+    Number.isFinite(player.locationY);
+}
+
+function getPlayerMapBounds(players: Array<PalworldPlayersStatusDto['players'][number] & { locationX: number; locationY: number }>): PlayerMapBounds {
+  const xs = players.map((player) => player.locationX);
+  const ys = players.map((player) => player.locationY);
+
+  return {
+    minX: Math.min(...xs),
+    maxX: Math.max(...xs),
+    minY: Math.min(...ys),
+    maxY: Math.max(...ys)
+  };
+}
+
+function renderPlayerMapMarker(
+  player: PalworldPlayersStatusDto['players'][number] & { locationX: number; locationY: number },
+  bounds: PlayerMapBounds,
+  index: number
+): string {
+  const position = getPlayerMapPosition(player, bounds);
+  const initials = getPlayerInitials(player.name);
+
+  return `
+    <article class="admin-map-marker" style="left: ${position.left}%; top: ${position.top}%;" title="${escapeHtml(player.name)}">
+      <span class="admin-map-marker__pin">${escapeHtml(initials)}</span>
+      <span class="admin-map-marker__label">${escapeHtml(player.name || `Jugador ${String(index + 1)}`)}</span>
+    </article>
+  `;
+}
+
+function renderPlayerMapListItem(
+  player: PalworldPlayersStatusDto['players'][number] & { locationX: number; locationY: number }
+): string {
+  const details = [
+    typeof player.level === 'number' ? `Nivel ${String(player.level)}` : null,
+    typeof player.ping === 'number' ? `${formatPing(player.ping)} ms` : null,
+    typeof player.locationZ === 'number' ? `Z ${formatCoordinate(player.locationZ)}` : null
+  ].filter((value): value is string => value !== null);
+
+  return `
+    <article class="admin-map-player">
+      <strong>${escapeHtml(player.name)}</strong>
+      <span>X ${formatCoordinate(player.locationX)} / Y ${formatCoordinate(player.locationY)}</span>
+      <small>${escapeHtml(details.join(' - ') || 'Sin datos adicionales')}</small>
+    </article>
+  `;
+}
+
+function getPlayerMapPosition(
+  player: PalworldPlayersStatusDto['players'][number] & { locationX: number; locationY: number },
+  bounds: PlayerMapBounds
+): { left: string; top: string } {
+  const left = normalizeMapAxis(player.locationX, bounds.minX, bounds.maxX);
+  const top = 100 - normalizeMapAxis(player.locationY, bounds.minY, bounds.maxY);
+
+  return {
+    left: left.toFixed(2),
+    top: top.toFixed(2)
+  };
+}
+
+function normalizeMapAxis(value: number, min: number, max: number): number {
+  if (min === max) {
+    return 50;
+  }
+
+  const padding = 8;
+  const normalized = ((value - min) / (max - min)) * (100 - padding * 2) + padding;
+  return Math.min(100 - padding, Math.max(padding, normalized));
+}
+
+function getPlayerInitials(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  const initials = words.slice(0, 2).map((word) => word[0]?.toUpperCase() ?? '').join('');
+  return initials || 'J';
+}
+
+function formatCoordinate(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
 function formatPing(value: number): string {
@@ -3254,7 +3429,7 @@ function bindSummaryCards(): void {
 
       if (clickedTargetIcon) {
         const adminTab = card.dataset['adminTab'];
-        if (adminTab === 'general' || adminTab === 'players') {
+        if (isAdminTab(adminTab)) {
           adminActiveTab = adminTab;
         }
 
@@ -3269,7 +3444,7 @@ function bindSummaryCards(): void {
       }
 
       const adminTab = card.dataset['adminTab'];
-      if (adminTab === 'general' || adminTab === 'players') {
+      if (isAdminTab(adminTab)) {
         adminActiveTab = adminTab;
       }
 

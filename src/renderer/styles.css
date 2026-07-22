@@ -1811,6 +1811,171 @@ button {
   min-height: 0;
 }
 
+.admin-map-panel {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.admin-map__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.admin-map__header h3 {
+  margin: 4px 0 0;
+  color: var(--color-primary-soft);
+  font-size: 20px;
+}
+
+.admin-map-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(240px, 0.55fr);
+  gap: 14px;
+  min-height: 460px;
+}
+
+.admin-map-stage {
+  position: relative;
+  min-height: 460px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 229, 255, 0.18);
+  border-radius: 8px;
+  background:
+    linear-gradient(rgba(0, 229, 255, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 229, 255, 0.055) 1px, transparent 1px),
+    radial-gradient(circle at center, rgba(0, 229, 255, 0.12), transparent 62%),
+    rgba(7, 11, 14, 0.74);
+  background-size: 42px 42px, 42px 42px, auto, auto;
+}
+
+.admin-map-stage::before,
+.admin-map-stage::after {
+  position: absolute;
+  content: "";
+  background: rgba(0, 229, 255, 0.14);
+}
+
+.admin-map-stage::before {
+  top: 50%;
+  right: 0;
+  left: 0;
+  height: 1px;
+}
+
+.admin-map-stage::after {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+}
+
+.admin-map-stage__axis {
+  position: absolute;
+  z-index: 1;
+  color: var(--color-primary);
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.admin-map-stage__axis--x {
+  right: 12px;
+  bottom: 10px;
+}
+
+.admin-map-stage__axis--y {
+  top: 10px;
+  left: 12px;
+}
+
+.admin-map-marker {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  width: max-content;
+  max-width: 160px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.admin-map-marker__pin {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid rgba(190, 255, 255, 0.8);
+  border-radius: 999px;
+  background: rgba(0, 229, 255, 0.92);
+  color: #001317;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 11px;
+  font-weight: 900;
+  box-shadow: 0 0 18px rgba(0, 229, 255, 0.28);
+}
+
+.admin-map-marker__label {
+  max-width: 160px;
+  overflow: hidden;
+  padding: 3px 7px;
+  border: 1px solid rgba(0, 229, 255, 0.28);
+  border-radius: 999px;
+  background: rgba(11, 15, 19, 0.86);
+  color: var(--color-primary-soft);
+  font-size: 11px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-map-list {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+  max-height: 460px;
+  overflow: auto;
+}
+
+.admin-map-player {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(0, 229, 255, 0.16);
+  border-radius: 8px;
+  background: rgba(11, 15, 19, 0.46);
+}
+
+.admin-map-player strong,
+.admin-map-player span,
+.admin-map-player small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-map-player strong {
+  color: var(--color-primary-soft);
+  font-size: 14px;
+}
+
+.admin-map-player span {
+  color: var(--color-primary);
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 12px;
+}
+
+.admin-map-player small {
+  color: var(--color-text-muted);
+}
+
 .admin-icon-button {
   display: inline-flex;
   align-items: center;

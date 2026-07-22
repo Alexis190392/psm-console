@@ -14,6 +14,11 @@ export interface PalworldPlayerDto {
   userId?: string;
   steamId?: string;
   ping?: number;
+  locationX?: number;
+  locationY?: number;
+  locationZ?: number;
+  level?: number;
+  buildingCount?: number;
   online?: boolean;
   lastSeenAt?: string;
   banState?: 'BANNED' | 'NOT_BANNED' | 'UNKNOWN';

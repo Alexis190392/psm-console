@@ -190,6 +190,11 @@ export class PalworldPlayersService {
       userId: existing?.userId ?? userId,
       steamId: existing?.steamId,
       ping: existing?.ping,
+      locationX: existing?.locationX,
+      locationY: existing?.locationY,
+      locationZ: existing?.locationZ,
+      level: existing?.level,
+      buildingCount: existing?.buildingCount,
       firstSeenAt: existing?.firstSeenAt ?? now,
       lastSeenAt: existing?.lastSeenAt ?? now,
       online: existing?.online ?? false,
@@ -212,6 +217,11 @@ export class PalworldPlayersService {
         userId: player.userId ?? existing?.userId,
         steamId: player.steamId ?? existing?.steamId,
         ping: player.ping,
+        locationX: player.locationX ?? existing?.locationX,
+        locationY: player.locationY ?? existing?.locationY,
+        locationZ: player.locationZ ?? existing?.locationZ,
+        level: player.level ?? existing?.level,
+        buildingCount: player.buildingCount ?? existing?.buildingCount,
         firstSeenAt: existing?.firstSeenAt ?? now,
         lastSeenAt: now,
         online: true,
@@ -280,6 +290,11 @@ function toPlayerDto(record: KnownPlayerRecord): PalworldPlayerDto {
     userId: record.userId,
     steamId: record.steamId,
     ping: record.ping,
+    locationX: record.locationX,
+    locationY: record.locationY,
+    locationZ: record.locationZ,
+    level: record.level,
+    buildingCount: record.buildingCount,
     online: record.online,
     lastSeenAt: record.lastSeenAt,
     banState: record.banState
@@ -369,7 +384,12 @@ function normalizePlayer(value: unknown): PalworldPlayerDto | null {
     playerId: readString(value, ['playerId', 'player_id', 'playeruid', 'playerUid']),
     userId: readString(value, ['userId', 'user_id', 'userid']),
     steamId: readString(value, ['steamId', 'steam_id', 'steamid']),
-    ping: readNumber(value, ['ping', 'latency'])
+    ping: readNumber(value, ['ping', 'latency']),
+    locationX: readNumber(value, ['location_x', 'LocationX', 'x']),
+    locationY: readNumber(value, ['location_y', 'LocationY', 'y']),
+    locationZ: readNumber(value, ['location_z', 'LocationZ', 'z']),
+    level: readNumber(value, ['level', 'Level']),
+    buildingCount: readNumber(value, ['building_count', 'buildingCount', 'BuildingCount'])
   };
 }
 
