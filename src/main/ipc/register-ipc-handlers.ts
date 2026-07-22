@@ -1,5 +1,5 @@
 import type { INestApplicationContext } from '@nestjs/common';
-import { BrowserWindow, shell, type IpcMain, type IpcMainInvokeEvent } from 'electron';
+import { app, BrowserWindow, shell, type IpcMain, type IpcMainInvokeEvent, type ProcessMetric } from 'electron';
 import { ApplicationStateService } from '../../backend/application-state/application-state.service';
 import { BackupService } from '../../backend/backup/backup.service';
 import { FirewallService } from '../../backend/firewall/firewall.service';
@@ -36,6 +36,7 @@ import type {
 } from '../../shared/dto/backup-status.dto';
 import type { LogsRecentRequestDto } from '../../shared/dto/log-status.dto';
 import type { PublicAddressRequestDto } from '../../shared/dto/network-diagnostics.dto';
+import type { AppProcessKind, AppProcessMetricDto, AppProcessMetricsDto } from '../../shared/dto/app-process-metrics.dto';
 
 export function registerIpcHandlers(
   ipcMain: Pick<IpcMain, 'handle'>,
@@ -61,6 +62,8 @@ export function registerIpcHandlers(
   ipcMain.handle(ipcChannels.appGetActions, () =>
     applicationStateService.getAllowedActions()
   );
+
+  ipcMain.handle(ipcChannels.appGetProcessMetrics, () => getAppProcessMetrics());
 
   ipcMain.handle(ipcChannels.steamCmdGetStatus, () => steamCmdService.getStatus());
 
@@ -184,4 +187,89 @@ export function registerIpcHandlers(
 
 function getSenderWindow(event: IpcMainInvokeEvent): BrowserWindow | null {
   return BrowserWindow.fromWebContents(event.sender);
+}
+
+function getAppProcessMetrics(): AppProcessMetricsDto {
+  return {
+    updatedAt: new Date().toISOString(),
+    processes: app.getAppMetrics().map(toAppProcessMetric)
+  };
+}
+
+function toAppProcessMetric(metric: ProcessMetric): AppProcessMetricDto {
+  const descriptor = describeProcessMetric(metric);
+
+  return {
+    pid: metric.pid,
+    kind: descriptor.kind,
+    label: descriptor.label,
+    detail: descriptor.detail,
+    electronType: metric.type,
+    serviceName: metric.serviceName ?? metric.name,
+    cpuPercent: metric.cpu.percentCPUUsage,
+    memoryBytes: metric.memory.workingSetSize * 1024,
+    sandboxed: metric.sandboxed
+  };
+}
+
+function describeProcessMetric(metric: ProcessMetric): { kind: AppProcessKind; label: string; detail: string } {
+  if (metric.type === 'Browser') {
+    return {
+      kind: 'main',
+      label: 'Principal',
+      detail: 'Coordina la app, NestJS, estado e IPC.'
+    };
+  }
+
+  if (metric.type === 'Tab') {
+    return {
+      kind: 'renderer',
+      label: 'Interfaz',
+      detail: 'Ventana visual y controles de usuario.'
+    };
+  }
+
+  if (metric.type === 'GPU') {
+    return {
+      kind: 'gpu',
+      label: 'Graficos',
+      detail: 'Renderizado de la ventana.'
+    };
+  }
+
+  if (metric.type === 'Utility') {
+    return {
+      kind: 'utility',
+      label: normalizeUtilityServiceLabel(metric.name ?? metric.serviceName),
+      detail: 'Servicio interno de Electron.'
+    };
+  }
+
+  return {
+    kind: 'other',
+    label: 'Soporte',
+    detail: `Proceso interno ${metric.type}.`
+  };
+}
+
+function normalizeUtilityServiceLabel(name: string | undefined): string {
+  const normalizedName = name?.trim();
+
+  if (!normalizedName) {
+    return 'Servicio';
+  }
+
+  if (/network/i.test(normalizedName)) {
+    return 'Red interna';
+  }
+
+  if (/storage/i.test(normalizedName)) {
+    return 'Almacenamiento';
+  }
+
+  if (/audio/i.test(normalizedName)) {
+    return 'Audio';
+  }
+
+  return normalizedName;
 }

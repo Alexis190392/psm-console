@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { AllowedActionsDto } from '../../shared/dto/allowed-actions.dto';
 import type { ApplicationStatusDto } from '../../shared/dto/application-status.dto';
+import type { AppProcessMetricsDto } from '../../shared/dto/app-process-metrics.dto';
 import type {
   BackupCreateRequestDto,
   BackupDeleteRequestDto,
@@ -41,6 +42,7 @@ import type { NetworkDiagnosticsDto, PublicAddressRequestDto } from '../../share
 const ipcChannels = {
   appGetStatus: 'app:get-status',
   appGetActions: 'app:get-actions',
+  appGetProcessMetrics: 'app:get-process-metrics',
   operationGet: 'operation:get',
   steamCmdGetStatus: 'steamcmd:get-status',
   steamCmdInstall: 'steamcmd:install',
@@ -77,6 +79,7 @@ export interface PalcmApi {
   app: {
     getStatus: () => Promise<ApplicationStatusDto>;
     getActions: () => Promise<AllowedActionsDto>;
+    getProcessMetrics: () => Promise<AppProcessMetricsDto>;
   };
   operation: {
     get: (operationId: string) => Promise<OperationProgressDto>;
@@ -135,7 +138,9 @@ export interface PalcmApi {
 const api: PalcmApi = {
   app: {
     getStatus: () => ipcRenderer.invoke(ipcChannels.appGetStatus) as Promise<ApplicationStatusDto>,
-    getActions: () => ipcRenderer.invoke(ipcChannels.appGetActions) as Promise<AllowedActionsDto>
+    getActions: () => ipcRenderer.invoke(ipcChannels.appGetActions) as Promise<AllowedActionsDto>,
+    getProcessMetrics: () =>
+      ipcRenderer.invoke(ipcChannels.appGetProcessMetrics) as Promise<AppProcessMetricsDto>
   },
   operation: {
     get: (operationId) =>

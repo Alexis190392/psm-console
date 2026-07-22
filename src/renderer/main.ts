@@ -3,6 +3,7 @@ import { APP_INFO, APP_VERSION_LABEL } from '../shared/constants/app-info';
 import { formatLocalLogTimestamp } from '../shared/utils/local-time';
 import { ApplicationStatus } from '../shared/enums/application-status';
 import type { AllowedActionsDto } from '../shared/dto/allowed-actions.dto';
+import type { AppProcessMetricDto, AppProcessMetricsDto } from '../shared/dto/app-process-metrics.dto';
 import type { BackupSummaryDto } from '../shared/dto/backup-status.dto';
 import type { FirewallPortCheckDto, FirewallStatusDto } from '../shared/dto/firewall-status.dto';
 import type { NetworkDiagnosticsDto } from '../shared/dto/network-diagnostics.dto';
@@ -30,7 +31,7 @@ import {
   type ParsedPalworldSetting,
   type ParsedPalworldSettings
 } from './config/palworld-settings-parser';
-import { formatDateTime, formatLastVerification } from './utils/format';
+import { formatBytes, formatDateTime, formatLastVerification } from './utils/format';
 import { cssEscape, escapeHtml, normalizeSearchText } from './utils/text';
 import { renderBackupsView as renderBackupsViewHtml } from './views/backups-view';
 import { renderGeneralView as renderGeneralViewHtml } from './views/general-view';
@@ -134,6 +135,20 @@ rootElement.innerHTML = `
         <strong id="status-label">${ApplicationStatus.BOOTSTRAPPING}</strong>
       </div>
       <div class="progress"><div id="progress-bar" class="progress__bar"></div></div>
+      <section id="process-metrics-panel" class="process-metrics hidden" aria-live="polite">
+        <div class="process-metrics__header">
+          <div>
+            <span class="view-kicker">PROCESOS DE LA APP</span>
+            <strong>Identificacion rapida</strong>
+          </div>
+          <button id="refresh-process-metrics" class="secondary-button icon-button" type="button" aria-label="Actualizar procesos" title="Actualizar procesos">
+            ${renderIcon('refresh')}
+          </button>
+        </div>
+        <div id="process-metrics-list" class="process-metrics__grid">
+          <p class="empty-state empty-state--compact">Abre Logs para revisar los subprocesos de PSM Console.</p>
+        </div>
+      </section>
       <div class="console-shell">
         <button id="export-console" class="console-export icon-button" type="button" aria-label="Exportar consola" title="Exportar consola">
           ${renderIcon('download')}
@@ -203,6 +218,9 @@ const consoleSearchInput = document.querySelector<HTMLInputElement>('#console-se
 const consoleModuleFilter = document.querySelector<HTMLSelectElement>('#console-module-filter');
 const pauseConsoleButton = document.querySelector<HTMLButtonElement>('#pause-console');
 const clearConsoleButton = document.querySelector<HTMLButtonElement>('#clear-console');
+const processMetricsPanel = document.querySelector<HTMLElement>('#process-metrics-panel');
+const processMetricsList = document.querySelector<HTMLElement>('#process-metrics-list');
+const refreshProcessMetricsButton = document.querySelector<HTMLButtonElement>('#refresh-process-metrics');
 const progressBar = document.querySelector<HTMLDivElement>('#progress-bar');
 const steamCmdFooter = document.querySelector('#steamcmd-footer');
 const operationMessage = document.querySelector('#operation-message');
@@ -336,6 +354,9 @@ if (!palcmApi) {
     operationLogOffsets.clear();
     latestPersistentLogsSignature = '';
     renderConsoleOutput();
+  });
+  refreshProcessMetricsButton?.addEventListener('click', () => {
+    void loadAppProcessMetrics();
   });
   startServerAction?.addEventListener('click', () => {
     if (latestStatus === ApplicationStatus.SERVER_RUNNING) {
@@ -959,6 +980,7 @@ function renderActiveView(): void {
   const isLogsView = navigationState.is('logs');
   document.querySelector('.console-shell')?.classList.toggle('hidden', !isLogsView);
   document.querySelector('.console-tools')?.classList.toggle('hidden', !isLogsView);
+  processMetricsPanel?.classList.toggle('hidden', !isLogsView);
   contentView?.classList.toggle('hidden', navigationState.is('logs'));
   navLinks.forEach((link) => {
     link.classList.toggle('sidebar__link--active', isSidebarNavActive(link));
@@ -990,6 +1012,7 @@ function renderActiveView(): void {
   }
 
   if (navigationState.is('logs')) {
+    void loadAppProcessMetrics();
     void loadPersistentLogs();
   }
 
@@ -2644,6 +2667,55 @@ async function loadPersistentLogs(): Promise<void> {
   } catch (error) {
     appendConsoleLine(`No se pudieron leer logs persistentes: ${error instanceof Error ? error.message : String(error)}`);
   }
+}
+
+async function loadAppProcessMetrics(): Promise<void> {
+  if (!palcmApi || !processMetricsList) {
+    return;
+  }
+
+  try {
+    const metrics = await palcmApi.app.getProcessMetrics();
+    processMetricsList.innerHTML = renderProcessMetrics(metrics);
+  } catch (error) {
+    processMetricsList.innerHTML = `<p class="empty-state empty-state--compact">No se pudieron leer procesos: ${escapeHtml(error instanceof Error ? error.message : String(error))}</p>`;
+  }
+}
+
+function renderProcessMetrics(metrics: AppProcessMetricsDto): string {
+  if (metrics.processes.length === 0) {
+    return '<p class="empty-state empty-state--compact">Sin subprocesos detectados.</p>';
+  }
+
+  return [...metrics.processes]
+    .sort(compareAppProcessMetrics)
+    .map(renderProcessMetricCard)
+    .join('');
+}
+
+function compareAppProcessMetrics(a: AppProcessMetricDto, b: AppProcessMetricDto): number {
+  const order = ['main', 'renderer', 'gpu', 'utility', 'other'];
+  return order.indexOf(a.kind) - order.indexOf(b.kind) || a.pid - b.pid;
+}
+
+function renderProcessMetricCard(process: AppProcessMetricDto): string {
+  return `
+    <article class="process-card process-card--${escapeHtml(process.kind)}">
+      <div>
+        <strong>PSMc ${escapeHtml(process.label)}</strong>
+        <span>PID ${String(process.pid)}</span>
+      </div>
+      <p>${escapeHtml(process.detail)}</p>
+      <dl>
+        <div><dt>CPU</dt><dd>${formatProcessCpu(process.cpuPercent)}</dd></div>
+        <div><dt>Memoria</dt><dd>${escapeHtml(formatBytes(process.memoryBytes))}</dd></div>
+      </dl>
+    </article>
+  `;
+}
+
+function formatProcessCpu(value: number): string {
+  return `${value.toFixed(value >= 10 ? 0 : 1)}%`;
 }
 
 function parseConsoleModuleFilter(value: string): LogModule | 'all' {

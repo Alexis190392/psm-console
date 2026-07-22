@@ -32,6 +32,10 @@ describe('IPC channel surface', () => {
     expect(ipcChannels.logsGetRecent).toBe('logs:get-recent');
   });
 
+  it('keeps app process metrics behind a concrete readonly domain channel', () => {
+    expect(ipcChannels.appGetProcessMetrics).toBe('app:get-process-metrics');
+  });
+
   it('keeps network diagnostics behind concrete readonly domain channels', () => {
     expect(ipcChannels.networkGetLocalAddresses).toBe('network:get-local-addresses');
     expect(ipcChannels.networkGetPublicAddress).toBe('network:get-public-address');

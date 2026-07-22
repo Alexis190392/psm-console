@@ -1047,6 +1047,92 @@ button {
   padding-top: 52px;
 }
 
+.process-metrics {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid rgba(0, 229, 255, 0.16);
+  border-radius: 8px;
+  background: rgba(11, 15, 19, 0.42);
+}
+
+.process-metrics__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.process-metrics__header strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--color-primary-soft);
+  font-size: 15px;
+}
+
+.process-metrics__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.process-card {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid rgba(0, 229, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(7, 11, 14, 0.58);
+}
+
+.process-card strong,
+.process-card span,
+.process-card p,
+.process-card dd {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.process-card strong {
+  display: block;
+  color: var(--color-primary-soft);
+  font-size: 14px;
+}
+
+.process-card span,
+.process-card p,
+.process-card dt {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.process-card p {
+  margin: 0;
+}
+
+.process-card dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.process-card dt,
+.process-card dd {
+  margin: 0;
+}
+
+.process-card dd {
+  color: var(--color-primary);
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .log--error {
   color: #ffb4ab;
   border: 1px solid rgba(255, 82, 82, 0.35);
