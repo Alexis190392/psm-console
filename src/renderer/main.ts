@@ -532,7 +532,7 @@ async function createDefaultConfiguration(options: { automatic?: boolean } = {})
 
 async function startPalworldServer(): Promise<void> {
   if (!palcmApi || !latestActions?.canStartServer || !isLanReadyForServerStart()) {
-    appendConsoleLine('No se inicio el servidor: falta confirmar IP LAN, puerto o reglas locales.');
+    appendConsoleLine('No se inicio el servidor: falta confirmar el puerto UDP de jugadores en Windows.');
     return;
   }
 
@@ -922,7 +922,8 @@ function isLanReadyForServerStart(): boolean {
   }
 
   if (latestFirewallStatus) {
-    return latestFirewallStatus.local.state === 'READY';
+    const playerPort = getPlayerLocalPortCheck(latestFirewallStatus);
+    return playerPort?.state === 'READY';
   }
 
   return latestLocalAddresses.length > 0;
@@ -1441,7 +1442,9 @@ function createLocalPlaySummary(
     };
   }
 
-  if (firewall.local.state === 'READY') {
+  const playerPort = getPlayerLocalPortCheck(firewall);
+
+  if (playerPort?.state === 'READY') {
     const localIp = firewall.external.network.localIpv4[0];
 
     return {
@@ -1452,10 +1455,10 @@ function createLocalPlaySummary(
     };
   }
 
-  if (firewall.local.state === 'MISSING') {
+  if (playerPort?.state === 'MISSING') {
     return {
       value: 'Revisar firewall',
-      detail: 'Windows todavia necesita reglas locales para aceptar jugadores en LAN.',
+      detail: 'Windows necesita permitir el puerto UDP de jugadores para LAN.',
       state: createSummaryCardState('warning')
     };
   }
@@ -1496,10 +1499,14 @@ function createPublicPlaySummary(
   const network = firewall.external.network;
 
   if (network.cgnatStatus === 'LIKELY') {
+    const port = getPublicPortFromFirewall(firewall);
+    const copyValue = network.publicIp && port ? `${network.publicIp}:${port}` : undefined;
+
     return {
-      value: 'No directo',
-      detail: 'Probable CGNAT. Para acceso publico directo haria falta IP publica real o alternativa externa.',
-      state: createSummaryCardState('warning')
+      value: copyValue ?? network.publicIp ?? 'No confirmado',
+      detail: 'IP publica detectada. El acceso externo es informativo y no bloquea el servidor.',
+      state: createSummaryCardState('warning'),
+      copyValue
     };
   }
 
@@ -1521,10 +1528,19 @@ function createPublicPlaySummary(
   }
 
   if (network.cgnatStatus === 'NEEDS_ROUTER_CHECK') {
+    const port = getPublicPortFromFirewall(firewall);
+    const copyValue = network.publicIp && port ? `${network.publicIp}:${port}` : undefined;
+    const probeSummary = createPublicPortProbeSummary(network, copyValue);
+
+    if (probeSummary) {
+      return probeSummary;
+    }
+
     return {
-      value: 'Requiere prueba',
-      detail: 'Compara la WAN del router con la IP publica. Si difieren, no hay acceso directo por IPv4.',
-      state: createSummaryCardState('warning')
+      value: copyValue ?? network.publicIp ?? 'No confirmado',
+      detail: 'IP publica detectada. Falta confirmar si el puerto responde desde Internet.',
+      state: createSummaryCardState(copyValue ? 'warning' : 'loading'),
+      copyValue
     };
   }
 
@@ -1540,10 +1556,18 @@ function createPublicPlaySummaryFromNetwork(
   port: string | null
 ): SummaryCardViewModel {
   if (network.cgnatStatus === 'LIKELY') {
+    const copyValue = network.publicIp && port ? `${network.publicIp}:${port}` : undefined;
+    const probeSummary = createPublicPortProbeSummary(network, copyValue);
+
+    if (probeSummary) {
+      return probeSummary;
+    }
+
     return {
-      value: 'No directo',
-      detail: 'Probable CGNAT. Haria falta IP publica real o alternativa externa.',
-      state: createSummaryCardState('warning')
+      value: copyValue ?? network.publicIp ?? 'No confirmado',
+      detail: 'IP publica detectada. El acceso externo es informativo y no bloquea el servidor.',
+      state: createSummaryCardState('warning'),
+      copyValue
     };
   }
 
@@ -1573,7 +1597,7 @@ function createPublicPlaySummaryFromNetwork(
 
     return {
       value: copyValue ?? network.publicIp ?? 'Requiere prueba',
-      detail: 'IP publica detectada. Falta comparar con WAN del router y probar el puerto.',
+      detail: 'IP publica detectada. Falta confirmar si el puerto responde desde Internet.',
       state: createSummaryCardState('warning'),
       copyValue
     };
@@ -2797,24 +2821,37 @@ function getPublicPortFromFirewall(firewall: FirewallStatusDto): string | null {
   return publicPort ? String(publicPort.port) : null;
 }
 
+function getPlayerLocalPortCheck(firewall: FirewallStatusDto): FirewallPortCheckDto | undefined {
+  return firewall.local.ports.find((port) => port.key === 'PublicPort' && port.enabled);
+}
+
+function getMissingAuxiliaryLocalPorts(firewall: FirewallStatusDto): FirewallPortCheckDto[] {
+  return firewall.local.ports.filter((port) => port.enabled && port.key !== 'PublicPort' && port.state === 'MISSING');
+}
+
 function createWindowsLocalSummary(firewall: FirewallStatusDto): SummaryCardViewModel {
-  if (firewall.local.state === 'READY') {
+  const playerPort = getPlayerLocalPortCheck(firewall);
+  const missingAuxiliaryPorts = getMissingAuxiliaryLocalPorts(firewall);
+
+  if (playerPort?.state === 'READY') {
     const port = getPublicPortFromFirewall(firewall);
     const localIp = firewall.external.network.localIpv4[0];
     const copyValue = localIp && port ? `${localIp}:${port}` : undefined;
 
     return {
       value: copyValue ?? 'Listo',
-      detail: copyValue ? 'Click para copiar la direccion LAN.' : 'Windows permite los puertos locales activos para PalServer.',
+      detail: missingAuxiliaryPorts.length > 0
+        ? 'Juego local listo. Hay servicios auxiliares pendientes si quieres usarlos.'
+        : copyValue ? 'Click para copiar la direccion LAN.' : 'Windows permite el puerto local de jugadores.',
       state: createSummaryCardState('ok'),
       copyValue
     };
   }
 
-  if (firewall.local.state === 'MISSING') {
+  if (playerPort?.state === 'MISSING') {
     return {
       value: 'Configurar',
-      detail: 'Faltan reglas de entrada en Windows para jugar desde LAN.',
+      detail: 'Falta permitir en Windows el puerto UDP de jugadores.',
       state: createSummaryCardState('configuration')
     };
   }
@@ -2847,8 +2884,8 @@ function createExternalAccessSummary(firewall: FirewallStatusDto): SummaryCardVi
 
   if (network.cgnatStatus === 'LIKELY') {
     return {
-      value: copyValue ?? network.publicIp ?? 'Bloqueado directo',
-      detail: 'Probable CGNAT o NAT del ISP. El puerto publico no sera directo sin alternativa externa.',
+      value: copyValue ?? network.publicIp ?? 'No confirmado',
+      detail: 'IP publica detectada. El acceso externo no bloquea el inicio del servidor.',
       state: createSummaryCardState('warning'),
       copyValue
     };
@@ -2865,9 +2902,9 @@ function createExternalAccessSummary(firewall: FirewallStatusDto): SummaryCardVi
 
   if (network.cgnatStatus === 'NEEDS_ROUTER_CHECK') {
     return {
-      value: copyValue ?? network.publicIp ?? 'Configurar router',
-      detail: 'Compara WAN del router con IP publica y crea port forwarding si coinciden.',
-      state: createSummaryCardState('configuration'),
+      value: copyValue ?? network.publicIp ?? 'No confirmado',
+      detail: 'IP publica detectada. Falta confirmar si el puerto responde desde Internet.',
+      state: createSummaryCardState(copyValue ? 'warning' : 'loading'),
       copyValue
     };
   }
@@ -2994,7 +3031,7 @@ function renderExternalPortRecommendations(ports: FirewallPortCheckDto[]): strin
     <div class="external-recommendations">
       <div>
         <h5>Prueba recomendada de puertos</h5>
-        <p>Si no puedes configurar el router, usa esta lista para verificar desde otra red o con una herramienta externa. Si todos fallan, revisar NAT/CGNAT o usar VPN/tunel.</p>
+        <p>Usa esta lista para probar conectividad externa desde otra red o con una herramienta online. Este resultado no bloquea el juego local.</p>
       </div>
       <div class="external-port-list">
         ${unique
@@ -3019,8 +3056,8 @@ function renderNetworkDiagnostics(network: FirewallStatusDto['external']['networ
   return `
     <section class="firewall-section network-diagnostics">
       <div class="firewall-section__header">
-        <h4>CGNAT / ISP</h4>
-        <p>${escapeHtml(network.message)}</p>
+        <h4>Acceso publico</h4>
+        <p>Diagnostico informativo de IP publica. No bloquea el inicio del servidor.</p>
       </div>
       <div class="network-diagnostics__grid">
         <article class="network-diagnostics__item">
@@ -3032,13 +3069,13 @@ function renderNetworkDiagnostics(network: FirewallStatusDto['external']['networ
           <strong>${escapeHtml(network.localIpv4.join(', ') || 'No disponible')}</strong>
         </article>
         <article class="network-diagnostics__item network-diagnostics__item--${state.tone}">
-          <span>Estado</span>
+          <span>Diagnostico</span>
           <strong>${escapeHtml(state.label)}</strong>
         </article>
       </div>
       <div class="network-diagnostics__recommendation">
         <span class="summary-card__icon" aria-label="${escapeHtml(state.label)}">${renderIcon(state.icon)}</span>
-        <p>${escapeHtml(network.recommendation)}</p>
+        <p>${escapeHtml(createPublicAccessRecommendation(network.cgnatStatus, network.publicIp))}</p>
       </div>
     </section>
   `;
@@ -3058,10 +3095,31 @@ function mapNetworkState(status: FirewallStatusDto['external']['network']['cgnat
   }
 
   if (status === 'NEEDS_ROUTER_CHECK') {
-    return { icon: 'help', tone: 'optional', label: 'Comparar con WAN del router' };
+    return { icon: 'help', tone: 'optional', label: 'No confirmado' };
   }
 
   return { icon: 'warning', tone: 'warning', label: 'No evaluado' };
+}
+
+function createPublicAccessRecommendation(
+  status: FirewallStatusDto['external']['network']['cgnatStatus'],
+  publicIp: string | null
+): string {
+  if (status === 'UNLIKELY') {
+    return 'IP publica detectada. Si el puerto figura abierto, puedes compartir IP:puerto para jugar por Internet.';
+  }
+
+  if (status === 'LIKELY') {
+    return 'IP publica detectada, pero el acceso directo puede depender del proveedor. El servidor igual puede iniciar y usarse en LAN.';
+  }
+
+  if (status === 'NEEDS_ROUTER_CHECK') {
+    return publicIp
+      ? 'IP publica detectada. Falta confirmar si el puerto responde desde Internet.'
+      : 'No se pudo obtener IP publica. El servidor igual puede iniciar si Windows local esta correcto.';
+  }
+
+  return 'Sin verificacion externa disponible. El servidor igual puede iniciar si Windows local esta correcto.';
 }
 
 function renderFirewallPortCard(port: FirewallPortCheckDto): string {
