@@ -249,6 +249,7 @@ let pendingAction: 'steamcmd' | 'server' | 'config' | null = null;
 const navigationState = new NavigationState();
 let latestStatus: ApplicationStatus = ApplicationStatus.BOOTSTRAPPING;
 let latestActions: AllowedActionsDto | null = null;
+let lastCopyToast: { value: string; copiedAt: number } | null = null;
 let latestSummary: {
   steamCmdStatus: string;
   serverStatus: string;
@@ -3182,6 +3183,11 @@ function renderSettingsFilterBar(parsed: ParsedPalworldSettings): string {
 
 function bindSummaryCards(): void {
   document.querySelectorAll<HTMLButtonElement>('.summary-card[data-target]').forEach((card) => {
+    if (card.dataset['summaryBound'] === 'true') {
+      return;
+    }
+
+    card.dataset['summaryBound'] = 'true';
     card.addEventListener('click', (event) => {
       const copyValue = card.dataset['copyValue'];
       const clickedElement = event.target instanceof Element ? event.target : null;
@@ -3216,6 +3222,13 @@ function bindSummaryCards(): void {
 }
 
 async function copyToClipboard(value: string, element: HTMLElement): Promise<void> {
+  const now = Date.now();
+  if (lastCopyToast?.value === value && now - lastCopyToast.copiedAt < 350) {
+    return;
+  }
+
+  lastCopyToast = { value, copiedAt: now };
+
   try {
     await navigator.clipboard.writeText(value);
     element.classList.add('summary-card--copied');
