@@ -103,6 +103,14 @@ El portable queda en:
 release/
 ```
 
+Despues de generarlo, valida el artefacto:
+
+```powershell
+npm.cmd run validate:portable
+```
+
+El checklist completo esta en `docs/implementation/portable-validation.md`.
+
 El nombre final lo define `electron-builder` usando `productName` y `version`, por ejemplo:
 
 ```text
