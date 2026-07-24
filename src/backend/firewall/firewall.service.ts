@@ -140,8 +140,6 @@ export class FirewallService {
     const publicPort = parsePort(values.get('PublicPort')) ?? 8211;
     const rconEnabled = parseBoolean(values.get('RCONEnabled'));
     const rconPort = parsePort(values.get('RCONPort')) ?? 25575;
-    const restApiEnabled = parseBoolean(values.get('RESTAPIEnabled'));
-    const restApiPort = parsePort(values.get('RESTAPIPort')) ?? 8212;
 
     return [
       {
@@ -159,14 +157,6 @@ export class FirewallService {
         protocol: 'TCP',
         enabled: rconEnabled,
         source: 'RCONEnabled + RCONPort'
-      },
-      {
-        key: 'RESTAPIPort',
-        label: 'REST API',
-        port: restApiPort,
-        protocol: 'TCP',
-        enabled: restApiEnabled,
-        source: 'RESTAPIEnabled + RESTAPIPort'
       }
     ];
   }

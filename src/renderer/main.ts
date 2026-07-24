@@ -293,7 +293,7 @@ const FIREWALL_DIAGNOSTIC_STEPS: DiagnosticStepDefinition[] = [
   {
     title: 'Leyendo configuracion del servidor',
     detail: 'Se leyo PalWorldSettings.ini y se ubicaron los puertos activos.',
-    activeDetail: 'Abriendo PalWorldSettings.ini para leer PublicPort, RCON y REST API.'
+    activeDetail: 'Abriendo PalWorldSettings.ini para leer PublicPort y RCON.'
   },
   {
     title: 'Detectando direcciones y puertos',
