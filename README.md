@@ -180,6 +180,15 @@ backups/world/
 logs/
 ```
 
+## Backups
+
+- Los backups manuales se crean desde la pestana `Backups` y nunca se eliminan por retencion automatica.
+- La automatizacion esta deshabilitada inicialmente. Puede configurarse con intervalo de 1 a 168 horas y retencion de 1 a 100 copias por tipo.
+- Los backups automaticos solo se ejecutan cuando el servidor esta detenido.
+- Cada copia nueva incluye un manifiesto SHA-256. La interfaz permite verificarlo antes de restaurar.
+- El mundo puede guardarse como carpeta o comprimido en `.tar.gz`.
+- Toda restauracion crea primero una copia preventiva `safety` y aplica el cambio de forma transaccional.
+
 ## Notas de seguridad
 
 - El renderer no tiene acceso directo a Node.js.

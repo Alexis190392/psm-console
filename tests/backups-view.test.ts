@@ -14,10 +14,23 @@ describe('backups view', () => {
           name: 'config-1.ini',
           path: 'D:\\backups\\config-1.ini',
           sizeBytes: 2048,
-          createdAt: '2026-07-20T12:00:00.000Z'
+          createdAt: '2026-07-20T12:00:00.000Z',
+          origin: 'manual',
+          format: 'file',
+          integrity: 'VERIFIED',
+          integrityMessage: 'Integridad verificada.'
         }
       ],
       worldBackups: [],
+      policy: {
+        automaticEnabled: false,
+        automaticIntervalHours: 24,
+        automaticRetentionPerType: 10,
+        compressWorldBackups: false
+      },
+      totalSizeBytes: 2048,
+      verifiedBackups: 1,
+      corruptedBackups: 0,
       message: 'Backups disponibles.'
     };
 
@@ -27,6 +40,10 @@ describe('backups view', () => {
     expect(html).toContain('D:\\Pal\\PalWorldSettings.ini');
     expect(html).toContain('config-1.ini');
     expect(html).toContain('2.0 KB');
+    expect(html).toContain('id="backup-policy-form"');
+    expect(html).toContain('name="automaticIntervalHours"');
+    expect(html).toContain('name="automaticRetentionPerType"');
+    expect(html).toContain('Verificado');
     expect(html).toContain('data-backup-select="configuration:config-1.ini"');
     expect(html).toContain('class="backup-select__box"');
     expect(html).not.toContain('id="delete-selected-backups"');

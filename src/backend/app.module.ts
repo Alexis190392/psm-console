@@ -1,6 +1,9 @@
 import { Module } from '@nestjs/common';
 import { ApplicationStateService } from './application-state/application-state.service';
 import { BackupService } from './backup/backup.service';
+import { BackupArchiveService } from './backup/backup-archive.service';
+import { BackupIntegrityService } from './backup/backup-integrity.service';
+import { BackupPolicyService } from './backup/backup-policy.service';
 import { FirewallService } from './firewall/firewall.service';
 import { NetworkService } from './network/network.service';
 import { LoggingService } from './logging/logging.service';
@@ -21,6 +24,9 @@ import { SteamCmdService } from './steamcmd/steamcmd.service';
     PortableStateService,
     ApplicationStateService,
     OperationManagerService,
+    BackupArchiveService,
+    BackupIntegrityService,
+    BackupPolicyService,
     BackupService,
     SteamCmdService,
     PalworldInstallationService,
@@ -38,6 +44,9 @@ import { SteamCmdService } from './steamcmd/steamcmd.service';
     PortableStateService,
     ApplicationStateService,
     OperationManagerService,
+    BackupArchiveService,
+    BackupIntegrityService,
+    BackupPolicyService,
     BackupService,
     SteamCmdService,
     PalworldInstallationService,

@@ -30,6 +30,8 @@ export const ipcChannels = {
   networkGetLocalAddresses: 'network:get-local-addresses',
   networkGetPublicAddress: 'network:get-public-address',
   backupGetSummary: 'backup:get-summary',
+  backupUpdatePolicy: 'backup:update-policy',
+  backupVerify: 'backup:verify',
   backupCreateConfiguration: 'backup:create-configuration',
   backupCreateWorld: 'backup:create-world',
   backupRestore: 'backup:restore',

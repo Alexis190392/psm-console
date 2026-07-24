@@ -3,6 +3,9 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { BackupService } from '../src/backend/backup/backup.service';
+import { BackupArchiveService } from '../src/backend/backup/backup-archive.service';
+import { BackupIntegrityService, getManifestPath } from '../src/backend/backup/backup-integrity.service';
+import { BackupPolicyService } from '../src/backend/backup/backup-policy.service';
 import { OperationManagerService } from '../src/backend/operations/operation-manager.service';
 import { PalworldConfigurationService } from '../src/backend/palworld-configuration/palworld-configuration.service';
 import type { PalworldProcessService } from '../src/backend/palworld-process/palworld-process.service';
@@ -22,7 +25,17 @@ describe('BackupService', () => {
     operationManager,
     portableStateService
   );
-  const service = new BackupService(portablePathService, configurationService, operationManager);
+  const policyService = new BackupPolicyService(portablePathService);
+  const integrityService = new BackupIntegrityService();
+  const archiveService = new BackupArchiveService();
+  const service = new BackupService(
+    portablePathService,
+    configurationService,
+    operationManager,
+    policyService,
+    integrityService,
+    archiveService
+  );
   const serverRoot = portablePathService.getPalworldServerRoot();
   const activeConfigurationPath = join(
     serverRoot,
@@ -67,6 +80,8 @@ describe('BackupService', () => {
     const summary = await service.getSummary();
     expect(summary.configurationBackups).toHaveLength(1);
     expect(summary.configurationBackups[0]?.path).toContain(join('backups', 'configuration'));
+    expect(summary.configurationBackups[0]?.integrity).toBe('VERIFIED');
+    expect(existsSync(getManifestPath(summary.configurationBackups[0]?.path ?? ''))).toBe(true);
     expect(existsSync(summary.configurationBackups[0]?.path ?? '')).toBe(true);
   });
 
@@ -108,7 +123,7 @@ describe('BackupService', () => {
     );
     await waitForOperation(deleteAccepted.operationId, operationManager);
 
-    expect(trashedPaths).toEqual([backup?.path]);
+    expect(trashedPaths).toEqual([backup?.path, getManifestPath(backup?.path ?? '')]);
   });
 
   it('restores a configuration backup and keeps a safety copy of the current INI', async () => {
@@ -131,7 +146,7 @@ describe('BackupService', () => {
 
     await expect(readFile(activeConfigurationPath, 'utf8')).resolves.toBe(originalContent);
     const afterRestore = await service.getSummary();
-    expect(afterRestore.configurationBackups.some((entry) => entry.name.includes('before-restore'))).toBe(true);
+    expect(afterRestore.configurationBackups.some((entry) => entry.origin === 'safety')).toBe(true);
   });
 
   it('restores a world backup only when the server is stopped', async () => {
@@ -153,7 +168,84 @@ describe('BackupService', () => {
 
     await expect(readFile(worldFile, 'utf8')).resolves.toBe('original-world');
     const afterRestore = await service.getSummary();
-    expect(afterRestore.worldBackups.some((entry) => entry.name.includes('before-restore'))).toBe(true);
+    expect(afterRestore.worldBackups.some((entry) => entry.origin === 'safety')).toBe(true);
+  });
+
+  it('rejects a modified backup before replacing the active configuration', async () => {
+    const originalContent = '[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(ServerName="Original")';
+    await mkdir(dirname(activeConfigurationPath), { recursive: true });
+    await writeFile(activeConfigurationPath, originalContent);
+
+    const accepted = service.createConfigurationBackup({ confirmed: true });
+    await waitForOperation(accepted.operationId, operationManager);
+    const backup = (await service.getSummary()).configurationBackups[0];
+    await writeFile(backup?.path ?? '', '[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(ServerName="Altered")');
+
+    const verifyAccepted = service.verifyBackup({ backupId: backup?.id ?? '' });
+    await waitForOperationStatus(verifyAccepted.operationId, operationManager, 'FAILED');
+    const restoreAccepted = service.restoreBackup({ confirmed: true, backupId: backup?.id ?? '' });
+    await waitForOperationStatus(restoreAccepted.operationId, operationManager, 'FAILED');
+
+    await expect(readFile(activeConfigurationPath, 'utf8')).resolves.toBe(originalContent);
+  });
+
+  it('creates and restores a compressed world backup when compression is enabled', async () => {
+    const worldFile = join(saveGamesPath, 'WorldOption.sav');
+    await mkdir(saveGamesPath, { recursive: true });
+    await writeFile(worldFile, 'compressed-world');
+    const policyAccepted = service.updatePolicy({
+      confirmed: true,
+      automaticEnabled: false,
+      automaticIntervalHours: 24,
+      automaticRetentionPerType: 10,
+      compressWorldBackups: true
+    });
+    await waitForOperation(policyAccepted.operationId, operationManager);
+
+    const accepted = service.createWorldBackup({ confirmed: true });
+    await waitForOperation(accepted.operationId, operationManager);
+    const backup = (await service.getSummary()).worldBackups[0];
+    expect(backup?.format).toBe('tar-gzip');
+    expect(backup?.name.endsWith('.tar.gz')).toBe(true);
+
+    await writeFile(worldFile, 'changed-world');
+    const restoreAccepted = service.restoreBackup({ confirmed: true, backupId: backup?.id ?? '' });
+    await waitForOperation(restoreAccepted.operationId, operationManager);
+
+    await expect(readFile(worldFile, 'utf8')).resolves.toBe('compressed-world');
+  });
+
+  it('applies retention only to automatic backups', async () => {
+    const backupDirectory = join(portableRoot, 'backups', 'configuration');
+    const olderAutomatic = join(backupDirectory, 'PalWorldSettings.automatic.older.ini');
+    const newerAutomatic = join(backupDirectory, 'PalWorldSettings.automatic.newer.ini');
+    const manual = join(backupDirectory, 'PalWorldSettings.manual.keep.ini');
+    const content = '[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(Difficulty=None)';
+    await mkdir(backupDirectory, { recursive: true });
+    await writeFile(olderAutomatic, content);
+    await integrityService.createManifest(olderAutomatic, 'configuration', 'automatic', 'file');
+    await new Promise((resolve) => {
+      setTimeout(resolve, 10);
+    });
+    await writeFile(newerAutomatic, content);
+    await integrityService.createManifest(newerAutomatic, 'configuration', 'automatic', 'file');
+    await writeFile(manual, content);
+    await integrityService.createManifest(manual, 'configuration', 'manual', 'file');
+
+    const policyAccepted = service.updatePolicy({
+      confirmed: true,
+      automaticEnabled: false,
+      automaticIntervalHours: 24,
+      automaticRetentionPerType: 1,
+      compressWorldBackups: false
+    });
+    await waitForOperation(policyAccepted.operationId, operationManager);
+
+    const summary = await service.getSummary();
+    expect(summary.configurationBackups.filter((entry) => entry.origin === 'automatic')).toHaveLength(1);
+    expect(summary.configurationBackups.some((entry) => entry.name === 'PalWorldSettings.manual.keep.ini')).toBe(true);
+    expect(existsSync(olderAutomatic)).toBe(false);
+    expect(existsSync(newerAutomatic)).toBe(true);
   });
 
   it('fails world restore when the server is running', async () => {
@@ -178,6 +270,9 @@ describe('BackupService', () => {
       portablePathService,
       configurationService,
       operationManager,
+      policyService,
+      integrityService,
+      archiveService,
       runningProcessService
     );
 

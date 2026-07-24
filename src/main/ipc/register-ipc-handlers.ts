@@ -36,7 +36,9 @@ import type { FirewallApplyRulesRequestDto } from '../../shared/dto/firewall-sta
 import type {
   BackupCreateRequestDto,
   BackupDeleteRequestDto,
-  BackupRestoreRequestDto
+  BackupRestoreRequestDto,
+  BackupUpdatePolicyRequestDto,
+  BackupVerifyRequestDto
 } from '../../shared/dto/backup-status.dto';
 import type { LogsRecentRequestDto } from '../../shared/dto/log-status.dto';
 import type { PublicAddressRequestDto } from '../../shared/dto/network-diagnostics.dto';
@@ -168,6 +170,14 @@ export function registerIpcHandlers(
   );
 
   ipcMain.handle(ipcChannels.backupGetSummary, () => backupService.getSummary());
+
+  ipcMain.handle(ipcChannels.backupUpdatePolicy, (_event, request: BackupUpdatePolicyRequestDto) =>
+    backupService.updatePolicy(request)
+  );
+
+  ipcMain.handle(ipcChannels.backupVerify, (_event, request: BackupVerifyRequestDto) =>
+    backupService.verifyBackup(request)
+  );
 
   ipcMain.handle(ipcChannels.backupCreateConfiguration, (_event, request: BackupCreateRequestDto) =>
     backupService.createConfigurationBackup(request)

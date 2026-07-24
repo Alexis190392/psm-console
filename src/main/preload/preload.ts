@@ -6,7 +6,9 @@ import type {
   BackupCreateRequestDto,
   BackupDeleteRequestDto,
   BackupRestoreRequestDto,
-  BackupSummaryDto
+  BackupSummaryDto,
+  BackupUpdatePolicyRequestDto,
+  BackupVerifyRequestDto
 } from '../../shared/dto/backup-status.dto';
 import type {
   OperationAcceptedDto,
@@ -83,6 +85,8 @@ const ipcChannels = {
   networkGetLocalAddresses: 'network:get-local-addresses',
   networkGetPublicAddress: 'network:get-public-address',
   backupGetSummary: 'backup:get-summary',
+  backupUpdatePolicy: 'backup:update-policy',
+  backupVerify: 'backup:verify',
   backupCreateConfiguration: 'backup:create-configuration',
   backupCreateWorld: 'backup:create-world',
   backupRestore: 'backup:restore',
@@ -144,6 +148,8 @@ export interface PalcmApi {
   };
   backup: {
     getSummary: () => Promise<BackupSummaryDto>;
+    updatePolicy: (request: BackupUpdatePolicyRequestDto) => Promise<OperationAcceptedDto>;
+    verify: (request: BackupVerifyRequestDto) => Promise<OperationAcceptedDto>;
     createConfiguration: (request: BackupCreateRequestDto) => Promise<OperationAcceptedDto>;
     createWorld: (request: BackupCreateRequestDto) => Promise<OperationAcceptedDto>;
     restore: (request: BackupRestoreRequestDto) => Promise<OperationAcceptedDto>;
@@ -230,6 +236,10 @@ const api: PalcmApi = {
   },
   backup: {
     getSummary: () => ipcRenderer.invoke(ipcChannels.backupGetSummary) as Promise<BackupSummaryDto>,
+    updatePolicy: (request) =>
+      ipcRenderer.invoke(ipcChannels.backupUpdatePolicy, request) as Promise<OperationAcceptedDto>,
+    verify: (request) =>
+      ipcRenderer.invoke(ipcChannels.backupVerify, request) as Promise<OperationAcceptedDto>,
     createConfiguration: (request) =>
       ipcRenderer.invoke(ipcChannels.backupCreateConfiguration, request) as Promise<OperationAcceptedDto>,
     createWorld: (request) =>

@@ -4,7 +4,7 @@ import { formatLocalLogTimestamp } from '../shared/utils/local-time';
 import { ApplicationStatus } from '../shared/enums/application-status';
 import type { AllowedActionsDto } from '../shared/dto/allowed-actions.dto';
 import type { AppProcessMetricDto, AppProcessMetricsDto } from '../shared/dto/app-process-metrics.dto';
-import type { BackupSummaryDto } from '../shared/dto/backup-status.dto';
+import type { BackupSummaryDto, BackupUpdatePolicyRequestDto } from '../shared/dto/backup-status.dto';
 import type { FirewallPortCheckDto, FirewallStatusDto } from '../shared/dto/firewall-status.dto';
 import type { NetworkDiagnosticsDto } from '../shared/dto/network-diagnostics.dto';
 import type { LogModule } from '../shared/dto/log-status.dto';
@@ -1870,6 +1870,7 @@ async function renderBackupsView(): Promise<void> {
     const summary = latestBackupSummary;
 
     setContent(renderBackupsViewHtml(summary));
+    bindBackupPolicyControls();
     renderBackupsFooter();
     document.querySelectorAll<HTMLInputElement>('[data-backup-select]').forEach((checkbox) => {
       checkbox.addEventListener('change', updateSelectedBackupsState);
@@ -1879,6 +1880,61 @@ async function renderBackupsView(): Promise<void> {
     const message = error instanceof Error ? error.message : String(error);
     renderSimpleView('Backups', `No se pudo leer el estado de backups. ${message}`);
   }
+}
+
+function bindBackupPolicyControls(): void {
+  document.querySelector<HTMLFormElement>('#backup-policy-form')?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    if (!(form instanceof HTMLFormElement) || !form.reportValidity()) {
+      return;
+    }
+
+    const values = new FormData(form);
+    showBackupPolicyConfirmation({
+      confirmed: true,
+      automaticEnabled: values.get('automaticEnabled') === 'on',
+      automaticIntervalHours: Number(values.get('automaticIntervalHours')),
+      automaticRetentionPerType: Number(values.get('automaticRetentionPerType')),
+      compressWorldBackups: values.get('compressWorldBackups') === 'on'
+    });
+  });
+}
+
+function showBackupPolicyConfirmation(request: BackupUpdatePolicyRequestDto): void {
+  if (!appFooter) {
+    return;
+  }
+
+  appFooter.classList.remove('hidden');
+  appFooter.classList.add('app-footer--confirm');
+  appFooter.innerHTML = renderInlineConfirm({
+    message: request.automaticEnabled
+      ? `Se habilitaran backups cada ${String(request.automaticIntervalHours)} horas. La retencion eliminara permanentemente solo automaticos que excedan ${String(request.automaticRetentionPerType)} por tipo.`
+      : 'Se deshabilitaran los backups automaticos. Las copias existentes no se eliminaran.',
+    actions: [
+      { id: 'confirm-backup-policy', label: 'Guardar politica', tone: 'warning' },
+      { id: 'cancel-backup-policy', label: 'Cancelar', tone: 'secondary' }
+    ]
+  });
+  document.querySelector<HTMLButtonElement>('#confirm-backup-policy')?.addEventListener('click', () => {
+    void updateBackupPolicy(request);
+  });
+  document.querySelector<HTMLButtonElement>('#cancel-backup-policy')?.addEventListener('click', hideBackupConfirmation);
+}
+
+async function updateBackupPolicy(request: BackupUpdatePolicyRequestDto): Promise<void> {
+  if (!palcmApi) {
+    return;
+  }
+
+  navigationState.set('logs');
+  renderActiveView();
+  const accepted = await palcmApi.backup.updatePolicy(request);
+  await pollOperation(accepted.operationId);
+  latestBackupSummary = null;
+  navigationState.set('backups');
+  await refreshState();
 }
 
 function stopRuntimeViewRefreshers(): void {
@@ -2492,6 +2548,10 @@ function renderBackupsFooter(): void {
       ${renderIcon('undo')}
       <span>Restaurar</span>
     </button>
+    <button id="verify-selected-backup" class="secondary-button button-with-icon" type="button" disabled>
+      ${renderIcon('check')}
+      <span>Verificar</span>
+    </button>
     <button id="delete-selected-backups" class="secondary-button backup-trash-selected button-with-icon" type="button" disabled>
       ${renderIcon('trash')}
       <span id="delete-selected-backups-label">Papelera</span>
@@ -2508,6 +2568,9 @@ function renderBackupsFooter(): void {
   });
   document.querySelector<HTMLButtonElement>('#restore-selected-backup')?.addEventListener('click', () => {
     showBackupRestoreConfirmation(getSelectedBackupIds());
+  });
+  document.querySelector<HTMLButtonElement>('#verify-selected-backup')?.addEventListener('click', () => {
+    void verifySelectedBackup(getSelectedBackupIds());
   });
 }
 
@@ -2543,9 +2606,10 @@ function getSelectedBackupIds(): string[] {
 function updateSelectedBackupsState(): void {
   const deleteButton = document.querySelector<HTMLButtonElement>('#delete-selected-backups');
   const restoreButton = document.querySelector<HTMLButtonElement>('#restore-selected-backup');
+  const verifyButton = document.querySelector<HTMLButtonElement>('#verify-selected-backup');
   const selectedCount = getSelectedBackupIds().length;
 
-  if (!deleteButton || !restoreButton) {
+  if (!deleteButton || !restoreButton || !verifyButton) {
     return;
   }
 
@@ -2564,7 +2628,9 @@ function updateSelectedBackupsState(): void {
     document.querySelector('#delete-selected-backups-label'),
     selectedCount === 0 ? 'Papelera' : `Papelera (${String(selectedCount)})`
   );
-  restoreButton.disabled = selectedCount !== 1;
+  const selectedBackup = selectedCount === 1 ? findLatestBackupById(getSelectedBackupIds()[0] ?? '') : null;
+  restoreButton.disabled = selectedCount !== 1 || selectedBackup?.integrity === 'CORRUPTED';
+  verifyButton.disabled = selectedCount !== 1;
   setText(
     document.querySelector('#backup-footer-message'),
     selectedCount === 0
@@ -2573,6 +2639,20 @@ function updateSelectedBackupsState(): void {
         ? '1 backup seleccionado. Puedes restaurarlo o enviarlo a la papelera.'
       : `${String(selectedCount)} backup(s) seleccionados.`
   );
+}
+
+async function verifySelectedBackup(backupIds: string[]): Promise<void> {
+  if (!palcmApi || backupIds.length !== 1) {
+    return;
+  }
+
+  navigationState.set('logs');
+  renderActiveView();
+  const accepted = await palcmApi.backup.verify({ backupId: backupIds[0] ?? '' });
+  await pollOperation(accepted.operationId);
+  latestBackupSummary = null;
+  navigationState.set('backups');
+  await refreshState();
 }
 
 function showBackupRestoreConfirmation(backupIds: string[]): void {
