@@ -43,7 +43,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: PSM-Console-portable
-          path: release/*Portable*.exe
+          path: release/PSM-Console-v*.exe
           if-no-files-found: error
 
       - name: Crear release estable
@@ -52,4 +52,4 @@ jobs:
           tag_name: v${{ env.VERSION }}
           name: PSM Console v${{ env.VERSION }}
           generate_release_notes: true
-          files: release/*Portable*.exe
+          files: release/PSM-Console-v*.exe
