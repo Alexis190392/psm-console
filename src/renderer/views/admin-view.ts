@@ -77,7 +77,7 @@ function renderAdminGeneralTab(adminStatus: PalworldAdminStatusDto): string {
       <form class="admin-card" data-admin-form="save">
         <span class="view-kicker">MUNDO</span>
         <h4>Guardar mundo</h4>
-        <p>Solicita un guardado manual del estado actual del servidor.</p>
+        <p class="admin-card__hint">Guarda el estado actual.</p>
         <button class="secondary-button button-with-icon" type="submit">
           ${renderIcon('save')}
           <span>Guardar ahora</span>
@@ -96,7 +96,7 @@ function renderAdminGeneralTab(adminStatus: PalworldAdminStatusDto): string {
       <form class="admin-card admin-card--danger" data-admin-form="stop">
         <span class="view-kicker">EMERGENCIA</span>
         <h4>Detener ahora</h4>
-        <p>Fuerza la detencion inmediata del servidor desde REST. Usalo solo si no responde el apagado programado.</p>
+        <p class="admin-card__hint">Solo si el apagado programado no responde.</p>
         <button class="secondary-button secondary-button--warning button-with-icon" type="submit">
           ${renderIcon('stop')}
           <span>Forzar detencion</span>
@@ -177,7 +177,7 @@ function renderAdminSnapshotCard(
     <article class="admin-snapshot-card">
       <span class="view-kicker">${escapeHtml(title.toUpperCase())}</span>
       <h4>${escapeHtml(title)}</h4>
-      <p>${escapeHtml(detail)}</p>
+      <span class="sr-only">${escapeHtml(detail)}</span>
       ${
         entries.length > 0
           ? `<dl>${entries.map(([key, value]) => `<div><dt>${escapeHtml(key)}</dt><dd>${escapeHtml(String(value))}</dd></div>`).join('')}</dl>`

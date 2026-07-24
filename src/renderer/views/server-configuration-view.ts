@@ -11,15 +11,15 @@ import { escapeHtml, normalizeSearchText } from '../utils/text';
 
 export function renderConfigurationPresets(): string {
   return `
-    <section class="preset-bar" aria-label="Perfiles rapidos de configuracion">
-      <div>
-        <span class="view-kicker">PERFILES</span>
-        <p>Aplican valores al formulario. No se guardan hasta presionar Guardar.</p>
-      </div>
+    <details class="preset-bar" aria-label="Perfiles rapidos de configuracion">
+      <summary>
+        <span>Perfiles rapidos</span>
+        <small>Preparan el formulario sin guardar</small>
+      </summary>
       <div class="preset-bar__actions">
         ${CONFIGURATION_PRESETS.map((preset) => `<button class="secondary-button preset-button" type="button" data-preset="${escapeHtml(preset.id)}">${escapeHtml(preset.label)}</button>`).join('')}
       </div>
-    </section>
+    </details>
   `;
 }
 
@@ -27,10 +27,7 @@ export function renderSettingsFilterBar(parsed: ParsedPalworldSettings): string 
   const categories = Array.from(groupSettings(parsed.settings).keys());
   return `
     <section class="settings-filter" aria-label="Filtros de parametros del INI">
-      <div class="settings-filter__head">
-        <span class="view-kicker">FILTROS</span>
-        <strong>Encontrar parametro</strong>
-      </div>
+      <strong class="settings-filter__head">Parametros</strong>
       <div class="settings-filter__controls">
         <label class="settings-filter__search" for="settings-search">
           ${renderIcon('search')}

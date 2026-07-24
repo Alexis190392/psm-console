@@ -48,6 +48,9 @@ describe('backups view', () => {
     expect(html).toContain('class="backup-select__box"');
     expect(html).not.toContain('id="delete-selected-backups"');
     expect(html).not.toContain('<span>Seleccionar</span>');
-    expect(html).toContain('Todavia no hay backups de este tipo.');
+    expect(html).toContain('data-backup-filter="configuration"');
+    expect(html).toContain('data-backup-kind="configuration"');
+    expect(html).toContain('backup-item__kind">INI');
+    expect(html).not.toContain('Todavia no hay backups de este tipo.');
   });
 });

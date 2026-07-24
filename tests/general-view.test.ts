@@ -6,13 +6,22 @@ describe('general view', () => {
   it('renders summary cards and network freshness', () => {
     const html = renderGeneralView({
       networkFreshness: 'verificado hace 1 minuto',
-      cards: [
+      primaryCards: [
         {
           title: 'Juego local',
           value: '192.168.0.10:8211',
           detail: 'Listo para copiar.',
           target: 'network',
           copyValue: '192.168.0.10:8211',
+          ...createSummaryCardState('ok')
+        }
+      ],
+      supportCards: [
+        {
+          title: 'SteamCMD',
+          value: 'Instalado',
+          detail: 'Listo.',
+          target: 'logs',
           ...createSummaryCardState('ok')
         }
       ]
@@ -22,5 +31,7 @@ describe('general view', () => {
     expect(html).toContain('192.168.0.10:8211');
     expect(html).toContain('data-copy-value="192.168.0.10:8211"');
     expect(html).toContain('Red: verificado hace 1 minuto');
+    expect(html).toContain('summary-card--prominent');
+    expect(html).toContain('summary-card--compact');
   });
 });

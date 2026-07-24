@@ -37,14 +37,20 @@ async function waitForSelector(window, selector, timeoutMs = 15000) {
 }
 
 async function clickNav(window, nav) {
-  await window.webContents.executeJavaScript(`
+  const selector = `.sidebar__link[data-nav="${nav}"]`;
+  await waitForSelector(window, `${selector}[aria-disabled="false"]`);
+  const clicked = await window.webContents.executeJavaScript(`
     (() => {
-      const link = document.querySelector('.sidebar__link[data-nav="${nav}"]');
-      if (!link || link.getAttribute('aria-disabled') === 'true') return false;
+      const link = document.querySelector(${JSON.stringify(selector)});
+      if (!link) return false;
       link.click();
       return true;
     })()
   `);
+  if (!clicked) {
+    throw new Error(`Navigation link could not be clicked: ${nav}`);
+  }
+  await waitForSelector(window, `${selector}.sidebar__link--active`);
   await wait(nav === 'network' ? 4500 : 800);
 }
 

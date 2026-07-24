@@ -10,6 +10,7 @@ export interface SummaryCardState {
 
 export interface SummaryCardDetails extends SummaryCardState {
   id?: string;
+  density?: 'compact' | 'prominent';
   title: string;
   value: string;
   detail: string;
@@ -34,13 +35,14 @@ export function renderSummaryCard(details: SummaryCardDetails): string {
   );
   const iconClass = `summary-card__icon${canOpenTargetFromIcon ? ' summary-card__icon--action' : ''}`;
   const iconTitle = canOpenTargetFromIcon ? 'Revisar detalle' : details.label;
+  const densityClass = details.density ? ` summary-card--${details.density}` : '';
 
   return `
-    <button${idAttribute} class="summary-card summary-card--${details.tone}" data-target="${details.target}"${adminTabAttribute}${copyAttribute} type="button">
+    <button${idAttribute} class="summary-card summary-card--${details.tone}${densityClass}" data-target="${details.target}"${adminTabAttribute}${copyAttribute} type="button">
       <span class="summary-card__body">
         <span class="summary-card__title">${escapeHtml(details.title)}</span>
         <strong>${escapeHtml(details.value)}</strong>
-        <small>${escapeHtml(details.detail)}</small>
+        <small title="${escapeHtml(details.detail)}">${escapeHtml(details.detail)}</small>
       </span>
       <span class="${iconClass}" aria-label="${escapeHtml(iconTitle)}" title="${escapeHtml(iconTitle)}" data-summary-icon="${canOpenTargetFromIcon ? 'target' : 'state'}">
         <span class="ui-icon ui-icon--${escapeHtml(details.icon)}" aria-hidden="true"></span>

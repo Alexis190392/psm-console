@@ -144,20 +144,23 @@ rootElement.innerHTML = `
         <strong id="status-label">${ApplicationStatus.BOOTSTRAPPING}</strong>
       </div>
       <div class="progress"><div id="progress-bar" class="progress__bar"></div></div>
-      <section id="process-metrics-panel" class="process-metrics hidden" aria-live="polite">
-        <div class="process-metrics__header">
-          <div>
-            <span class="view-kicker">PROCESOS DE LA APP</span>
-            <strong>Identificacion rapida</strong>
+      <details id="process-metrics-panel" class="process-metrics hidden">
+        <summary class="process-metrics__summary">
+          <span>Procesos de PSM Console</span>
+          <small>CPU, memoria y funciones internas</small>
+        </summary>
+        <div class="process-metrics__body" aria-live="polite">
+          <div class="process-metrics__header">
+            <strong>Consumo actual</strong>
+            <button id="refresh-process-metrics" class="secondary-button icon-button" type="button" aria-label="Actualizar procesos" title="Actualizar procesos">
+              ${renderIcon('refresh')}
+            </button>
           </div>
-          <button id="refresh-process-metrics" class="secondary-button icon-button" type="button" aria-label="Actualizar procesos" title="Actualizar procesos">
-            ${renderIcon('refresh')}
-          </button>
+          <div id="process-metrics-list" class="process-metrics__grid">
+            <p class="empty-state empty-state--compact">Abre este detalle para revisar los subprocesos.</p>
+          </div>
         </div>
-        <div id="process-metrics-list" class="process-metrics__grid">
-          <p class="empty-state empty-state--compact">Abre Logs para revisar los subprocesos de PSM Console.</p>
-        </div>
-      </section>
+      </details>
       <div class="console-shell">
         <button id="export-console" class="console-export icon-button" type="button" aria-label="Exportar consola" title="Exportar consola">
           ${renderIcon('download')}
@@ -1087,34 +1090,13 @@ async function renderGeneralView(): Promise<void> {
 
   setContent(renderGeneralViewHtml({
     networkFreshness,
-    cards: [
-      {
-          title: 'SteamCMD',
-          value: 'Instalado',
-          detail: 'Cliente listo para actualizar y validar archivos.',
-          target: 'logs',
-          ...createSummaryCardState('ok')
-      },
+    primaryCards: [
       {
           title: 'Servidor',
           value: serverState.value,
           detail: serverState.detail,
           target: serverState.state.tone === 'error' ? 'logs' : 'server',
           ...serverState.state
-      },
-      {
-          title: 'Configuracion',
-          value: 'Activa',
-          detail: latestSummary?.configurationPath ?? 'PalWorldSettings.ini disponible.',
-          target: 'server',
-          ...createSummaryCardState('ok')
-      },
-      {
-          title: 'Puerto',
-          value: port ? `UDP ${port}` : 'Sin validar',
-          detail: port ? 'Puerto leido desde la configuracion activa.' : 'No se encontro PublicPort en el INI activo.',
-          target: 'network',
-          ...portState
       },
       {
           id: 'general-local-play-card',
@@ -1141,6 +1123,29 @@ async function renderGeneralView(): Promise<void> {
           target: 'admin',
           adminTab: 'players',
           ...playersState.state
+      }
+    ],
+    supportCards: [
+      {
+          title: 'SteamCMD',
+          value: 'Instalado',
+          detail: 'Cliente listo para actualizar y validar archivos.',
+          target: 'logs',
+          ...createSummaryCardState('ok')
+      },
+      {
+          title: 'Configuracion',
+          value: 'Activa',
+          detail: latestSummary?.configurationPath ?? 'PalWorldSettings.ini disponible.',
+          target: 'server',
+          ...createSummaryCardState('ok')
+      },
+      {
+          title: 'Puerto',
+          value: port ? `UDP ${port}` : 'Sin validar',
+          detail: port ? 'Puerto leido desde la configuracion activa.' : 'No se encontro PublicPort en el INI activo.',
+          target: 'network',
+          ...portState
       },
       {
           title: 'Backups',
@@ -1887,6 +1892,7 @@ async function renderBackupsView(): Promise<void> {
 
     setContent(renderBackupsViewHtml(summary));
     bindBackupPolicyControls();
+    bindBackupFilters();
     renderBackupsFooter();
     document.querySelectorAll<HTMLInputElement>('[data-backup-select]').forEach((checkbox) => {
       checkbox.addEventListener('change', updateSelectedBackupsState);
@@ -1896,6 +1902,25 @@ async function renderBackupsView(): Promise<void> {
     const message = error instanceof Error ? error.message : String(error);
     renderSimpleView('Backups', `No se pudo leer el estado de backups. ${message}`);
   }
+}
+
+function bindBackupFilters(): void {
+  const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-backup-filter]'));
+  const rows = Array.from(document.querySelectorAll<HTMLElement>('[data-backup-row]'));
+
+  buttons.forEach((button) => {
+    button.addEventListener('click', () => {
+      const filter = button.dataset['backupFilter'] ?? 'all';
+      buttons.forEach((candidate) => {
+        const active = candidate === button;
+        candidate.classList.toggle('segmented-filter__button--active', active);
+        candidate.setAttribute('aria-pressed', active ? 'true' : 'false');
+      });
+      rows.forEach((row) => {
+        row.classList.toggle('hidden', filter !== 'all' && row.dataset['backupKind'] !== filter);
+      });
+    });
+  });
 }
 
 function bindBackupPolicyControls(): void {
@@ -2549,7 +2574,7 @@ function renderSimpleView(title: string, message: string): void {
 }
 
 function updateReadyChrome(): void {
-  const shouldHidePreflightChrome = isOperationalStatus(latestStatus) && !navigationState.is('logs');
+  const shouldHidePreflightChrome = isOperationalStatus(latestStatus);
   panelStatusHeader?.classList.toggle('hidden', shouldHidePreflightChrome);
   progressBar?.parentElement?.classList.toggle('hidden', shouldHidePreflightChrome);
 }
@@ -2865,6 +2890,9 @@ function renderFirewallStatusView(
   firewall: FirewallStatusDto,
   queryPortStatus: PalworldQueryPortStatusDto | null
 ): void {
+  const shouldOpenTechnicalDetails =
+    firewall.local.state !== 'READY' || queryPortStatus?.state === 'IN_USE';
+
   setContent(`
       <div class="view-stack view-stack--scroll">
         <div class="view-header view-header--contained">
@@ -2876,22 +2904,30 @@ function renderFirewallStatusView(
             <button id="refresh-firewall" class="secondary-button icon-button" type="button" aria-label="Actualizar diagnostico" title="Actualizar diagnostico">
               ${renderIcon('refresh')}
             </button>
-            <button id="apply-firewall" class="primary-button primary-button--warning button-with-icon" type="button" ${firewall.local.state === 'READY' ? 'disabled' : ''}>
-              ${renderIcon('server')}
-              <span>Configurar Windows</span>
-            </button>
+            ${firewall.local.state === 'READY'
+              ? ''
+              : `<button id="apply-firewall" class="primary-button primary-button--warning button-with-icon" type="button">
+                  ${renderIcon('server')}
+                  <span>Configurar Windows</span>
+                </button>`}
           </div>
         </div>
         <section class="summary-grid summary-grid--ready network-state-grid">
           ${renderNetworkStateCard('Windows local', createWindowsLocalSummary(firewall))}
           ${renderNetworkStateCard('Acceso externo', createExternalAccessSummary(firewall))}
         </section>
-        <section class="firewall-layout">
-          ${renderFirewallSection('PC local', firewall.local.message, firewall.local.ports)}
-          ${renderSteamQueryPortDiagnostics(queryPortStatus)}
-          ${renderFirewallSection('Acceso externo', firewall.external.message, firewall.external.ports)}
-          ${renderNetworkDiagnostics(firewall.external.network)}
-        </section>
+        <details class="technical-disclosure" ${shouldOpenTechnicalDetails ? 'open' : ''}>
+          <summary>
+            <span>Detalle tecnico</span>
+            <small>Puertos, Steam Query y diagnostico externo</small>
+          </summary>
+          <section class="firewall-layout">
+            ${renderFirewallSection('PC local', firewall.local.message, firewall.local.ports)}
+            ${renderSteamQueryPortDiagnostics(queryPortStatus)}
+            ${renderFirewallSection('Acceso externo', firewall.external.message, firewall.external.ports)}
+            ${renderNetworkDiagnostics(firewall.external.network)}
+          </section>
+        </details>
         <div id="firewall-confirmation" class="inline-confirm hidden" role="alertdialog" aria-label="Confirmar configuracion del Firewall de Windows">
           <span>Se crearan reglas de entrada en el Firewall de Windows para los puertos activos. Windows puede pedir permisos de administrador.</span>
           <button id="confirm-firewall" class="primary-button primary-button--warning button-with-icon" type="button">
@@ -3990,7 +4026,7 @@ function showToast(message: string, tone: 'info' | 'error' = 'info'): void {
   toast.className = `toast toast--${tone}`;
   toast.setAttribute('role', tone === 'error' ? 'alert' : 'status');
   toast.textContent = message;
-  toastRegion.append(toast);
+  toastRegion.replaceChildren(toast);
 
   window.setTimeout(() => {
     toast.classList.add('toast--leaving');
