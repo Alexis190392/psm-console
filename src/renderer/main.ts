@@ -265,6 +265,8 @@ let consolePaused = false;
 let latestPersistentLogsSignature = '';
 let settingInfoDismissBound = false;
 let latestServerSettings: ParsedPalworldSettings | null = null;
+let latestServerSettingsPath: string | null = null;
+let serverConfigurationDraft: { path: string; content: string } | null = null;
 let configurationAutoCreateAttempted = false;
 let pendingAction: 'steamcmd' | 'server' | 'config' | null = null;
 const navigationState = new NavigationState();
@@ -384,9 +386,8 @@ if (!palcmApi) {
         }
       }
 
-      if (navigationState.is('server') && nextView !== 'server' && hasServerPendingChanges()) {
-        showLeaveServerConfirmation(nextView);
-        return;
+      if (navigationState.is('server') && nextView !== 'server') {
+        rememberServerConfigurationDraft();
       }
 
       navigationState.set(nextView);
@@ -555,8 +556,8 @@ async function createDefaultConfiguration(options: { automatic?: boolean } = {})
 }
 
 async function startPalworldServer(): Promise<void> {
-  if (!palcmApi || !latestActions?.canStartServer || !isLanReadyForServerStart()) {
-    appendConsoleLine('No se inicio el servidor: falta confirmar el puerto UDP de jugadores en Windows.');
+  if (!palcmApi || !latestActions?.canStartServer) {
+    appendConsoleLine('No se inicio el servidor: el estado actual no permite iniciar desde la app.');
     return;
   }
 
@@ -909,7 +910,7 @@ function updateStartServerButton(actions: AllowedActionsDto): void {
     return;
   }
 
-  const canStart = actions.canStartServer && isLanReadyForServerStart();
+  const canStart = actions.canStartServer;
   startServerAction.disabled = !canStart;
   startServerAction.textContent = canStart ? 'Iniciar servidor' : 'Servidor bloqueado';
   updateSidebarRuntimeStatus(canStart ? 'ready' : 'blocked', canStart ? 'Listo para iniciar' : 'Bloqueado');
@@ -942,19 +943,6 @@ function refreshStartButtonState(): void {
   if (latestActions) {
     updateStartServerButton(latestActions);
   }
-}
-
-function isLanReadyForServerStart(): boolean {
-  if (!latestConfiguredPort) {
-    return false;
-  }
-
-  if (latestFirewallStatus) {
-    const playerPort = getPlayerLocalPortCheck(latestFirewallStatus);
-    return playerPort?.state === 'READY';
-  }
-
-  return latestLocalAddresses.length > 0;
 }
 
 function isOperationalStatus(status: ApplicationStatus): boolean {
@@ -1693,6 +1681,7 @@ async function renderServerConfigurationView(): Promise<void> {
     const file = await palcmApi.config.read();
     const parsed = parsePalworldSettings(file.content);
     latestServerSettings = parsed;
+    latestServerSettingsPath = file.path;
     setContent(`
       <div class="view-stack">
         <div class="view-header view-header--contained">
@@ -1719,8 +1708,10 @@ async function renderServerConfigurationView(): Promise<void> {
     `);
     renderServerFooter(parsed);
     bindSettingsControls(parsed);
+    restoreServerConfigurationDraft(parsed, file.path);
   } catch (error) {
     latestServerSettings = null;
+    latestServerSettingsPath = null;
     appFooter?.classList.add('hidden');
     rootElement.classList.remove('app--footer-visible', 'app--wide');
     const message = error instanceof Error ? error.message : String(error);
@@ -1752,6 +1743,7 @@ async function saveConfiguration(parsed?: ParsedPalworldSettings): Promise<void>
     content
   });
   await pollOperation(accepted.operationId);
+  clearServerConfigurationDraft();
   showToast('Configuracion guardada');
   navigationState.set('server');
   await refreshState();
@@ -1793,6 +1785,7 @@ async function restoreDefaultConfiguration(): Promise<void> {
   renderActiveView();
   const accepted = await palcmApi.config.restoreDefault({ confirmed: true });
   await pollOperation(accepted.operationId);
+  clearServerConfigurationDraft();
   showToast('Configuracion default restaurada');
   navigationState.set('server');
   await refreshState();
@@ -3956,6 +3949,8 @@ function updateServerDirtyState(parsed: ParsedPalworldSettings): void {
     discardButton.disabled = !state.hasChanges;
   }
 
+  rememberServerConfigurationDraft(parsed, state);
+
   if (!footerMessage) {
     return;
   }
@@ -3968,6 +3963,95 @@ function updateServerDirtyState(parsed: ParsedPalworldSettings): void {
   footerMessage.textContent = state.editorChanged
     ? 'INI avanzado modificado manualmente: guarda para aplicar el archivo.'
     : 'Sin cambios pendientes.';
+}
+
+function rememberServerConfigurationDraft(
+  parsed = latestServerSettings,
+  state?: { hasChanges: boolean }
+): void {
+  if (!parsed) {
+    return;
+  }
+
+  const path = latestServerSettingsPath ?? latestSummary?.configurationPath;
+  const editor = document.querySelector<HTMLTextAreaElement>('#config-editor');
+
+  if (!path || !editor) {
+    return;
+  }
+
+  const dirtyState = state ?? getServerDirtyState(parsed);
+
+  if (!dirtyState.hasChanges) {
+    return;
+  }
+
+  serverConfigurationDraft = {
+    path,
+    content: editor.value
+  };
+}
+
+function clearServerConfigurationDraft(): void {
+  serverConfigurationDraft = null;
+}
+
+function restoreServerConfigurationDraft(parsed: ParsedPalworldSettings, path: string): void {
+  if (!serverConfigurationDraft || serverConfigurationDraft.path !== path) {
+    return;
+  }
+
+  const editor = document.querySelector<HTMLTextAreaElement>('#config-editor');
+
+  if (!editor) {
+    return;
+  }
+
+  editor.value = serverConfigurationDraft.content;
+
+  try {
+    const draft = parsePalworldSettings(serverConfigurationDraft.content);
+    draft.settings.forEach((setting) => {
+      applySettingControlValue(setting.key, setting.value);
+    });
+  } catch {
+    // Si el usuario edito manualmente un INI invalido, conservamos el texto avanzado
+    // para que pueda corregirlo sin perder el borrador.
+  }
+
+  updateServerDirtyState(parsed);
+}
+
+function applySettingControlValue(key: string, value: string): void {
+  const definition = getSettingDefinition(key, value);
+  const unquotedValue = unquoteSettingValue(value);
+
+  if (definition.kind === 'boolean') {
+    const button = document.querySelector<HTMLButtonElement>(`button[data-setting-key="${cssEscape(key)}"]`);
+    const state = button?.querySelector<HTMLElement>('.setting-toggle__state');
+    const isChecked = unquotedValue.toLowerCase() === 'true';
+
+    if (!button) {
+      return;
+    }
+
+    button.setAttribute('aria-checked', isChecked ? 'true' : 'false');
+    if (state) {
+      state.textContent = isChecked ? 'Activo' : 'Inactivo';
+    }
+    return;
+  }
+
+  const control = document.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-setting-key="${cssEscape(key)}"]`);
+  const range = document.querySelector<HTMLInputElement>(`input[data-range-key="${cssEscape(key)}"]`);
+
+  if (control) {
+    control.value = unquotedValue;
+  }
+
+  if (range) {
+    range.value = unquotedValue;
+  }
 }
 
 function discardServerChanges(parsed: ParsedPalworldSettings): void {
@@ -4009,40 +4093,9 @@ function discardServerChanges(parsed: ParsedPalworldSettings): void {
   }
 
   closeSettingInfoPanels();
+  clearServerConfigurationDraft();
   updateServerDirtyState(parsed);
   showToast('Cambios descartados');
-}
-
-function showLeaveServerConfirmation(nextView: string): void {
-  if (!appFooter) {
-    navigationState.set(nextView);
-    renderActiveView();
-    return;
-  }
-
-  appFooter.classList.remove('hidden');
-  appFooter.classList.add('app-footer--confirm');
-  appFooter.innerHTML = renderInlineConfirm({
-    message: 'Hay cambios sin guardar en la configuracion. Si sales ahora no se aplicaran al INI.',
-    actions: [
-      { id: 'stay-server-config', label: 'Seguir editando', tone: 'secondary' },
-      { id: 'leave-server-config', label: 'Salir sin guardar', tone: 'danger' }
-    ]
-  });
-
-  document.querySelector<HTMLButtonElement>('#stay-server-config')?.addEventListener('click', () => {
-    appFooter.classList.remove('app-footer--confirm');
-    if (latestServerSettings) {
-      renderServerFooter(latestServerSettings);
-    }
-  });
-
-  document.querySelector<HTMLButtonElement>('#leave-server-config')?.addEventListener('click', () => {
-    appFooter.classList.remove('app-footer--confirm');
-    latestServerSettings = null;
-    navigationState.set(nextView);
-    renderActiveView();
-  });
 }
 
 function showToast(message: string, tone: 'info' | 'error' = 'info'): void {
