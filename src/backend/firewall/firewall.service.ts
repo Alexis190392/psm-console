@@ -370,12 +370,19 @@ async function runPowerShell(script: string): Promise<string> {
 }
 
 async function runPowerShellElevated(script: string): Promise<void> {
+  await runPowerShellWithTimeout(
+    buildElevatedPowerShellLauncher(script),
+    ELEVATED_POWERSHELL_TIMEOUT_MS
+  );
+}
+
+export function buildElevatedPowerShellLauncher(script: string): string {
   const encoded = Buffer.from(script, 'utf16le').toString('base64');
-  const launcher = `
-$process = Start-Process -FilePath powershell.exe -Verb RunAs -Wait -PassThru -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-EncodedCommand','${encoded}'
+
+  return `
+$process = Start-Process -FilePath powershell.exe -Verb RunAs -WindowStyle Hidden -Wait -PassThru -ArgumentList '-NoProfile','-NonInteractive','-WindowStyle','Hidden','-ExecutionPolicy','Bypass','-EncodedCommand','${encoded}'
 if ($process.ExitCode -ne 0) { throw "Elevated PowerShell exited with code $($process.ExitCode)" }
 `;
-  await runPowerShellWithTimeout(launcher, ELEVATED_POWERSHELL_TIMEOUT_MS);
 }
 
 async function runPowerShellWithTimeout(script: string, timeout: number): Promise<string> {

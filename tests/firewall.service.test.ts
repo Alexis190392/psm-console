@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildElevatedPowerShellLauncher,
   buildFirewallCheckScript,
   createFirewallCheckErrorMessage,
   resolveFirewallPortRequirements
@@ -41,5 +42,13 @@ describe('FirewallService', () => {
     expect(createFirewallCheckErrorMessage({ killed: true })).toBe(
       'Windows Firewall no respondio dentro de 8 segundos. Reintenta el diagnostico.'
     );
+  });
+
+  it('keeps UAC elevation visible but hides the PowerShell console afterwards', () => {
+    const launcher = buildElevatedPowerShellLauncher('Write-Output "test"');
+
+    expect(launcher).toContain('-Verb RunAs');
+    expect(launcher).toContain('-WindowStyle Hidden');
+    expect(launcher).toContain("'-WindowStyle','Hidden'");
   });
 });
