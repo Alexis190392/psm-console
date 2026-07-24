@@ -19,6 +19,10 @@ export interface PalworldStopRequestDto {
   confirmed: boolean;
 }
 
+export interface PalworldRestartRequestDto {
+  confirmed: boolean;
+}
+
 export type PalworldQueryPortState = 'AVAILABLE' | 'IN_USE' | 'UNSUPPORTED' | 'UNKNOWN';
 
 export interface PalworldQueryPortStatusDto {

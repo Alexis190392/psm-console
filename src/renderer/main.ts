@@ -269,6 +269,7 @@ let latestServerSettingsPath: string | null = null;
 let serverConfigurationDraft: { path: string; content: string } | null = null;
 let configurationAutoCreateAttempted = false;
 let pendingAction: 'steamcmd' | 'server' | 'config' | null = null;
+let activeCancellableOperationId: string | null = null;
 const navigationState = new NavigationState();
 let latestStatus: ApplicationStatus = ApplicationStatus.BOOTSTRAPPING;
 let latestActions: AllowedActionsDto | null = null;
@@ -615,6 +616,7 @@ async function pollOperation(
   }
 
   let operation: OperationProgressDto;
+  activeCancellableOperationId = operationId;
 
   let shouldContinuePolling = true;
 
@@ -634,6 +636,8 @@ async function pollOperation(
     await wait(500);
   }
 
+  activeCancellableOperationId = null;
+  updateFooterChrome();
   if (options.refreshStatusWhileRunning) {
     await refreshStatusChrome();
   }
@@ -645,6 +649,46 @@ function renderOperation(operation: OperationProgressDto): void {
 
   if (progressBar) {
     progressBar.style.width = `${String(operation.percent)}%`;
+  }
+
+  if (operation.canCancel && !['COMPLETED', 'FAILED', 'CANCELLED'].includes(operation.status)) {
+    renderOperationCancellationFooter(operation);
+  }
+}
+
+function renderOperationCancellationFooter(operation: OperationProgressDto): void {
+  if (!appFooter) {
+    return;
+  }
+
+  rootElement.classList.add('app--footer-visible');
+  appFooter.classList.remove('hidden', 'app-footer--confirm');
+  appFooter.innerHTML = `
+    <span class="app-footer__message">${escapeHtml(operation.message)}</span>
+    <button id="cancel-running-operation" class="secondary-button secondary-button--warning button-with-icon" type="button">
+      ${renderIcon('x')}
+      <span>Cancelar</span>
+    </button>
+  `;
+  document.querySelector<HTMLButtonElement>('#cancel-running-operation')?.addEventListener('click', () => {
+    void cancelRunningOperation();
+  });
+}
+
+async function cancelRunningOperation(): Promise<void> {
+  if (!palcmApi || !activeCancellableOperationId) {
+    return;
+  }
+
+  const operationId = activeCancellableOperationId;
+  activeCancellableOperationId = null;
+  try {
+    const operation = await palcmApi.operation.cancel({ operationId });
+    renderOperation(operation);
+    showToast('Cancelacion solicitada');
+  } catch (error) {
+    activeCancellableOperationId = operationId;
+    showToast(error instanceof Error ? error.message : String(error), 'error');
   }
 }
 
@@ -1957,6 +2001,12 @@ function renderAdminActiveTab(adminStatus: PalworldAdminStatusDto, playersStatus
 
 function renderAdminGeneralTab(adminStatus: PalworldAdminStatusDto): string {
   return `
+    <div class="admin-runtime-actions">
+      <button id="restart-server" class="secondary-button button-with-icon" type="button">
+        ${renderIcon('refresh')}
+        <span>Reiniciar servidor</span>
+      </button>
+    </div>
     <div class="admin-snapshot-grid">
       ${renderAdminSnapshotCard('Servidor', 'Info oficial del servidor', adminStatus.info)}
       ${renderAdminSnapshotCard('Metricas', 'Rendimiento reportado por REST', adminStatus.metrics)}
@@ -2094,6 +2144,7 @@ function renderAdminSnapshotCard(
 }
 
 function bindAdminControls(): void {
+  document.querySelector<HTMLButtonElement>('#restart-server')?.addEventListener('click', showServerRestartConfirmation);
   document.querySelectorAll<HTMLFormElement>('[data-admin-form]').forEach((form) => {
     form.addEventListener('submit', (event) => {
       event.preventDefault();
@@ -2106,6 +2157,39 @@ function bindAdminControls(): void {
       showAdminConfirmation(form, submitter);
     });
   });
+}
+
+function showServerRestartConfirmation(): void {
+  if (!appFooter) {
+    return;
+  }
+
+  rootElement.classList.add('app--footer-visible');
+  appFooter.classList.remove('hidden');
+  appFooter.classList.add('app-footer--confirm');
+  appFooter.innerHTML = renderInlineConfirm({
+    message: 'Se detendra la instancia actual y se iniciara nuevamente cuando Windows confirme el cierre.',
+    actions: [
+      { id: 'confirm-server-restart', label: 'Reiniciar', tone: 'warning' },
+      { id: 'cancel-server-restart', label: 'Cancelar', tone: 'secondary' }
+    ]
+  });
+  document.querySelector<HTMLButtonElement>('#confirm-server-restart')?.addEventListener('click', () => {
+    void restartServer();
+  });
+  document.querySelector<HTMLButtonElement>('#cancel-server-restart')?.addEventListener('click', updateFooterChrome);
+}
+
+async function restartServer(): Promise<void> {
+  if (!palcmApi) {
+    return;
+  }
+
+  navigationState.set('logs');
+  renderActiveView();
+  const accepted = await palcmApi.server.restart({ confirmed: true });
+  await pollOperation(accepted.operationId, { refreshStatusWhileRunning: true });
+  await refreshState();
 }
 
 function showAdminConfirmation(form: HTMLFormElement, submitter: HTMLButtonElement | null): void {
@@ -2771,6 +2855,10 @@ function renderServerFooter(parsed: ParsedPalworldSettings): void {
       ${renderIcon('refresh')}
       <span>Actualizar</span>
     </button>
+    <button id="server-maintenance" class="secondary-button button-with-icon" type="button" ${isServerUpdateBlocked() ? 'disabled' : ''}>
+      ${renderIcon('settings')}
+      <span>Mantenimiento</span>
+    </button>
     <button id="discard-config" class="secondary-button button-with-icon" type="button" disabled>
       ${renderIcon('undo')}
       <span>Descartar</span>
@@ -2791,7 +2879,62 @@ function renderServerFooter(parsed: ParsedPalworldSettings): void {
     showRestoreDefaultConfirmation
   );
   document.querySelector<HTMLButtonElement>('#update-server')?.addEventListener('click', showServerUpdateConfirmation);
+  document.querySelector<HTMLButtonElement>('#server-maintenance')?.addEventListener('click', showMaintenanceMenu);
   updateServerDirtyState(parsed);
+}
+
+function showMaintenanceMenu(): void {
+  if (!appFooter) {
+    return;
+  }
+
+  appFooter.classList.remove('hidden');
+  appFooter.classList.add('app-footer--confirm');
+  appFooter.innerHTML = renderInlineConfirm({
+    message: 'Selecciona el componente que quieres volver a descargar y validar desde su fuente oficial.',
+    actions: [
+      { id: 'repair-steamcmd', label: 'SteamCMD', tone: 'secondary' },
+      { id: 'repair-server', label: 'Servidor', tone: 'warning' },
+      { id: 'cancel-maintenance', label: 'Cancelar', tone: 'secondary' }
+    ]
+  });
+  document.querySelector<HTMLButtonElement>('#repair-steamcmd')?.addEventListener('click', () => {
+    void repairSteamCmd();
+  });
+  document.querySelector<HTMLButtonElement>('#repair-server')?.addEventListener('click', () => {
+    void repairServerInstallation();
+  });
+  document.querySelector<HTMLButtonElement>('#cancel-maintenance')?.addEventListener('click', () => {
+    void renderServerConfigurationView();
+  });
+}
+
+async function repairSteamCmd(): Promise<void> {
+  if (!palcmApi) {
+    return;
+  }
+
+  navigationState.set('logs');
+  renderActiveView();
+  const accepted = await palcmApi.steamCmd.repair({ confirmed: true });
+  await pollOperation(accepted.operationId);
+  showToast('Reparacion de SteamCMD finalizada');
+  navigationState.set('server');
+  await refreshState();
+}
+
+async function repairServerInstallation(): Promise<void> {
+  if (!palcmApi) {
+    return;
+  }
+
+  navigationState.set('logs');
+  renderActiveView();
+  const accepted = await palcmApi.server.repair({ confirmed: true });
+  await pollOperation(accepted.operationId);
+  showToast('Reparacion del servidor finalizada');
+  navigationState.set('server');
+  await refreshState();
 }
 
 function isServerUpdateBlocked(): boolean {

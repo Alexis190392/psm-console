@@ -4,7 +4,10 @@ import { requiresUserConfirmation } from '../src/shared/contracts/confirmation-p
 describe('confirmation policy', () => {
   it('requires confirmation before downloads, server actions, firewall and backups', () => {
     expect(requiresUserConfirmation('steamcmd:install')).toBe(true);
+    expect(requiresUserConfirmation('steamcmd:repair')).toBe(true);
     expect(requiresUserConfirmation('server:install')).toBe(true);
+    expect(requiresUserConfirmation('server:repair')).toBe(true);
+    expect(requiresUserConfirmation('server:restart')).toBe(true);
     expect(requiresUserConfirmation('admin:execute-action')).toBe(true);
     expect(requiresUserConfirmation('config:restore-default')).toBe(true);
     expect(requiresUserConfirmation('firewall:create-rule')).toBe(true);
@@ -20,9 +23,7 @@ describe('confirmation policy', () => {
     expect(requiresUserConfirmation('network:get-public-address')).toBe(false);
   });
 
-  it('does not advertise confirmations for unavailable actions', () => {
-    expect(requiresUserConfirmation('steamcmd:repair')).toBe(false);
-    expect(requiresUserConfirmation('server:repair')).toBe(false);
-    expect(requiresUserConfirmation('server:restart')).toBe(false);
+  it('does not require a second confirmation to cancel an active operation', () => {
+    expect(requiresUserConfirmation('operation:cancel')).toBe(false);
   });
 });

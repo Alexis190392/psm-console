@@ -20,6 +20,8 @@ describe('IPC channel surface', () => {
 
   it('keeps server maintenance actions behind concrete domain channels', () => {
     expect(ipcChannels.serverUpdate).toBe('server:update');
+    expect(ipcChannels.serverRepair).toBe('server:repair');
+    expect(ipcChannels.serverRestart).toBe('server:restart');
     expect(ipcChannels.serverGetQueryPortStatus).toBe('server:get-query-port-status');
     expect(ipcChannels.serverStopQueryPortOwner).toBe('server:stop-query-port-owner');
   });
@@ -64,12 +66,8 @@ describe('IPC channel surface', () => {
     }
   });
 
-  it('does not advertise maintenance channels before they are implemented', () => {
-    const channels = Object.values(ipcChannels);
-
-    expect(channels).not.toContain('operation:cancel');
-    expect(channels).not.toContain('steamcmd:repair');
-    expect(channels).not.toContain('server:repair');
-    expect(channels).not.toContain('server:restart');
+  it('exposes cancellable maintenance through explicit channels', () => {
+    expect(ipcChannels.operationCancel).toBe('operation:cancel');
+    expect(ipcChannels.steamCmdRepair).toBe('steamcmd:repair');
   });
 });

@@ -1,9 +1,12 @@
 export const confirmationRequiredActions = [
   'steamcmd:install',
+  'steamcmd:repair',
   'server:install',
   'server:update',
+  'server:repair',
   'server:start',
   'server:stop',
+  'server:restart',
   'admin:execute-action',
   'config:save',
   'config:create-default',

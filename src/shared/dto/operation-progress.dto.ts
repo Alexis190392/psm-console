@@ -15,3 +15,7 @@ export interface OperationProgressDto {
 export interface OperationAcceptedDto {
   operationId: string;
 }
+
+export interface OperationCancelRequestDto {
+  operationId: string;
+}

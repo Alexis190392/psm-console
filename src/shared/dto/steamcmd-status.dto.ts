@@ -11,3 +11,7 @@ export interface SteamCmdStatusDto {
 export interface SteamCmdInstallRequestDto {
   confirmed: boolean;
 }
+
+export interface SteamCmdRepairRequestDto {
+  confirmed: boolean;
+}

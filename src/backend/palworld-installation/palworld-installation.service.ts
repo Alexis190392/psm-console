@@ -6,10 +6,15 @@ import { OperationManagerService } from '../operations/operation-manager.service
 import { PortablePathService } from '../portable-path/portable-path.service';
 import { PortableStateService } from '../portable-state/portable-state.service';
 import { SteamCmdService } from '../steamcmd/steamcmd.service';
+import {
+  PalworldMaintenanceSnapshotService,
+  type MaintenanceSnapshot
+} from '../palworld-maintenance/palworld-maintenance-snapshot.service';
 import type { OperationAcceptedDto } from '../../shared/dto/operation-progress.dto';
 import type {
   PalworldInstallationStatusDto,
   PalworldInstallRequestDto,
+  PalworldRepairRequestDto,
   PalworldUpdateRequestDto
 } from '../../shared/dto/palworld-installation-status.dto';
 
@@ -26,7 +31,8 @@ export class PalworldInstallationService {
     private readonly portablePathService: PortablePathService,
     private readonly operationManagerService: OperationManagerService,
     private readonly steamCmdService: SteamCmdService,
-    private readonly portableStateService: PortableStateService
+    private readonly portableStateService: PortableStateService,
+    private readonly maintenanceSnapshotService: PalworldMaintenanceSnapshotService
   ) {}
 
   getStatus(): PalworldInstallationStatusDto {
@@ -115,6 +121,25 @@ export class PalworldInstallationService {
     };
   }
 
+  repair(request: PalworldRepairRequestDto, getServerState?: () => string): OperationAcceptedDto {
+    if (!request.confirmed) {
+      throw new Error('PALWORLD_REPAIR_REQUIRES_CONFIRMATION');
+    }
+
+    this.assertServerReadyAndStopped(getServerState);
+
+    const operation = this.operationManagerService.create(
+      'Reparacion de Palworld Dedicated Server',
+      'Preparando validacion completa de archivos con SteamCMD.'
+    );
+
+    void this.runServerAppUpdate(operation.operationId, 'repair');
+
+    return {
+      operationId: operation.operationId
+    };
+  }
+
   private async installAsync(operationId: string): Promise<void> {
     await this.runServerAppUpdate(operationId, 'install');
   }
@@ -123,18 +148,34 @@ export class PalworldInstallationService {
     await this.runServerAppUpdate(operationId, 'update');
   }
 
-  private async runServerAppUpdate(operationId: string, mode: 'install' | 'update'): Promise<void> {
+  private async runServerAppUpdate(
+    operationId: string,
+    mode: 'install' | 'update' | 'repair'
+  ): Promise<void> {
     const steamCmdExecutable = this.steamCmdService.getStatus().executablePath;
     const installDirectory = this.portablePathService.getPalworldServerRoot();
+    let snapshot: MaintenanceSnapshot | undefined;
 
     try {
+      if (mode !== 'install') {
+        this.operationManagerService.update(operationId, {
+          status: 'RUNNING',
+          percent: 2,
+          message: 'Creando respaldo de mantenimiento antes de modificar el servidor.'
+        });
+        snapshot = await this.maintenanceSnapshotService.create();
+        this.operationManagerService.appendLog(operationId, `Respaldo de mantenimiento: ${snapshot.root}`);
+      }
+
       this.operationManagerService.update(operationId, {
         status: 'RUNNING',
         percent: 5,
         message:
           mode === 'install'
             ? 'Ejecutando SteamCMD para descargar Palworld Dedicated Server.'
-            : 'Ejecutando SteamCMD para actualizar Palworld Dedicated Server.'
+            : mode === 'update'
+              ? 'Ejecutando SteamCMD para actualizar Palworld Dedicated Server.'
+              : 'Ejecutando SteamCMD para reparar y validar Palworld Dedicated Server.'
       });
       this.operationManagerService.appendLog(
         operationId,
@@ -143,14 +184,22 @@ export class PalworldInstallationService {
 
       const result = await this.runSteamCmdWithRetry(operationId, steamCmdExecutable, installDirectory);
 
+      if (this.operationManagerService.isCancelled(operationId)) {
+        throw new Error('OPERATION_CANCELLED');
+      }
+
       if (result.exitCode !== 0) {
         throw new Error(`SteamCMD termino con codigo ${String(result.exitCode)}. ${result.output}`.trim());
       }
 
-      if (!existsSync(join(installDirectory, 'PalServer.exe'))) {
-        throw new Error('PALSERVER_EXE_NOT_FOUND_AFTER_INSTALL');
-      }
+      this.maintenanceSnapshotService.validate(snapshot);
       this.portableStateService.rememberServer(installDirectory, join(installDirectory, 'PalServer.exe'));
+      if (snapshot) {
+        this.operationManagerService.appendLog(
+          operationId,
+          await this.maintenanceSnapshotService.describeCatalogChanges(snapshot)
+        );
+      }
 
       this.operationManagerService.update(operationId, {
         status: 'COMPLETED',
@@ -158,16 +207,44 @@ export class PalworldInstallationService {
         message:
           mode === 'install'
             ? 'Palworld Dedicated Server instalado correctamente.'
-            : 'Palworld Dedicated Server actualizado correctamente.'
+            : mode === 'update'
+              ? 'Palworld Dedicated Server actualizado y validado correctamente.'
+              : 'Palworld Dedicated Server reparado y validado correctamente.'
       });
     } catch (error) {
+      if (snapshot) {
+        this.operationManagerService.appendLog(
+          operationId,
+          'La operacion no finalizo correctamente. Restaurando configuracion y mundo protegidos.'
+        );
+        try {
+          await this.maintenanceSnapshotService.restore(snapshot);
+          this.operationManagerService.appendLog(operationId, 'Rollback de datos completado.');
+        } catch (rollbackError) {
+          this.operationManagerService.appendLog(
+            operationId,
+            `Fallo el rollback de datos: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`
+          );
+        }
+      }
+
+      if (this.operationManagerService.isCancelled(operationId)) {
+        this.operationManagerService.completeCancellation(
+          operationId,
+          'Operacion cancelada. Configuracion y mundo quedaron restaurados.'
+        );
+        return;
+      }
+
       this.operationManagerService.update(operationId, {
         status: 'FAILED',
         percent: 100,
         message:
           mode === 'install'
             ? 'No se pudo instalar Palworld Dedicated Server.'
-            : 'No se pudo actualizar Palworld Dedicated Server.',
+            : mode === 'update'
+              ? 'No se pudo actualizar Palworld Dedicated Server. Se restauraron los datos protegidos.'
+              : 'No se pudo reparar Palworld Dedicated Server. Se restauraron los datos protegidos.',
         error: error instanceof Error ? error.message : String(error)
       });
     }
@@ -179,6 +256,10 @@ export class PalworldInstallationService {
     installDirectory: string
   ): Promise<SteamCmdRunResult> {
     const firstResult = await this.runSteamCmd(operationId, executablePath, installDirectory, 1);
+
+    if (this.operationManagerService.isCancelled(operationId)) {
+      return firstResult;
+    }
 
     if (firstResult.exitCode === 0 || !shouldRetryAfterSteamCmdBootstrap(firstResult.output)) {
       return firstResult;
@@ -222,6 +303,9 @@ export class PalworldInstallationService {
       let lastOutput = '';
       let allOutput = '';
       this.operationManagerService.appendLog(operationId, `Intento ${String(attempt)} de instalacion con SteamCMD.`);
+      this.operationManagerService.registerCancellation(operationId, () => {
+        child.kill();
+      });
 
       const handleOutput = (chunk: Buffer): void => {
         lastOutput = chunk.toString('utf8').trim();
@@ -247,12 +331,29 @@ export class PalworldInstallationService {
       child.stderr.on('data', handleOutput);
       child.on('error', reject);
       child.on('close', (code) => {
+        this.operationManagerService.clearCancellation(operationId);
         resolve({
           exitCode: code,
           output: allOutput || lastOutput
         });
       });
     });
+  }
+
+  private assertServerReadyAndStopped(getServerState?: () => string): void {
+    const status = this.getStatus();
+    if (status.status !== 'READY' || !existsSync(status.executablePath)) {
+      throw new Error('PALWORLD_SERVER_NOT_READY');
+    }
+
+    const runtimeState = getServerState?.();
+    if (runtimeState && ['STARTING', 'RUNNING', 'STOPPING'].includes(runtimeState)) {
+      throw new Error('PALWORLD_MAINTENANCE_REQUIRES_SERVER_STOPPED');
+    }
+
+    if (this.steamCmdService.getStatus().status !== 'READY') {
+      throw new Error('STEAMCMD_NOT_READY');
+    }
   }
 }
 

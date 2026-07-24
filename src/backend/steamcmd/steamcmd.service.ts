@@ -2,14 +2,18 @@ import { Injectable } from '@nestjs/common';
 import { spawn } from 'node:child_process';
 import extract from 'extract-zip';
 import { createWriteStream, existsSync } from 'node:fs';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, rm } from 'node:fs/promises';
 import { get } from 'node:https';
 import { join } from 'node:path';
 import { OperationManagerService } from '../operations/operation-manager.service';
 import { PortablePathService } from '../portable-path/portable-path.service';
 import { PortableStateService } from '../portable-state/portable-state.service';
 import type { OperationAcceptedDto } from '../../shared/dto/operation-progress.dto';
-import type { SteamCmdInstallRequestDto, SteamCmdStatusDto } from '../../shared/dto/steamcmd-status.dto';
+import type {
+  SteamCmdInstallRequestDto,
+  SteamCmdRepairRequestDto,
+  SteamCmdStatusDto
+} from '../../shared/dto/steamcmd-status.dto';
 
 export const STEAMCMD_OFFICIAL_DOWNLOAD_URL =
   'https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip';
@@ -60,14 +64,31 @@ export class SteamCmdService {
       'Preparando descarga oficial de SteamCMD.'
     );
 
-    void this.installAsync(operation.operationId);
+    void this.installAsync(operation.operationId, 'install');
 
     return {
       operationId: operation.operationId
     };
   }
 
-  private async installAsync(operationId: string): Promise<void> {
+  repair(request: SteamCmdRepairRequestDto): OperationAcceptedDto {
+    if (!request.confirmed) {
+      throw new Error('STEAMCMD_REPAIR_REQUIRES_CONFIRMATION');
+    }
+
+    const operation = this.operationManagerService.create(
+      'Reparacion de SteamCMD',
+      'Preparando una copia limpia desde la fuente oficial.'
+    );
+
+    void this.installAsync(operation.operationId, 'repair');
+
+    return {
+      operationId: operation.operationId
+    };
+  }
+
+  private async installAsync(operationId: string, mode: 'install' | 'repair'): Promise<void> {
     const installDirectory = this.portablePathService.getSteamCmdRoot();
     const zipPath = join(installDirectory, 'steamcmd.zip');
 
@@ -75,7 +96,7 @@ export class SteamCmdService {
       this.operationManagerService.update(operationId, {
         status: 'RUNNING',
         percent: 5,
-        message: `Creando carpeta ${installDirectory}`
+        message: `Preparando carpeta ${installDirectory}`
       });
       await mkdir(installDirectory, { recursive: true });
       this.operationManagerService.appendLog(operationId, `mkdir "${installDirectory}"`);
@@ -85,7 +106,8 @@ export class SteamCmdService {
       this.operationManagerService.update(operationId, {
         status: 'RUNNING',
         percent: 85,
-        message: 'Extrayendo SteamCMD.'
+        message: mode === 'repair' ? 'Reemplazando archivos de SteamCMD.' : 'Extrayendo SteamCMD.',
+        canCancel: false
       });
       this.operationManagerService.appendLog(operationId, `extract steamcmd.zip -> "${installDirectory}"`);
       await extract(zipPath, { dir: installDirectory });
@@ -101,13 +123,25 @@ export class SteamCmdService {
       this.operationManagerService.update(operationId, {
         status: 'COMPLETED',
         percent: 100,
-        message: 'SteamCMD descargado y extraido correctamente.'
+        message:
+          mode === 'repair'
+            ? 'SteamCMD reparado e inicializado correctamente.'
+            : 'SteamCMD descargado y extraido correctamente.'
       });
     } catch (error) {
+      await rm(zipPath, { force: true }).catch(() => undefined);
+      if (this.operationManagerService.isCancelled(operationId)) {
+        this.operationManagerService.completeCancellation(
+          operationId,
+          'Operacion cancelada. Se elimino la descarga incompleta.'
+        );
+        return;
+      }
+
       this.operationManagerService.update(operationId, {
         status: 'FAILED',
         percent: 100,
-        message: 'No se pudo instalar SteamCMD.',
+        message: mode === 'repair' ? 'No se pudo reparar SteamCMD.' : 'No se pudo instalar SteamCMD.',
         error: error instanceof Error ? error.message : String(error)
       });
     }
@@ -116,22 +150,38 @@ export class SteamCmdService {
   private async downloadSteamCmdZip(operationId: string, zipPath: string): Promise<void> {
     await new Promise<void>((resolve, reject) => {
       this.operationManagerService.appendLog(operationId, `GET ${STEAMCMD_OFFICIAL_DOWNLOAD_URL}`);
+      let settled = false;
+      let file: ReturnType<typeof createWriteStream> | null = null;
+      const finish = (error?: Error): void => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        this.operationManagerService.clearCancellation(operationId);
+        if (error) {
+          reject(error);
+          return;
+        }
+
+        resolve();
+      };
       const request = get(STEAMCMD_OFFICIAL_DOWNLOAD_URL, (response) => {
         if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
-          reject(new Error(`Redireccion no soportada al descargar SteamCMD: ${response.headers.location}`));
+          finish(new Error(`Redireccion no soportada al descargar SteamCMD: ${response.headers.location}`));
           return;
         }
 
         if (response.statusCode !== 200) {
           const statusCode = response.statusCode ? String(response.statusCode) : 'desconocido';
-          reject(new Error(`SteamCMD respondio HTTP ${statusCode}`));
+          finish(new Error(`SteamCMD respondio HTTP ${statusCode}`));
           return;
         }
 
         this.operationManagerService.appendLog(operationId, `HTTP ${String(response.statusCode)} -> "${zipPath}"`);
         const totalBytes = Number(response.headers['content-length'] ?? 0);
         let downloadedBytes = 0;
-        const file = createWriteStream(zipPath);
+        file = createWriteStream(zipPath);
 
         response.on('data', (chunk: Buffer) => {
           downloadedBytes += chunk.length;
@@ -149,15 +199,23 @@ export class SteamCmdService {
 
         response.pipe(file);
         file.on('finish', () => {
-          file.close(() => {
+          file?.close(() => {
             this.operationManagerService.appendLog(operationId, `download complete "${zipPath}"`);
-            resolve();
+            finish();
           });
         });
-        file.on('error', reject);
+        file.on('error', (error) => {
+          finish(error);
+        });
       });
 
-      request.on('error', reject);
+      this.operationManagerService.registerCancellation(operationId, () => {
+        file?.destroy();
+        request.destroy(new Error('OPERATION_CANCELLED'));
+      });
+      request.on('error', (error) => {
+        finish(error);
+      });
     });
   }
 
@@ -170,6 +228,9 @@ export class SteamCmdService {
       });
 
       let lastOutput = '';
+      this.operationManagerService.registerCancellation(operationId, () => {
+        child.kill();
+      });
 
       const handleOutput = (chunk: Buffer): void => {
         lastOutput = chunk.toString('utf8').trim();
@@ -186,6 +247,12 @@ export class SteamCmdService {
       child.stderr.on('data', handleOutput);
       child.on('error', reject);
       child.on('close', (code) => {
+        this.operationManagerService.clearCancellation(operationId);
+        if (this.operationManagerService.isCancelled(operationId)) {
+          reject(new Error('OPERATION_CANCELLED'));
+          return;
+        }
+
         if (code === 0) {
           resolve();
           return;

@@ -5,6 +5,7 @@ import { OperationManagerService } from '../src/backend/operations/operation-man
 import { PALWORLD_DEDICATED_SERVER_APP_ID, PalworldInstallationService } from '../src/backend/palworld-installation/palworld-installation.service';
 import { PortablePathService } from '../src/backend/portable-path/portable-path.service';
 import { PortableStateService } from '../src/backend/portable-state/portable-state.service';
+import { PalworldMaintenanceSnapshotService } from '../src/backend/palworld-maintenance/palworld-maintenance-snapshot.service';
 import type { SteamCmdService } from '../src/backend/steamcmd/steamcmd.service';
 
 describe('PalworldInstallationService', () => {
@@ -14,6 +15,7 @@ describe('PalworldInstallationService', () => {
     getPath: () => join(portableRoot, 'PalCM.exe')
   });
   const portableStateService = new PortableStateService(portablePathService);
+  const maintenanceSnapshotService = new PalworldMaintenanceSnapshotService(portablePathService);
   const serverRoot = portablePathService.getPalworldServerRoot();
   const steamCmdService = {
     getStatus: () => ({
@@ -34,7 +36,8 @@ describe('PalworldInstallationService', () => {
       portablePathService,
       new OperationManagerService(),
       steamCmdService,
-      portableStateService
+      portableStateService,
+      maintenanceSnapshotService
     );
 
     expect(service.getStatus()).toMatchObject({
@@ -50,7 +53,8 @@ describe('PalworldInstallationService', () => {
       portablePathService,
       new OperationManagerService(),
       steamCmdService,
-      portableStateService
+      portableStateService,
+      maintenanceSnapshotService
     );
 
     expect(service.getStatus().status).toBe('READY');
@@ -61,7 +65,8 @@ describe('PalworldInstallationService', () => {
       portablePathService,
       new OperationManagerService(),
       steamCmdService,
-      portableStateService
+      portableStateService,
+      maintenanceSnapshotService
     );
 
     expect(() => service.install({ confirmed: false })).toThrow('PALWORLD_INSTALL_REQUIRES_CONFIRMATION');
@@ -72,10 +77,23 @@ describe('PalworldInstallationService', () => {
       portablePathService,
       new OperationManagerService(),
       steamCmdService,
-      portableStateService
+      portableStateService,
+      maintenanceSnapshotService
     );
 
     expect(() => service.update({ confirmed: false })).toThrow('PALWORLD_UPDATE_REQUIRES_CONFIRMATION');
+  });
+
+  it('requires explicit confirmation before repairing the server', () => {
+    const service = new PalworldInstallationService(
+      portablePathService,
+      new OperationManagerService(),
+      steamCmdService,
+      portableStateService,
+      maintenanceSnapshotService
+    );
+
+    expect(() => service.repair({ confirmed: false })).toThrow('PALWORLD_REPAIR_REQUIRES_CONFIRMATION');
   });
 
   it('requires the server to be installed before updating', () => {
@@ -83,7 +101,8 @@ describe('PalworldInstallationService', () => {
       portablePathService,
       new OperationManagerService(),
       steamCmdService,
-      portableStateService
+      portableStateService,
+      maintenanceSnapshotService
     );
 
     expect(() => service.update({ confirmed: true })).toThrow('PALWORLD_SERVER_NOT_READY');
@@ -96,7 +115,8 @@ describe('PalworldInstallationService', () => {
       portablePathService,
       new OperationManagerService(),
       steamCmdService,
-      portableStateService
+      portableStateService,
+      maintenanceSnapshotService
     );
 
     expect(() => service.update({ confirmed: true }, () => 'RUNNING')).toThrow(

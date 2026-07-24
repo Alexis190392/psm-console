@@ -70,6 +70,7 @@ export class PortablePathService {
       this.getConfigRoot(),
       join(this.getPortableRoot(), 'backups', 'configuration'),
       join(this.getPortableRoot(), 'backups', 'world'),
+      join(this.getPortableRoot(), 'backups', 'maintenance'),
       this.getLogsRoot()
     ].forEach((directory) => {
       mkdirSync(directory, { recursive: true });

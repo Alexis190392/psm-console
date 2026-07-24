@@ -8,7 +8,11 @@ import type {
   BackupRestoreRequestDto,
   BackupSummaryDto
 } from '../../shared/dto/backup-status.dto';
-import type { OperationAcceptedDto, OperationProgressDto } from '../../shared/dto/operation-progress.dto';
+import type {
+  OperationAcceptedDto,
+  OperationCancelRequestDto,
+  OperationProgressDto
+} from '../../shared/dto/operation-progress.dto';
 import type { FirewallApplyRulesRequestDto, FirewallStatusDto } from '../../shared/dto/firewall-status.dto';
 import type { LogsRecentDto, LogsRecentRequestDto } from '../../shared/dto/log-status.dto';
 import type {
@@ -23,11 +27,13 @@ import type {
 import type {
   PalworldInstallationStatusDto,
   PalworldInstallRequestDto,
+  PalworldRepairRequestDto,
   PalworldUpdateRequestDto
 } from '../../shared/dto/palworld-installation-status.dto';
 import type {
   PalworldQueryPortStatusDto,
   PalworldRuntimeStatusDto,
+  PalworldRestartRequestDto,
   PalworldStartRequestDto,
   PalworldStopQueryPortOwnerRequestDto,
   PalworldStopRequestDto
@@ -38,7 +44,11 @@ import type {
   PalworldAdminStatusDto
 } from '../../shared/dto/palworld-admin.dto';
 import type { PalworldPlayersStatusDto } from '../../shared/dto/palworld-players-status.dto';
-import type { SteamCmdInstallRequestDto, SteamCmdStatusDto } from '../../shared/dto/steamcmd-status.dto';
+import type {
+  SteamCmdInstallRequestDto,
+  SteamCmdRepairRequestDto,
+  SteamCmdStatusDto
+} from '../../shared/dto/steamcmd-status.dto';
 import type { NetworkDiagnosticsDto, PublicAddressRequestDto } from '../../shared/dto/network-diagnostics.dto';
 
 const ipcChannels = {
@@ -46,13 +56,17 @@ const ipcChannels = {
   appGetActions: 'app:get-actions',
   appGetProcessMetrics: 'app:get-process-metrics',
   operationGet: 'operation:get',
+  operationCancel: 'operation:cancel',
   steamCmdGetStatus: 'steamcmd:get-status',
   steamCmdInstall: 'steamcmd:install',
+  steamCmdRepair: 'steamcmd:repair',
   serverGetInstallationStatus: 'server:get-installation-status',
   serverInstall: 'server:install',
   serverUpdate: 'server:update',
+  serverRepair: 'server:repair',
   serverStart: 'server:start',
   serverStop: 'server:stop',
+  serverRestart: 'server:restart',
   serverGetRuntimeStatus: 'server:get-runtime-status',
   serverGetQueryPortStatus: 'server:get-query-port-status',
   serverStopQueryPortOwner: 'server:stop-query-port-owner',
@@ -87,17 +101,21 @@ export interface PalcmApi {
   };
   operation: {
     get: (operationId: string) => Promise<OperationProgressDto>;
+    cancel: (request: OperationCancelRequestDto) => Promise<OperationProgressDto>;
   };
   steamCmd: {
     getStatus: () => Promise<SteamCmdStatusDto>;
     install: (request: SteamCmdInstallRequestDto) => Promise<OperationAcceptedDto>;
+    repair: (request: SteamCmdRepairRequestDto) => Promise<OperationAcceptedDto>;
   };
   server: {
     getInstallationStatus: () => Promise<PalworldInstallationStatusDto>;
     install: (request: PalworldInstallRequestDto) => Promise<OperationAcceptedDto>;
     update: (request: PalworldUpdateRequestDto) => Promise<OperationAcceptedDto>;
+    repair: (request: PalworldRepairRequestDto) => Promise<OperationAcceptedDto>;
     start: (request: PalworldStartRequestDto) => Promise<OperationAcceptedDto>;
     stop: (request: PalworldStopRequestDto) => Promise<OperationAcceptedDto>;
+    restart: (request: PalworldRestartRequestDto) => Promise<OperationAcceptedDto>;
     getRuntimeStatus: () => Promise<PalworldRuntimeStatusDto>;
     getQueryPortStatus: () => Promise<PalworldQueryPortStatusDto>;
     stopQueryPortOwner: (request: PalworldStopQueryPortOwnerRequestDto) => Promise<OperationAcceptedDto>;
@@ -150,12 +168,16 @@ const api: PalcmApi = {
   },
   operation: {
     get: (operationId) =>
-      ipcRenderer.invoke(ipcChannels.operationGet, { operationId }) as Promise<OperationProgressDto>
+      ipcRenderer.invoke(ipcChannels.operationGet, { operationId }) as Promise<OperationProgressDto>,
+    cancel: (request) =>
+      ipcRenderer.invoke(ipcChannels.operationCancel, request) as Promise<OperationProgressDto>
   },
   steamCmd: {
     getStatus: () => ipcRenderer.invoke(ipcChannels.steamCmdGetStatus) as Promise<SteamCmdStatusDto>,
     install: (request) =>
-      ipcRenderer.invoke(ipcChannels.steamCmdInstall, request) as Promise<OperationAcceptedDto>
+      ipcRenderer.invoke(ipcChannels.steamCmdInstall, request) as Promise<OperationAcceptedDto>,
+    repair: (request) =>
+      ipcRenderer.invoke(ipcChannels.steamCmdRepair, request) as Promise<OperationAcceptedDto>
   },
   server: {
     getInstallationStatus: () =>
@@ -164,10 +186,14 @@ const api: PalcmApi = {
       ipcRenderer.invoke(ipcChannels.serverInstall, request) as Promise<OperationAcceptedDto>,
     update: (request) =>
       ipcRenderer.invoke(ipcChannels.serverUpdate, request) as Promise<OperationAcceptedDto>,
+    repair: (request) =>
+      ipcRenderer.invoke(ipcChannels.serverRepair, request) as Promise<OperationAcceptedDto>,
     start: (request) =>
       ipcRenderer.invoke(ipcChannels.serverStart, request) as Promise<OperationAcceptedDto>,
     stop: (request) =>
       ipcRenderer.invoke(ipcChannels.serverStop, request) as Promise<OperationAcceptedDto>,
+    restart: (request) =>
+      ipcRenderer.invoke(ipcChannels.serverRestart, request) as Promise<OperationAcceptedDto>,
     getRuntimeStatus: () =>
       ipcRenderer.invoke(ipcChannels.serverGetRuntimeStatus) as Promise<PalworldRuntimeStatusDto>,
     getQueryPortStatus: () =>

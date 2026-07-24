@@ -10,6 +10,7 @@ import { PalworldInstallationService } from '../palworld-installation/palworld-i
 import type { OperationAcceptedDto } from '../../shared/dto/operation-progress.dto';
 import type {
   PalworldQueryPortStatusDto,
+  PalworldRestartRequestDto,
   PalworldRuntimeState,
   PalworldRuntimeStatusDto,
   PalworldStartRequestDto,
@@ -148,6 +149,33 @@ export class PalworldProcessService {
     };
   }
 
+  restart(request: PalworldRestartRequestDto): OperationAcceptedDto {
+    if (!request.confirmed) {
+      throw new Error('PALWORLD_RESTART_REQUIRES_CONFIRMATION');
+    }
+
+    const installation = this.palworldInstallationService.getStatus();
+    this.reconcileRuntimeStatus(installation.executablePath);
+
+    if (installation.status !== 'READY' || !existsSync(installation.executablePath)) {
+      throw new Error('PALWORLD_SERVER_NOT_READY');
+    }
+    if (this.state === 'STARTING' || this.state === 'STOPPING') {
+      throw new Error('PALWORLD_SERVER_TRANSITION_IN_PROGRESS');
+    }
+
+    const operation = this.operationManagerService.create(
+      'Reinicio de Palworld Dedicated Server',
+      'Preparando reinicio controlado del servidor.'
+    );
+    this.activeOperationId = operation.operationId;
+    void this.restartAsync(operation.operationId, installation.executablePath);
+
+    return {
+      operationId: operation.operationId
+    };
+  }
+
   stopQueryPortOwner(request: PalworldStopQueryPortOwnerRequestDto): OperationAcceptedDto {
     if (!request.confirmed) {
       throw new Error('QUERY_PORT_OWNER_STOP_REQUIRES_CONFIRMATION');
@@ -167,6 +195,55 @@ export class PalworldProcessService {
 
   private startAsync(operationId: string, executablePath: string): void {
     void this.startProcessAsync(operationId, executablePath);
+  }
+
+  private async restartAsync(operationId: string, executablePath: string): Promise<void> {
+    try {
+      const processes = this.getActiveProcesses(executablePath, { forceScan: true });
+      if (processes.length > 0) {
+        this.stopRequestedAt = Date.now();
+        this.setRuntimeState('STOPPING', 'Deteniendo el servidor para reiniciarlo.');
+        this.operationManagerService.update(operationId, {
+          status: 'RUNNING',
+          percent: 10,
+          message: `Deteniendo PID ${processes.map((process) => String(process.pid)).join(', ')} antes de reiniciar.`,
+          canCancel: false
+        });
+        const result = killProcessTree(processes.map((process) => process.pid));
+        if (!result.ok) {
+          throw new Error(result.message);
+        }
+        await this.waitUntilProcessesStop(executablePath);
+      }
+
+      this.process = null;
+      this.observedProcess = null;
+      this.cachedProcessScan = [];
+      this.lastProcessScanAt = 0;
+      this.setRuntimeState('STARTING', 'Reiniciando Palworld Dedicated Server.');
+      this.operationManagerService.update(operationId, {
+        status: 'RUNNING',
+        percent: 35,
+        message: 'Servidor detenido. Iniciando una nueva instancia.',
+        canCancel: false
+      });
+      await this.startProcessAsync(operationId, executablePath);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.setRuntimeState('ERROR', `No se pudo reiniciar PalServer.exe: ${message}`);
+      this.failActiveOperation(operationId, message);
+    }
+  }
+
+  private async waitUntilProcessesStop(executablePath: string): Promise<void> {
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      if (this.getActiveProcesses(executablePath, { forceScan: true }).length === 0) {
+        return;
+      }
+      await wait(500);
+    }
+
+    throw new Error('PALWORLD_RESTART_STOP_TIMEOUT');
   }
 
   private async startProcessAsync(operationId: string, executablePath: string): Promise<void> {
@@ -753,6 +830,12 @@ function createQueryPortStatus(owner: UdpPortOwner, port: number): PalworldQuery
 
 function windowlessTimeout(callback: () => void, milliseconds: number): void {
   setTimeout(callback, milliseconds);
+}
+
+async function wait(milliseconds: number): Promise<void> {
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
 }
 
 async function assertSteamQueryPortAvailable(port: number): Promise<void> {

@@ -20,15 +20,18 @@ import type {
 import type { PalworldCreateDefaultConfigurationRequestDto } from '../../shared/dto/palworld-configuration-status.dto';
 import type {
   PalworldInstallRequestDto,
+  PalworldRepairRequestDto,
   PalworldUpdateRequestDto
 } from '../../shared/dto/palworld-installation-status.dto';
 import type {
+  PalworldRestartRequestDto,
   PalworldStartRequestDto,
   PalworldStopQueryPortOwnerRequestDto,
   PalworldStopRequestDto
 } from '../../shared/dto/palworld-runtime-status.dto';
 import type { PalworldAdminActionRequestDto } from '../../shared/dto/palworld-admin.dto';
-import type { SteamCmdInstallRequestDto } from '../../shared/dto/steamcmd-status.dto';
+import type { SteamCmdInstallRequestDto, SteamCmdRepairRequestDto } from '../../shared/dto/steamcmd-status.dto';
+import type { OperationCancelRequestDto } from '../../shared/dto/operation-progress.dto';
 import type { FirewallApplyRulesRequestDto } from '../../shared/dto/firewall-status.dto';
 import type {
   BackupCreateRequestDto,
@@ -72,6 +75,10 @@ export function registerIpcHandlers(
     steamCmdService.install(request)
   );
 
+  ipcMain.handle(ipcChannels.steamCmdRepair, (_event, request: SteamCmdRepairRequestDto) =>
+    steamCmdService.repair(request)
+  );
+
   ipcMain.handle(ipcChannels.serverGetInstallationStatus, () =>
     palworldInstallationService.getStatus()
   );
@@ -84,12 +91,20 @@ export function registerIpcHandlers(
     palworldInstallationService.update(request, () => palworldProcessService.getRuntimeStatus().state)
   );
 
+  ipcMain.handle(ipcChannels.serverRepair, (_event, request: PalworldRepairRequestDto) =>
+    palworldInstallationService.repair(request, () => palworldProcessService.getRuntimeStatus().state)
+  );
+
   ipcMain.handle(ipcChannels.serverStart, (_event, request: PalworldStartRequestDto) =>
     palworldProcessService.start(request)
   );
 
   ipcMain.handle(ipcChannels.serverStop, (_event, request: PalworldStopRequestDto) =>
     palworldProcessService.stop(request)
+  );
+
+  ipcMain.handle(ipcChannels.serverRestart, (_event, request: PalworldRestartRequestDto) =>
+    palworldProcessService.restart(request)
   );
 
   ipcMain.handle(ipcChannels.serverGetRuntimeStatus, () =>
@@ -134,6 +149,10 @@ export function registerIpcHandlers(
 
   ipcMain.handle(ipcChannels.operationGet, (_event, request: { operationId: string }) =>
     operationManagerService.get(request.operationId)
+  );
+
+  ipcMain.handle(ipcChannels.operationCancel, (_event, request: OperationCancelRequestDto) =>
+    operationManagerService.cancel(request)
   );
 
   ipcMain.handle(ipcChannels.firewallGetStatus, () => firewallService.getStatus());
