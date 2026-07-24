@@ -9,7 +9,7 @@ import type { FirewallPortCheckDto, FirewallStatusDto } from '../shared/dto/fire
 import type { NetworkDiagnosticsDto } from '../shared/dto/network-diagnostics.dto';
 import type { LogModule } from '../shared/dto/log-status.dto';
 import type { OperationProgressDto } from '../shared/dto/operation-progress.dto';
-import type { PalworldAdminAction, PalworldAdminStatusDto } from '../shared/dto/palworld-admin.dto';
+import type { PalworldAdminAction } from '../shared/dto/palworld-admin.dto';
 import type { PalworldPlayersStatusDto } from '../shared/dto/palworld-players-status.dto';
 import type { PalworldQueryPortStatusDto, PalworldRuntimeStatusDto } from '../shared/dto/palworld-runtime-status.dto';
 import {
@@ -18,25 +18,31 @@ import {
   type SummaryCardViewModel
 } from './components/summary-card';
 import { renderInlineConfirm } from './components/inline-confirm';
+import { renderIcon } from './components/icon';
 import { bindWindowControls } from './components/window-controls';
-import { type PalworldSettingDefinition } from './config/palworld-settings-catalog';
 import { CONFIGURATION_PRESETS } from './config/configuration-presets';
 import { hasConfigurationChangedExternally } from './config/configuration-change-guard';
-import { formatSelectOptionLabel, getSettingDefinition } from './config/setting-definition-resolver';
+import { getSettingDefinition } from './config/setting-definition-resolver';
 import {
   formatSettingValue,
   parsePalworldSettings,
   serializePalworldSettings,
   unquoteSettingValue,
-  type ParsedPalworldSetting,
   type ParsedPalworldSettings
 } from './config/palworld-settings-parser';
-import { formatBytes, formatDateTime, formatLastVerification } from './utils/format';
+import { formatBytes, formatLastVerification } from './utils/format';
 import { cssEscape, escapeHtml, normalizeSearchText } from './utils/text';
 import { renderBackupsView as renderBackupsViewHtml } from './views/backups-view';
+import { renderAdminStatus } from './views/admin-view';
+import {
+  renderConfigurationPresets,
+  renderSettingsFilterBar,
+  renderSettingsForm
+} from './views/server-configuration-view';
 import { renderGeneralView as renderGeneralViewHtml } from './views/general-view';
 import { renderPreflightSummaryView, renderSimpleView as renderSimpleViewHtml } from './views/status-views';
 import { NavigationState } from './state/navigation-state';
+import { AdminViewState } from './state/admin-view-state';
 
 const palcmLogoUrl = new URL('./assets/palcm-logo.png', import.meta.url).href;
 
@@ -44,12 +50,6 @@ const appRoot = document.querySelector<HTMLDivElement>('#app');
 
 if (!appRoot) {
   throw new Error('Renderer root element was not found.');
-}
-
-function renderIcon(name: string, extraClass = ''): string {
-  const className = `ui-icon ui-icon--${name}${extraClass ? ` ${extraClass}` : ''}`;
-
-  return `<span class="${className}" aria-hidden="true"></span>`;
 }
 
 const rootElement = appRoot;
@@ -256,9 +256,7 @@ let publicNetworkRequestPort: string | null = null;
 let latestConfiguredPort: string | null = null;
 let latestBackupSummary: BackupSummaryDto | null = null;
 let adminRefreshTimer: number | null = null;
-let adminRefreshInFlight = false;
-let adminActiveTab: 'general' | 'players' | 'map' = 'general';
-let adminMenuOpen = false;
+const adminViewState = new AdminViewState();
 let consoleSearchTerm = '';
 let consoleSelectedModule: LogModule | 'all' = 'all';
 let consolePaused = false;
@@ -380,10 +378,10 @@ if (!palcmApi) {
 
       const nextView = link.dataset['nav'] ?? 'home';
       if (nextView === 'admin') {
-        adminMenuOpen = true;
+        adminViewState.setMenuOpen(true);
         const requestedAdminTab = link.dataset['adminSidebarTab'];
         if (isAdminTab(requestedAdminTab)) {
-          adminActiveTab = requestedAdminTab;
+          adminViewState.setTab(requestedAdminTab);
         }
       }
 
@@ -877,7 +875,7 @@ function updateNavigation(status: ApplicationStatus): void {
 
   if (navigationState.is('admin') && !serverRunning) {
     navigationState.set('home');
-    adminMenuOpen = false;
+    adminViewState.setMenuOpen(false);
   }
 
   navLinks.forEach((link) => {
@@ -897,8 +895,8 @@ function updateNavigation(status: ApplicationStatus): void {
 
   if (adminNavGroup) {
     adminNavGroup.classList.toggle('hidden', !serverRunning);
-    adminNavGroup.classList.toggle('sidebar__group--open', serverRunning && (adminMenuOpen || navigationState.is('admin')));
-    adminNavGroup.classList.toggle('sidebar__group--collapsed', !serverRunning || (!adminMenuOpen && !navigationState.is('admin')));
+    adminNavGroup.classList.toggle('sidebar__group--open', serverRunning && (adminViewState.isMenuOpen() || navigationState.is('admin')));
+    adminNavGroup.classList.toggle('sidebar__group--collapsed', !serverRunning || (!adminViewState.isMenuOpen() && !navigationState.is('admin')));
   }
 }
 
@@ -921,7 +919,7 @@ function isSidebarNavActive(link: HTMLAnchorElement): boolean {
     return true;
   }
 
-  return isAdminTab(requestedAdminTab) && requestedAdminTab === adminActiveTab;
+  return isAdminTab(requestedAdminTab) && adminViewState.isTab(requestedAdminTab);
 }
 
 function isAdminTab(value: string | undefined): value is 'general' | 'players' | 'map' {
@@ -1970,11 +1968,10 @@ function renderAdminLoading(): void {
 }
 
 async function refreshAdminView(options: { force?: boolean } = {}): Promise<void> {
-  if (!palcmApi || adminRefreshInFlight || !navigationState.is('admin')) {
+  if (!palcmApi || !navigationState.is('admin') || !adminViewState.beginRefresh()) {
     return;
   }
 
-  adminRefreshInFlight = true;
   try {
     const [adminStatus, playersStatus] = await Promise.all([
       palcmApi.admin.getStatus(),
@@ -1982,7 +1979,7 @@ async function refreshAdminView(options: { force?: boolean } = {}): Promise<void
     ]);
 
     if (navigationState.is('admin') && (options.force || !isEditingAdminForm())) {
-      setContent(renderAdminStatus(adminStatus, playersStatus));
+      setContent(renderAdminStatus(adminStatus, playersStatus, adminViewState.getTab()));
       bindAdminControls();
     }
   } catch (error) {
@@ -1991,7 +1988,7 @@ async function refreshAdminView(options: { force?: boolean } = {}): Promise<void
       renderSimpleView('Administracion', `No se pudo cargar el panel administrativo. ${message}`);
     }
   } finally {
-    adminRefreshInFlight = false;
+    adminViewState.endRefresh();
   }
 }
 
@@ -2009,194 +2006,6 @@ function startAdminAutoRefresh(): void {
   adminRefreshTimer = window.setInterval(() => {
     void refreshAdminView();
   }, 3_000);
-}
-
-function renderAdminStatus(adminStatus: PalworldAdminStatusDto, playersStatus: PalworldPlayersStatusDto): string {
-  const isReady = adminStatus.status === 'READY';
-
-  return `
-    <div class="view-stack admin-view">
-      <section class="content-card admin-panel">
-        ${
-          isReady
-            ? renderAdminTabs(adminStatus, playersStatus)
-            : `<div class="admin-toolbar"><span class="view-kicker">ADMINISTRACION</span><span class="view-meta-pill">${escapeHtml(adminStatus.message)}</span></div><p class="empty-state">${escapeHtml(adminStatus.message)}</p>`
-        }
-      </section>
-    </div>
-  `;
-}
-
-function renderAdminTabs(adminStatus: PalworldAdminStatusDto, playersStatus: PalworldPlayersStatusDto): string {
-  const tabLabel: Record<typeof adminActiveTab, string> = {
-    general: 'SERVIDOR',
-    players: 'JUGADORES',
-    map: 'MAPA'
-  };
-
-  return `
-    <div class="admin-toolbar">
-      <span class="view-kicker">ADMINISTRACION / ${tabLabel[adminActiveTab]}</span>
-      <span class="view-meta-pill">${escapeHtml(adminStatus.message)}</span>
-    </div>
-    ${renderAdminActiveTab(adminStatus, playersStatus)}
-  `;
-}
-
-function renderAdminActiveTab(adminStatus: PalworldAdminStatusDto, playersStatus: PalworldPlayersStatusDto): string {
-  if (adminActiveTab === 'players') {
-    return renderAdminPlayersTab(playersStatus);
-  }
-
-  if (adminActiveTab === 'map') {
-    return renderAdminMapTab(playersStatus);
-  }
-
-  return renderAdminGeneralTab(adminStatus);
-}
-
-function renderAdminGeneralTab(adminStatus: PalworldAdminStatusDto): string {
-  return `
-    <div class="admin-runtime-actions">
-      <button id="restart-server" class="secondary-button button-with-icon" type="button">
-        ${renderIcon('refresh')}
-        <span>Reiniciar servidor</span>
-      </button>
-    </div>
-    <div class="admin-snapshot-grid">
-      ${renderAdminSnapshotCard('Servidor', 'Info oficial del servidor', adminStatus.info)}
-      ${renderAdminSnapshotCard('Metricas', 'Rendimiento reportado por REST', adminStatus.metrics)}
-      ${renderAdminSnapshotCard('Settings', 'Configuracion activa leida del servidor', adminStatus.settings)}
-    </div>
-    <div class="admin-grid">
-      <form class="admin-card" data-admin-form="save">
-        <span class="view-kicker">MUNDO</span>
-        <h4>Guardar mundo</h4>
-        <p>Solicita un guardado manual del estado actual del servidor.</p>
-        <button class="secondary-button button-with-icon" type="submit">
-          ${renderIcon('save')}
-          <span>Guardar ahora</span>
-        </button>
-      </form>
-      <form class="admin-card" data-admin-form="shutdown">
-        <span class="view-kicker">APAGADO</span>
-        <h4>Apagado programado</h4>
-        <input name="seconds" type="number" min="0" max="3600" value="60" />
-        <input name="message" type="text" value="Servidor detenido desde PSM Console." />
-        <button class="secondary-button button-with-icon" type="submit">
-          ${renderIcon('clock')}
-          <span>Programar</span>
-        </button>
-      </form>
-      <form class="admin-card admin-card--danger" data-admin-form="stop">
-        <span class="view-kicker">EMERGENCIA</span>
-        <h4>Detener ahora</h4>
-        <p>Fuerza la detencion inmediata del servidor desde REST. Usalo solo si no responde el apagado programado.</p>
-        <button class="secondary-button secondary-button--warning button-with-icon" type="submit">
-          ${renderIcon('stop')}
-          <span>Forzar detencion</span>
-        </button>
-      </form>
-    </div>
-  `;
-}
-
-function renderAdminPlayersTab(playersStatus: PalworldPlayersStatusDto): string {
-  return `
-    <form class="admin-broadcast-bar" data-admin-form="announce">
-      <span class="view-kicker">ANUNCIO GLOBAL</span>
-      <div class="admin-broadcast-bar__row">
-        <input name="message" type="text" placeholder="Mensaje para todos los jugadores" required />
-        <button class="primary-button icon-button" type="submit" aria-label="Enviar anuncio" title="Enviar anuncio">
-          ${renderIcon('send')}
-        </button>
-      </div>
-    </form>
-    <div class="admin-players-layout">
-      <section class="admin-players-panel admin-players-panel--wide">
-        <div class="players-list-card__header">
-          <div>
-            <p class="eyebrow">JUGADORES</p>
-            <h3>Jugadores conectados</h3>
-          </div>
-          <span>${renderPlayersHeaderMeta(playersStatus)}</span>
-        </div>
-        ${renderAdminPlayersList(playersStatus)}
-      </section>
-    </div>
-  `;
-}
-
-function renderAdminMapTab(playersStatus: PalworldPlayersStatusDto): string {
-  if (playersStatus.status !== 'READY') {
-    return `
-      <section class="admin-map-panel">
-        <p class="empty-state">${escapeHtml(playersStatus.message)}</p>
-      </section>
-    `;
-  }
-
-  const locatedPlayers = playersStatus.players.filter(hasPlayerLocation);
-
-  if (locatedPlayers.length === 0) {
-    return `
-      <section class="admin-map-panel">
-        <div class="admin-map__header">
-          <div>
-            <span class="view-kicker">MAPA</span>
-            <h3>Ubicacion de jugadores</h3>
-          </div>
-          <span class="view-meta-pill">${escapeHtml(formatDateTime(playersStatus.updatedAt))}</span>
-        </div>
-        <p class="empty-state">No hay jugadores conectados con coordenadas reportadas por la REST API.</p>
-      </section>
-    `;
-  }
-
-  const bounds = getPlayerMapBounds(locatedPlayers);
-
-  return `
-    <section class="admin-map-panel">
-      <div class="admin-map__header">
-        <div>
-          <span class="view-kicker">MAPA</span>
-          <h3>Ubicacion de jugadores</h3>
-        </div>
-        <span class="view-meta-pill">${String(locatedPlayers.length)} activos</span>
-      </div>
-      <div class="admin-map-layout">
-        <div class="admin-map-stage" role="img" aria-label="Mapa relativo de jugadores conectados">
-          <div class="admin-map-stage__axis admin-map-stage__axis--x">X</div>
-          <div class="admin-map-stage__axis admin-map-stage__axis--y">Y</div>
-          ${locatedPlayers.map((player, index) => renderPlayerMapMarker(player, bounds, index)).join('')}
-        </div>
-        <div class="admin-map-list">
-          ${locatedPlayers.map(renderPlayerMapListItem).join('')}
-        </div>
-      </div>
-    </section>
-  `;
-}
-
-function renderAdminSnapshotCard(
-  title: string,
-  detail: string,
-  snapshot: PalworldAdminStatusDto['info']
-): string {
-  const entries = Object.entries(snapshot ?? {}).slice(0, 6);
-
-  return `
-    <article class="admin-snapshot-card">
-      <span class="view-kicker">${escapeHtml(title.toUpperCase())}</span>
-      <h4>${escapeHtml(title)}</h4>
-      <p>${escapeHtml(detail)}</p>
-      ${
-        entries.length > 0
-          ? `<dl>${entries.map(([key, value]) => `<div><dt>${escapeHtml(key)}</dt><dd>${escapeHtml(String(value))}</dd></div>`).join('')}</dl>`
-          : '<small>Sin datos disponibles en este momento.</small>'
-      }
-    </article>
-  `;
 }
 
 function bindAdminControls(): void {
@@ -2337,195 +2146,6 @@ function readFormString(formData: FormData, key: string): string {
   const value = formData.get(key);
 
   return typeof value === 'string' ? value : '';
-}
-
-function renderPlayersHeaderMeta(summary: PalworldPlayersStatusDto): string {
-  const capacity = `${String(summary.currentPlayers)}${summary.maxPlayers ? `/${String(summary.maxPlayers)}` : ''}`;
-  return summary.status === 'READY'
-    ? `${capacity} - ${formatDateTime(summary.updatedAt)}`
-    : formatDateTime(summary.updatedAt);
-}
-
-function renderAdminPlayersList(summary: PalworldPlayersStatusDto): string {
-  if (summary.status !== 'READY') {
-    return `<p class="empty-state">${escapeHtml(summary.message)}</p>`;
-  }
-
-  const previousPlayers = summary.previousPlayers ?? [];
-
-  if (summary.players.length === 0 && previousPlayers.length === 0) {
-    return '<p class="empty-state">No hay jugadores detectados todavia.</p>';
-  }
-
-  return `
-    <div class="players-sections">
-      ${renderPlayersSection('En curso', summary.players, 'No hay jugadores conectados en este momento.', true)}
-      ${renderPlayersSection('Vistos anteriormente', previousPlayers, 'Todavia no hay jugadores anteriores.', false)}
-    </div>
-  `;
-}
-
-function renderPlayersSection(
-  title: string,
-  players: PalworldPlayersStatusDto['players'],
-  emptyMessage: string,
-  allowKick: boolean
-): string {
-  return `
-    <section class="players-section">
-      <div class="players-section__header">
-        <h4>${escapeHtml(title)}</h4>
-        <span>${String(players.length)}</span>
-      </div>
-      ${
-        players.length > 0
-          ? `<div class="players-list">${players.map((player) => renderAdminPlayerRow(player, allowKick)).join('')}</div>`
-          : `<p class="empty-state empty-state--compact">${escapeHtml(emptyMessage)}</p>`
-      }
-    </section>
-  `;
-}
-
-function renderAdminPlayerRow(player: PalworldPlayersStatusDto['players'][number], allowKick: boolean): string {
-  const actionId = player.userId ?? player.steamId ?? player.playerId ?? '';
-  const identity = actionId || 'ID no informado';
-  const isBanned = player.banState === 'BANNED';
-  const banAction: PalworldAdminAction = isBanned ? 'unban' : 'ban';
-  const locationText = hasPlayerLocation(player)
-    ? `X ${formatCoordinate(player.locationX)}, Y ${formatCoordinate(player.locationY)}`
-    : null;
-  const secondary = [
-    player.playerId ? `PlayerUID ${player.playerId}` : null,
-    player.userId ? `UserID ${player.userId}` : null,
-    player.steamId ? `SteamID ${player.steamId}` : null,
-    locationText
-  ].filter((value): value is string => value !== null);
-  const statusText = player.online
-    ? 'Conectado'
-    : player.lastSeenAt
-      ? `Visto ${formatDateTime(player.lastSeenAt)}`
-      : 'Visto anteriormente';
-
-  return `
-    <article class="player-row ${player.online ? 'player-row--online' : 'player-row--previous'}">
-      <div>
-        <strong>${escapeHtml(player.name)}</strong>
-        <span>${escapeHtml(identity)}</span>
-      </div>
-      <small>${escapeHtml(secondary.join(' - ') || 'Sin identificadores adicionales')}</small>
-      <em>${player.online && typeof player.ping === 'number' ? `${formatPing(player.ping)} ms` : escapeHtml(statusText)}</em>
-      <form class="player-row__actions" data-admin-form="player">
-        <input name="userId" type="hidden" value="${escapeHtml(actionId)}" />
-        <input name="message" type="hidden" value="Accion aplicada desde PSM Console." />
-        <button class="admin-icon-button secondary-button icon-button" type="submit" data-player-action="kick" ${actionId && allowKick ? '' : 'disabled'} aria-label="Expulsar jugador" title="${allowKick ? 'Expulsar jugador' : 'Solo disponible para jugadores conectados'}">
-          ${renderIcon('send')}
-        </button>
-        <button class="ban-toggle ${isBanned ? 'ban-toggle--active' : ''}" type="submit" data-player-action="${banAction}" ${actionId ? '' : 'disabled'} aria-pressed="${isBanned ? 'true' : 'false'}" aria-label="${isBanned ? 'Desbanear jugador' : 'Banear jugador'}" title="${isBanned ? 'Desbanear jugador' : 'Banear jugador'}">
-          <span class="ban-toggle__track" aria-hidden="true"><span class="ban-toggle__thumb"></span></span>
-          <span>${isBanned ? 'Baneado' : 'Permitido'}</span>
-        </button>
-      </form>
-    </article>
-  `;
-}
-
-interface PlayerMapBounds {
-  minX: number;
-  maxX: number;
-  minY: number;
-  maxY: number;
-}
-
-function hasPlayerLocation(
-  player: PalworldPlayersStatusDto['players'][number]
-): player is PalworldPlayersStatusDto['players'][number] & { locationX: number; locationY: number } {
-  return typeof player.locationX === 'number' &&
-    Number.isFinite(player.locationX) &&
-    typeof player.locationY === 'number' &&
-    Number.isFinite(player.locationY);
-}
-
-function getPlayerMapBounds(players: Array<PalworldPlayersStatusDto['players'][number] & { locationX: number; locationY: number }>): PlayerMapBounds {
-  const xs = players.map((player) => player.locationX);
-  const ys = players.map((player) => player.locationY);
-
-  return {
-    minX: Math.min(...xs),
-    maxX: Math.max(...xs),
-    minY: Math.min(...ys),
-    maxY: Math.max(...ys)
-  };
-}
-
-function renderPlayerMapMarker(
-  player: PalworldPlayersStatusDto['players'][number] & { locationX: number; locationY: number },
-  bounds: PlayerMapBounds,
-  index: number
-): string {
-  const position = getPlayerMapPosition(player, bounds);
-  const initials = getPlayerInitials(player.name);
-
-  return `
-    <article class="admin-map-marker" style="left: ${position.left}%; top: ${position.top}%;" title="${escapeHtml(player.name)}">
-      <span class="admin-map-marker__pin">${escapeHtml(initials)}</span>
-      <span class="admin-map-marker__label">${escapeHtml(player.name || `Jugador ${String(index + 1)}`)}</span>
-    </article>
-  `;
-}
-
-function renderPlayerMapListItem(
-  player: PalworldPlayersStatusDto['players'][number] & { locationX: number; locationY: number }
-): string {
-  const details = [
-    typeof player.level === 'number' ? `Nivel ${String(player.level)}` : null,
-    typeof player.ping === 'number' ? `${formatPing(player.ping)} ms` : null,
-    typeof player.locationZ === 'number' ? `Z ${formatCoordinate(player.locationZ)}` : null
-  ].filter((value): value is string => value !== null);
-
-  return `
-    <article class="admin-map-player">
-      <strong>${escapeHtml(player.name)}</strong>
-      <span>X ${formatCoordinate(player.locationX)} / Y ${formatCoordinate(player.locationY)}</span>
-      <small>${escapeHtml(details.join(' - ') || 'Sin datos adicionales')}</small>
-    </article>
-  `;
-}
-
-function getPlayerMapPosition(
-  player: PalworldPlayersStatusDto['players'][number] & { locationX: number; locationY: number },
-  bounds: PlayerMapBounds
-): { left: string; top: string } {
-  const left = normalizeMapAxis(player.locationX, bounds.minX, bounds.maxX);
-  const top = 100 - normalizeMapAxis(player.locationY, bounds.minY, bounds.maxY);
-
-  return {
-    left: left.toFixed(2),
-    top: top.toFixed(2)
-  };
-}
-
-function normalizeMapAxis(value: number, min: number, max: number): number {
-  if (min === max) {
-    return 50;
-  }
-
-  const padding = 8;
-  const normalized = ((value - min) / (max - min)) * (100 - padding * 2) + padding;
-  return Math.min(100 - padding, Math.max(padding, normalized));
-}
-
-function getPlayerInitials(name: string): string {
-  const words = name.trim().split(/\s+/).filter(Boolean);
-  const initials = words.slice(0, 2).map((word) => word[0]?.toUpperCase() ?? '').join('');
-  return initials || 'J';
-}
-
-function formatCoordinate(value: number): string {
-  return Number.isInteger(value) ? String(value) : value.toFixed(1);
-}
-
-function formatPing(value: number): string {
-  return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
 function renderBackupsFooter(): void {
@@ -3756,47 +3376,6 @@ function replaceSummaryCard(id: string, html: string): void {
   }
 }
 
-function renderConfigurationPresets(): string {
-  return `
-    <section class="preset-bar" aria-label="Perfiles rapidos de configuracion">
-      <div>
-        <span class="view-kicker">PERFILES</span>
-        <p>Aplican valores al formulario. No se guardan hasta presionar Guardar.</p>
-      </div>
-      <div class="preset-bar__actions">
-        ${CONFIGURATION_PRESETS.map((preset) => `<button class="secondary-button preset-button" type="button" data-preset="${escapeHtml(preset.id)}">${escapeHtml(preset.label)}</button>`).join('')}
-      </div>
-    </section>
-  `;
-}
-
-function renderSettingsFilterBar(parsed: ParsedPalworldSettings): string {
-  const categories = Array.from(groupSettings(parsed.settings).keys());
-
-  return `
-    <section class="settings-filter" aria-label="Filtros de parametros del INI">
-      <div class="settings-filter__head">
-        <span class="view-kicker">FILTROS</span>
-        <strong>Encontrar parametro</strong>
-      </div>
-      <div class="settings-filter__controls">
-        <label class="settings-filter__search" for="settings-search">
-          ${renderIcon('search')}
-          <input id="settings-search" type="search" placeholder="Nombre, clave o descripcion" autocomplete="off" />
-        </label>
-        <label class="settings-filter__category" for="settings-category">
-          <span>Categoria</span>
-          <select id="settings-category">
-            <option value="all">Todas</option>
-            ${categories.map((category) => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`).join('')}
-          </select>
-        </label>
-        <span id="settings-filter-count" class="settings-filter__count">${String(parsed.settings.length)} parametros</span>
-      </div>
-    </section>
-  `;
-}
-
 function bindSummaryCards(): void {
   document.querySelectorAll<HTMLButtonElement>('.summary-card[data-target]').forEach((card) => {
     if (card.dataset['summaryBound'] === 'true') {
@@ -3813,7 +3392,7 @@ function bindSummaryCards(): void {
       if (clickedTargetIcon) {
         const adminTab = card.dataset['adminTab'];
         if (isAdminTab(adminTab)) {
-          adminActiveTab = adminTab;
+          adminViewState.setTab(adminTab);
         }
 
         navigationState.set(card.dataset['target']);
@@ -3828,7 +3407,7 @@ function bindSummaryCards(): void {
 
       const adminTab = card.dataset['adminTab'];
       if (isAdminTab(adminTab)) {
-        adminActiveTab = adminTab;
+        adminViewState.setTab(adminTab);
       }
 
       navigationState.set(card.dataset['target']);
@@ -3899,105 +3478,6 @@ function readSettingsFormValues(parsed: ParsedPalworldSettings): Map<string, str
   });
 
   return values;
-}
-
-function renderSettingsForm(parsed: ParsedPalworldSettings): string {
-  const grouped = groupSettings(parsed.settings);
-
-  return Array.from(grouped.entries())
-    .map(
-      ([group, settings]) => `
-        <section class="settings-group">
-          <h4>${escapeHtml(group)} <span data-group-count>${String(settings.length)}</span></h4>
-          <div class="settings-grid">
-            ${settings.map((setting) => renderSettingControl(setting)).join('')}
-          </div>
-        </section>
-      `
-    )
-    .join('');
-}
-
-function groupSettings(settings: ParsedPalworldSetting[]): Map<string, ParsedPalworldSetting[]> {
-  const grouped = new Map<string, ParsedPalworldSetting[]>();
-
-  settings.forEach((setting) => {
-    const definition = getSettingDefinition(setting.key, setting.value);
-    const group = definition.group;
-    grouped.set(group, [...(grouped.get(group) ?? []), setting]);
-  });
-
-  return grouped;
-}
-
-function renderSettingControl(setting: ParsedPalworldSetting): string {
-  const definition = getSettingDefinition(setting.key, setting.value);
-  const rawValue = unquoteSettingValue(setting.value);
-  const info = `${definition.help}${definition.range ? ` Rango: ${definition.range}` : ''}`;
-  const searchText = [
-    definition.group,
-    definition.label,
-    setting.key,
-    definition.help,
-    definition.range ?? ''
-  ].join(' ');
-
-  return `
-    <article class="setting-field" data-setting-card data-setting-card-key="${escapeHtml(setting.key)}" data-setting-group="${escapeHtml(definition.group)}" data-search="${escapeHtml(normalizeSearchText(searchText))}">
-      <span class="setting-field__top">
-        <span>
-          <strong>${escapeHtml(definition.label)}</strong>
-          <small>${escapeHtml(setting.key)}</small>
-        </span>
-        <button class="setting-info" type="button" aria-label="${escapeHtml(info)}" data-info="${escapeHtml(info)}">i</button>
-      </span>
-      ${renderSettingInput(definition, setting.key, rawValue)}
-    </article>
-  `;
-}
-
-function renderSettingInput(definition: PalworldSettingDefinition, key: string, value: string): string {
-  if (definition.kind === 'boolean') {
-    const isChecked = value.toLowerCase() === 'true';
-
-    return `
-      <button class="setting-toggle" data-setting-key="${escapeHtml(key)}" type="button" role="switch" aria-checked="${isChecked ? 'true' : 'false'}">
-        <span class="setting-toggle__track" aria-hidden="true"><span></span></span>
-        <span class="setting-toggle__state">${isChecked ? 'Activo' : 'Inactivo'}</span>
-      </button>
-    `;
-  }
-
-  if (definition.kind === 'select' && definition.options) {
-    return `
-      <select data-setting-key="${escapeHtml(key)}">
-        ${definition.options
-          .map((option) => `<option value="${escapeHtml(option)}" ${option === value ? 'selected' : ''}>${escapeHtml(formatSelectOptionLabel(option))}</option>`)
-          .join('')}
-      </select>
-    `;
-  }
-
-  if (definition.kind === 'number') {
-    const numericValue = Number(value);
-
-    if (
-      typeof definition.min === 'number' &&
-      typeof definition.max === 'number' &&
-      Number.isFinite(numericValue)
-    ) {
-      return `
-        <span class="setting-range">
-          <input data-range-key="${escapeHtml(key)}" type="range" min="${String(definition.min)}" max="${String(definition.max)}" step="${String(definition.step ?? 'any')}" value="${escapeHtml(value)}" />
-          <input class="setting-range__value" data-setting-key="${escapeHtml(key)}" type="number" min="${String(definition.min)}" max="${String(definition.max)}" step="${String(definition.step ?? 'any')}" value="${escapeHtml(value)}" />
-        </span>
-      `;
-    }
-
-    return `<input data-setting-key="${escapeHtml(key)}" type="number" step="any" value="${escapeHtml(value)}" />`;
-  }
-
-  return `<input data-setting-key="${escapeHtml(key)}" type="text" value="${escapeHtml(value)}" />`;
 }
 
 function bindSettingsControls(parsed: ParsedPalworldSettings): void {
