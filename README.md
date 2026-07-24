@@ -8,6 +8,14 @@ PSM Console es una aplicación portable para Windows que instala, configura, ini
 
 Está desarrollada con Electron, NestJS y TypeScript. La interfaz no accede directamente al sistema: utiliza una capa IPC tipada, restringida y aislada.
 
+## Descargas
+
+Las versiones publicadas y sus archivos portables se distribuyen desde la página de Releases.
+
+[Ver releases y descargar PSM Console](https://github.com/Alexis190392/psm-console/releases)
+
+Las versiones provenientes de la rama `test` aparecen como prerelease. Las versiones estables se publicarán desde `master`.
+
 ## Funcionalidades
 
 - Detecta, descarga y valida SteamCMD con confirmación explícita.
