@@ -109,8 +109,6 @@ Despues de generarlo, valida el artefacto:
 npm.cmd run validate:portable
 ```
 
-El checklist completo esta en `docs/implementation/portable-validation.md`.
-
 El nombre final lo define `electron-builder` usando `productName` y `version`, por ejemplo:
 
 ```text
@@ -139,7 +137,7 @@ PalCM usa versionado `x.y.z`:
 - `y`: ciclo de prueba con funcionalidades nuevas.
 - `z`: fixes, ajustes chicos, refactors internos o mejoras de UX/UI dentro del ciclo actual.
 
-La version visible de la app se centraliza en `src/shared/constants/app-info.ts` y la version del artefacto se define en `package.json`. Al cambiar una, cambiar ambas. Mas detalle en `docs/decisions/versioning.md`.
+La version visible de la app se centraliza en `src/shared/constants/app-info.ts` y la version del artefacto se define en `package.json`. Al cambiar una, cambiar ambas.
 
 ## SteamCMD en desarrollo
 

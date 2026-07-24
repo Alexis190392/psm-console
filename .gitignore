@@ -1,11 +1,34 @@
+# Dependencies and generated builds
 node_modules/
 dist/
 release/
+coverage/
+.vite/
+*.tsbuildinfo
+
+# Local runtime data
 ejecucionPruebas/
+app-data/
+tools/
+server/
+config/
+logs/
+backups/
 .tmp-tests/
+
+# Local tooling
 .idea/
-yarn.lock
-*.log
+.agents/
+.codex/
+
+# Environment files and logs
 .env
 .env.*
 !.env.example
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# This project uses package-lock.json as the lockfile
+yarn.lock
