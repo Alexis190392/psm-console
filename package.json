@@ -86,7 +86,7 @@
       "artifactName": "PalCM-Setup-${version}.${ext}"
     },
     "portable": {
-      "artifactName": "PalCM-Portable-${version}.${ext}"
+      "artifactName": "PSM-Console-v${version}.${ext}"
     }
   }
 }
