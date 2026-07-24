@@ -3,6 +3,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { PalworldConfigurationService } from '../palworld-configuration/palworld-configuration.service';
 import { PalworldInstallationService } from '../palworld-installation/palworld-installation.service';
+import { resolvePalworldRuntimeExecutable } from '../palworld-process/palworld-process.service';
 import { OperationManagerService } from '../operations/operation-manager.service';
 import { NetworkService } from '../network/network.service';
 import type {
@@ -46,7 +47,7 @@ export class FirewallService {
       step: 'windows-firewall',
       state: 'active',
       title: 'Consultando Firewall de Windows',
-      detail: 'Buscando filtros por protocolo y puerto, y validando solo las reglas asociadas a PalServer.exe.'
+      detail: 'Leyendo las reglas nativas por protocolo y puerto, y validando el ejecutable real del servidor.'
     });
     reportProgress({
       step: 'public-network',
@@ -140,6 +141,7 @@ export class FirewallService {
       if (server.status !== 'READY') {
         throw new Error('PALSERVER_NOT_INSTALLED');
       }
+      const firewallExecutablePath = resolvePalworldRuntimeExecutable(server.executablePath).executablePath;
 
       this.operationManagerService.update(operationId, {
         status: 'RUNNING',
@@ -168,9 +170,9 @@ export class FirewallService {
         });
         this.operationManagerService.appendLog(
           operationId,
-          `New-NetFirewallRule ${port.protocol} ${String(port.port)} "${server.executablePath}"`
+          `New-NetFirewallRule ${port.protocol} ${String(port.port)} "${firewallExecutablePath}"`
         );
-        ruleScripts.push(buildFirewallRuleScript(port, server.executablePath));
+        ruleScripts.push(buildFirewallRuleScript(port, firewallExecutablePath));
       }
 
       this.operationManagerService.update(operationId, {
@@ -224,7 +226,10 @@ export class FirewallService {
 
     try {
       const server = this.palworldInstallationService.getStatus();
-      const executablePath = server.status === 'READY' ? server.executablePath : '';
+      const executablePath =
+        server.status === 'READY'
+          ? resolvePalworldRuntimeExecutable(server.executablePath).executablePath
+          : '';
       const output = await runPowerShell(buildFirewallCheckScript(enabledRequirements, executablePath));
       const parsed = parsePowerShellChecks(output);
       const enabledChecks = enabledRequirements.map((requirement) => {
@@ -276,33 +281,27 @@ export function buildFirewallCheckScript(
     requirements.map((requirement) => ({
       key: requirement.key,
       port: requirement.port,
-      protocol: requirement.protocol
+      protocolNumber: requirement.protocol === 'UDP' ? 17 : 6
     }))
   );
   const escapedExecutablePath = escapePowerShellSingleQuoted(executablePath);
 
   return `
 $requirements = '${escapePowerShellSingleQuoted(requirementJson)}' | ConvertFrom-Json
+$policy = New-Object -ComObject HNetCfg.FwPolicy2
 $results = @()
 foreach ($requirement in $requirements) {
   $matches = @()
-  $portFilters = @(
-    Get-NetFirewallPortFilter -Protocol $requirement.protocol -ErrorAction SilentlyContinue |
-      Where-Object { [string]$_.LocalPort -eq [string]$requirement.port }
-  )
-  foreach ($portFilter in $portFilters) {
-    $rules = @(
-      Get-NetFirewallRule -AssociatedNetFirewallPortFilter $portFilter -ErrorAction SilentlyContinue
-    )
-    foreach ($rule in $rules) {
-      if ([string]$rule.Direction -ne 'Inbound') { continue }
-      if ([string]$rule.Action -ne 'Allow') { continue }
-      if ([string]$rule.Enabled -ne 'True') { continue }
-      $app = $rule | Get-NetFirewallApplicationFilter -ErrorAction SilentlyContinue
-      $programs = @($app | ForEach-Object { [string]$_.Program })
-      if ('${escapedExecutablePath}' -ne '' -and $programs.Count -gt 0 -and $programs -notcontains 'Any' -and $programs -notcontains '${escapedExecutablePath}') { continue }
-      $matches += $rule.DisplayName
-    }
+  foreach ($rule in $policy.Rules) {
+    if (-not [bool]$rule.Enabled) { continue }
+    if ([int]$rule.Direction -ne 1) { continue }
+    if ([int]$rule.Action -ne 1) { continue }
+    if ([int]$rule.Protocol -ne [int]$requirement.protocolNumber) { continue }
+    $localPorts = @([string]$rule.LocalPorts -split ',' | ForEach-Object { $_.Trim() })
+    if ($localPorts -notcontains [string]$requirement.port) { continue }
+    $applicationPath = [string]$rule.ApplicationName
+    if ('${escapedExecutablePath}' -ne '' -and $applicationPath -ne '' -and $applicationPath -ne '${escapedExecutablePath}') { continue }
+    $matches += [string]$rule.Name
   }
   $results += @{ key = $requirement.key; ok = ($matches.Count -gt 0); rules = @($matches | Select-Object -Unique) }
 }

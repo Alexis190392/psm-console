@@ -16,17 +16,18 @@ describe('FirewallService', () => {
     expect(keys).not.toContain('RESTAPIPort');
   });
 
-  it('queries port filters before resolving associated firewall rules', () => {
+  it('uses the native Firewall COM API without privileged NetSecurity cmdlets', () => {
     const requirements = resolveFirewallPortRequirements(
       'OptionSettings=(PublicPort=8211,RCONEnabled=True,RCONPort=25575)'
     );
     const script = buildFirewallCheckScript(requirements, 'D:\\PalCM\\server\\PalServer.exe');
 
-    expect(script).toContain('Get-NetFirewallPortFilter -Protocol $requirement.protocol');
-    expect(script).toContain('Get-NetFirewallRule -AssociatedNetFirewallPortFilter $portFilter');
-    expect(script).not.toContain(
-      'Get-NetFirewallRule -Direction Inbound -Action Allow -Enabled True'
-    );
+    expect(script).toContain('New-Object -ComObject HNetCfg.FwPolicy2');
+    expect(script).toContain('if ([int]$rule.Protocol -ne [int]$requirement.protocolNumber)');
+    expect(script).toContain('"protocolNumber":17');
+    expect(script).toContain('"protocolNumber":6');
+    expect(script).not.toContain('Get-NetFirewallRule');
+    expect(script).not.toContain('Get-NetFirewallPortFilter');
   });
 
   it('escapes the executable path embedded in the PowerShell query', () => {
