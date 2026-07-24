@@ -43,7 +43,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: PSM-Console-portable-test
-          path: release/*Portable*.exe
+          path: release/PSM-Console-v*.exe
           if-no-files-found: error
 
       - name: Reemplazar prerelease anterior de la misma versión
@@ -68,4 +68,4 @@ jobs:
           name: PSM Console v${{ env.VERSION }}
           prerelease: true
           generate_release_notes: true
-          files: release/*Portable*.exe
+          files: release/PSM-Console-v*.exe
