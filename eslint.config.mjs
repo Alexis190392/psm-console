@@ -8,6 +8,7 @@ export default tseslint.config(
       'node_modules/**',
       'design/**',
       'ejecucionPruebas/**',
+      '.tmp-tests/**',
       'scripts/capture-screenshots.js',
       'eslint.config.mjs'
     ]

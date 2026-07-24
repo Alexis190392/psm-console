@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { BackupService } from '../src/backend/backup/backup.service';
 import { BackupArchiveService } from '../src/backend/backup/backup-archive.service';
 import { BackupIntegrityService, getManifestPath } from '../src/backend/backup/backup-integrity.service';
@@ -46,6 +46,10 @@ describe('BackupService', () => {
     'PalWorldSettings.ini'
   );
   const saveGamesPath = join(serverRoot, 'Pal', 'Saved', 'SaveGames');
+
+  beforeEach(async () => {
+    await rm(portableRoot, { recursive: true, force: true });
+  });
 
   afterEach(async () => {
     await rm(portableRoot, { recursive: true, force: true });

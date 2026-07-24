@@ -8,6 +8,7 @@ describe('confirmation policy', () => {
     expect(requiresUserConfirmation('server:install')).toBe(true);
     expect(requiresUserConfirmation('server:repair')).toBe(true);
     expect(requiresUserConfirmation('server:restart')).toBe(true);
+    expect(requiresUserConfirmation('server:stop-query-port-owner')).toBe(true);
     expect(requiresUserConfirmation('admin:execute-action')).toBe(true);
     expect(requiresUserConfirmation('config:restore-default')).toBe(true);
     expect(requiresUserConfirmation('firewall:create-rule')).toBe(true);

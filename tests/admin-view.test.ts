@@ -47,6 +47,7 @@ describe('admin view', () => {
     expect(html).toContain('ADMINISTRACION / SERVIDOR');
     expect(html).toContain('data-admin-form="save"');
     expect(html).toContain('data-admin-form="shutdown"');
+    expect(html).toContain('data-admin-form="stop"');
     expect(html).toContain('Servidor de prueba');
   });
 
@@ -58,6 +59,8 @@ describe('admin view', () => {
     expect(html).toContain('Vistos anteriormente');
     expect(html).toContain('data-player-action="kick"');
     expect(html).toContain('data-player-action="unban"');
+    expect(html).toContain('data-admin-form="announce"');
+    expect(html).toContain('data-admin-form="player"');
     expect(html).toContain('Jugador &lt;Uno&gt;');
     expect(html).not.toContain('Jugador <Uno>');
   });

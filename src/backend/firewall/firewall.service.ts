@@ -136,29 +136,7 @@ export class FirewallService {
 
   private async getRequiredPorts(): Promise<FirewallPortRequirementDto[]> {
     const configuration = await this.palworldConfigurationService.readActive();
-    const values = parseOptionSettings(configuration.content);
-    const publicPort = parsePort(values.get('PublicPort')) ?? 8211;
-    const rconEnabled = parseBoolean(values.get('RCONEnabled'));
-    const rconPort = parsePort(values.get('RCONPort')) ?? 25575;
-
-    return [
-      {
-        key: 'PublicPort',
-        label: 'Jugadores',
-        port: publicPort,
-        protocol: 'UDP',
-        enabled: true,
-        source: 'PublicPort'
-      },
-      {
-        key: 'RCONPort',
-        label: 'RCON',
-        port: rconPort,
-        protocol: 'TCP',
-        enabled: rconEnabled,
-        source: 'RCONEnabled + RCONPort'
-      }
-    ];
+    return resolveFirewallPortRequirements(configuration.content);
   }
 
   private async checkLocalPorts(requirements: FirewallPortRequirementDto[]): Promise<FirewallPortCheckDto[]> {
@@ -253,6 +231,32 @@ $results | ConvertTo-Json -Compress
     };
   }
 
+}
+
+export function resolveFirewallPortRequirements(configurationContent: string): FirewallPortRequirementDto[] {
+  const values = parseOptionSettings(configurationContent);
+  const publicPort = parsePort(values.get('PublicPort')) ?? 8211;
+  const rconEnabled = parseBoolean(values.get('RCONEnabled'));
+  const rconPort = parsePort(values.get('RCONPort')) ?? 25575;
+
+  return [
+    {
+      key: 'PublicPort',
+      label: 'Jugadores',
+      port: publicPort,
+      protocol: 'UDP',
+      enabled: true,
+      source: 'PublicPort'
+    },
+    {
+      key: 'RCONPort',
+      label: 'RCON',
+      port: rconPort,
+      protocol: 'TCP',
+      enabled: rconEnabled,
+      source: 'RCONEnabled + RCONPort'
+    }
+  ];
 }
 
 function buildFirewallRuleScript(port: FirewallPortCheckDto, executablePath: string): string {

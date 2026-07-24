@@ -83,6 +83,38 @@ describe('ApplicationStateService', () => {
       canStopServer: true
     });
   });
+
+  it('allows stopping while the server is starting', () => {
+    const service = new ApplicationStateService(
+      new PortablePathService(),
+      createSteamCmdServiceStub('READY'),
+      createPalworldInstallationServiceStub('READY'),
+      createPalworldConfigurationServiceStub('READY'),
+      createPalworldProcessServiceStub('STARTING')
+    );
+
+    expect(service.getStatus().status).toBe(ApplicationStatus.SERVER_STARTING);
+    expect(service.getAllowedActions()).toMatchObject({
+      canStartServer: false,
+      canStopServer: true
+    });
+  });
+
+  it('allows retrying after a runtime error', () => {
+    const service = new ApplicationStateService(
+      new PortablePathService(),
+      createSteamCmdServiceStub('READY'),
+      createPalworldInstallationServiceStub('READY'),
+      createPalworldConfigurationServiceStub('READY'),
+      createPalworldProcessServiceStub('ERROR')
+    );
+
+    expect(service.getStatus().status).toBe(ApplicationStatus.ERROR);
+    expect(service.getAllowedActions()).toMatchObject({
+      canStartServer: true,
+      canStopServer: false
+    });
+  });
 });
 
 function createSteamCmdServiceStub(status: 'MISSING' | 'READY'): SteamCmdService {
@@ -120,7 +152,9 @@ function createPalworldConfigurationServiceStub(status: 'MISSING' | 'READY'): Pa
   } as PalworldConfigurationService;
 }
 
-function createPalworldProcessServiceStub(state: 'STOPPED' | 'RUNNING'): PalworldProcessService {
+function createPalworldProcessServiceStub(
+  state: 'STOPPED' | 'STARTING' | 'RUNNING' | 'ERROR'
+): PalworldProcessService {
   return {
     getRuntimeStatus: () => ({
       state,

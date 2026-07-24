@@ -31,6 +31,7 @@ import {
   type ParsedPalworldSettings
 } from './config/palworld-settings-parser';
 import { formatBytes, formatLastVerification } from './utils/format';
+import { getOperationFailureMessage, isOperationSuccessful } from './utils/operation-result';
 import { cssEscape, escapeHtml, normalizeSearchText } from './utils/text';
 import { renderBackupsView as renderBackupsViewHtml } from './views/backups-view';
 import { renderAdminStatus } from './views/admin-view';
@@ -43,6 +44,7 @@ import { renderGeneralView as renderGeneralViewHtml } from './views/general-view
 import { renderPreflightSummaryView, renderSimpleView as renderSimpleViewHtml } from './views/status-views';
 import { NavigationState } from './state/navigation-state';
 import { AdminViewState } from './state/admin-view-state';
+import { resolveServerActionState } from './state/server-action-state';
 
 const palcmLogoUrl = new URL('./assets/palcm-logo.png', import.meta.url).href;
 
@@ -328,7 +330,7 @@ if (!palcmApi) {
   await refreshState();
 
   confirmActionButton?.addEventListener('click', () => {
-    void runPendingAction();
+    runUiAction('No se pudo ejecutar la accion pendiente', runPendingAction);
   });
 
   cancelActionButton?.addEventListener('click', () => {
@@ -366,12 +368,17 @@ if (!palcmApi) {
     void loadAppProcessMetrics();
   });
   startServerAction?.addEventListener('click', () => {
-    if (latestStatus === ApplicationStatus.SERVER_RUNNING) {
-      void stopPalworldServer();
+    if (!latestActions) {
       return;
     }
-
-    void startPalworldServer();
+    const action = resolveServerActionState(latestStatus, latestActions).action;
+    if (action === 'stop') {
+      runUiAction('No se pudo detener el servidor', stopPalworldServer);
+      return;
+    }
+    if (action === 'start') {
+      runUiAction('No se pudo iniciar el servidor', startPalworldServer);
+    }
   });
 
   navLinks.forEach((link) => {
@@ -467,7 +474,10 @@ async function refreshState(): Promise<void> {
         configurationAutoCreateAttempted = true;
         hideConfirmation();
         appendConsoleLine('Configuracion activa ausente o invalida. Creando base default del INI.');
-        void createDefaultConfiguration({ automatic: true });
+        runUiAction(
+          'No se pudo crear la configuracion inicial',
+          () => createDefaultConfiguration({ automatic: true })
+        );
         return;
       }
 
@@ -542,8 +552,11 @@ async function installSteamCmd(): Promise<void> {
   disableConfirmationButtons();
   appendConsoleLine('Confirmado: descargar SteamCMD.');
   const accepted = await palcmApi.steamCmd.install({ confirmed: true });
-  await pollOperation(accepted.operationId);
+  const completed = await pollOperation(accepted.operationId);
   await refreshState();
+  if (!completed) {
+    return;
+  }
 }
 
 async function installServer(): Promise<void> {
@@ -554,8 +567,11 @@ async function installServer(): Promise<void> {
   disableConfirmationButtons();
   appendConsoleLine('Confirmado: instalar Palworld Dedicated Server.');
   const accepted = await palcmApi.server.install({ confirmed: true });
-  await pollOperation(accepted.operationId);
+  const completed = await pollOperation(accepted.operationId);
   await refreshState();
+  if (!completed) {
+    return;
+  }
 }
 
 async function createDefaultConfiguration(options: { automatic?: boolean } = {}): Promise<void> {
@@ -569,8 +585,11 @@ async function createDefaultConfiguration(options: { automatic?: boolean } = {})
   }
 
   const accepted = await palcmApi.config.createDefault({ confirmed: true });
-  await pollOperation(accepted.operationId);
+  const completed = await pollOperation(accepted.operationId);
   await refreshState();
+  if (!completed) {
+    return;
+  }
 }
 
 async function startPalworldServer(): Promise<void> {
@@ -627,36 +646,47 @@ async function stopPalworldServer(): Promise<void> {
 async function pollOperation(
   operationId: string,
   options: { refreshStatusWhileRunning?: boolean } = {}
-): Promise<void> {
+): Promise<boolean> {
   if (!palcmApi) {
-    return;
+    return false;
   }
 
-  let operation: OperationProgressDto;
   activeCancellableOperationId = operationId;
 
-  let shouldContinuePolling = true;
+  try {
+    for (;;) {
+      const operation = await palcmApi.operation.get(operationId);
+      renderOperation(operation);
 
-  while (shouldContinuePolling) {
-    operation = await palcmApi.operation.get(operationId);
-    renderOperation(operation);
+      if (['COMPLETED', 'FAILED', 'CANCELLED'].includes(operation.status)) {
+        const failureMessage = getOperationFailureMessage(operation);
+        if (failureMessage) {
+          appendConsoleLine(`${operation.title}: ${failureMessage}`);
+          showToast(
+            operation.status === 'CANCELLED' ? 'Operacion cancelada' : `Operacion fallida: ${failureMessage}`,
+            operation.status === 'FAILED' ? 'error' : 'info'
+          );
+        }
+        return isOperationSuccessful(operation);
+      }
 
-    if (['COMPLETED', 'FAILED', 'CANCELLED'].includes(operation.status)) {
-      shouldContinuePolling = false;
-      continue;
+      if (options.refreshStatusWhileRunning) {
+        await refreshStatusChrome();
+      }
+
+      await wait(500);
     }
-
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    appendConsoleLine(`No se pudo consultar la operacion: ${message}`);
+    showToast('No se pudo consultar el progreso de la operacion', 'error');
+    return false;
+  } finally {
+    activeCancellableOperationId = null;
+    updateFooterChrome();
     if (options.refreshStatusWhileRunning) {
       await refreshStatusChrome();
     }
-
-    await wait(500);
-  }
-
-  activeCancellableOperationId = null;
-  updateFooterChrome();
-  if (options.refreshStatusWhileRunning) {
-    await refreshStatusChrome();
   }
 }
 
@@ -688,7 +718,7 @@ function renderOperationCancellationFooter(operation: OperationProgressDto): voi
     </button>
   `;
   document.querySelector<HTMLButtonElement>('#cancel-running-operation')?.addEventListener('click', () => {
-    void cancelRunningOperation();
+    runUiAction('No se pudo cancelar la operacion', cancelRunningOperation);
   });
 }
 
@@ -957,32 +987,10 @@ function updateStartServerButton(actions: AllowedActionsDto): void {
   if (!startServerAction) {
     return;
   }
-
-  if (latestStatus === ApplicationStatus.SERVER_STARTING) {
-    startServerAction.disabled = true;
-    startServerAction.textContent = 'Iniciando servidor';
-    updateSidebarRuntimeStatus('starting', 'Iniciando');
-    return;
-  }
-
-  if (latestStatus === ApplicationStatus.SERVER_RUNNING) {
-    startServerAction.disabled = !actions.canStopServer;
-    startServerAction.textContent = actions.canStopServer ? 'Detener servidor' : 'Servidor activo';
-    updateSidebarRuntimeStatus('running', 'Ejecutandose');
-    return;
-  }
-
-  if (latestStatus === ApplicationStatus.ERROR) {
-    startServerAction.disabled = true;
-    startServerAction.textContent = 'Servidor bloqueado';
-    updateSidebarRuntimeStatus('error', 'Revisar logs');
-    return;
-  }
-
-  const canStart = actions.canStartServer;
-  startServerAction.disabled = !canStart;
-  startServerAction.textContent = canStart ? 'Iniciar servidor' : 'Servidor bloqueado';
-  updateSidebarRuntimeStatus(canStart ? 'ready' : 'blocked', canStart ? 'Listo para iniciar' : 'Bloqueado');
+  const state = resolveServerActionState(latestStatus, actions);
+  startServerAction.disabled = state.disabled;
+  startServerAction.textContent = state.buttonLabel;
+  updateSidebarRuntimeStatus(state.runtimeTone, state.runtimeLabel);
 }
 
 function updateSidebarRuntimeStatus(
@@ -1811,7 +1819,9 @@ async function saveConfiguration(parsed?: ParsedPalworldSettings): Promise<void>
     confirmed: true,
     content
   });
-  await pollOperation(accepted.operationId);
+  if (!(await pollOperation(accepted.operationId))) {
+    return;
+  }
   clearServerConfigurationDraft();
   showToast('Configuracion guardada');
   navigationState.set('server');
@@ -1853,7 +1863,9 @@ async function restoreDefaultConfiguration(): Promise<void> {
   navigationState.set('logs');
   renderActiveView();
   const accepted = await palcmApi.config.restoreDefault({ confirmed: true });
-  await pollOperation(accepted.operationId);
+  if (!(await pollOperation(accepted.operationId))) {
+    return;
+  }
   clearServerConfigurationDraft();
   showToast('Configuracion default restaurada');
   navigationState.set('server');
@@ -1875,7 +1887,7 @@ function showRestoreDefaultConfirmation(): void {
     ]
   });
   document.querySelector<HTMLButtonElement>('#confirm-restore-default')?.addEventListener('click', () => {
-    void restoreDefaultConfiguration();
+    runUiAction('No se pudo restaurar la configuracion default', restoreDefaultConfiguration);
   });
   document.querySelector<HTMLButtonElement>('#cancel-restore-default')?.addEventListener(
     'click',
@@ -1943,7 +1955,7 @@ function showBackupPolicyConfirmation(request: BackupUpdatePolicyRequestDto): vo
     ]
   });
   document.querySelector<HTMLButtonElement>('#confirm-backup-policy')?.addEventListener('click', () => {
-    void updateBackupPolicy(request);
+    runUiAction('No se pudo actualizar la politica de backups', () => updateBackupPolicy(request));
   });
   document.querySelector<HTMLButtonElement>('#cancel-backup-policy')?.addEventListener('click', hideBackupConfirmation);
 }
@@ -1956,7 +1968,9 @@ async function updateBackupPolicy(request: BackupUpdatePolicyRequestDto): Promis
   navigationState.set('logs');
   renderActiveView();
   const accepted = await palcmApi.backup.updatePolicy(request);
-  await pollOperation(accepted.operationId);
+  if (!(await pollOperation(accepted.operationId))) {
+    return;
+  }
   latestBackupSummary = null;
   navigationState.set('backups');
   await refreshState();
@@ -2067,7 +2081,7 @@ function showServerRestartConfirmation(): void {
     ]
   });
   document.querySelector<HTMLButtonElement>('#confirm-server-restart')?.addEventListener('click', () => {
-    void restartServer();
+    runUiAction('No se pudo reiniciar el servidor', restartServer);
   });
   document.querySelector<HTMLButtonElement>('#cancel-server-restart')?.addEventListener('click', updateFooterChrome);
 }
@@ -2080,7 +2094,9 @@ async function restartServer(): Promise<void> {
   navigationState.set('logs');
   renderActiveView();
   const accepted = await palcmApi.server.restart({ confirmed: true });
-  await pollOperation(accepted.operationId, { refreshStatusWhileRunning: true });
+  if (!(await pollOperation(accepted.operationId, { refreshStatusWhileRunning: true }))) {
+    return;
+  }
   await refreshState();
 }
 
@@ -2101,7 +2117,7 @@ function showAdminConfirmation(form: HTMLFormElement, submitter: HTMLButtonEleme
     ]
   });
   document.querySelector<HTMLButtonElement>('#confirm-admin-action')?.addEventListener('click', () => {
-    void executeAdminAction(form, action);
+    runUiAction('No se pudo ejecutar la accion administrativa', () => executeAdminAction(form, action));
   });
   document.querySelector<HTMLButtonElement>('#cancel-admin-action')?.addEventListener('click', () => {
     updateFooterChrome();
@@ -2217,7 +2233,7 @@ function renderBackupsFooter(): void {
     showBackupRestoreConfirmation(getSelectedBackupIds());
   });
   document.querySelector<HTMLButtonElement>('#verify-selected-backup')?.addEventListener('click', () => {
-    void verifySelectedBackup(getSelectedBackupIds());
+    runUiAction('No se pudo verificar el backup', () => verifySelectedBackup(getSelectedBackupIds()));
   });
 }
 
@@ -2239,7 +2255,7 @@ function showBackupConfirmation(kind: 'configuration' | 'world'): void {
     ]
   });
   document.querySelector<HTMLButtonElement>('#confirm-backup')?.addEventListener('click', () => {
-    void createBackup(kind);
+    runUiAction('No se pudo crear el backup', () => createBackup(kind));
   });
   document.querySelector<HTMLButtonElement>('#cancel-backup')?.addEventListener('click', hideBackupConfirmation);
 }
@@ -2296,7 +2312,9 @@ async function verifySelectedBackup(backupIds: string[]): Promise<void> {
   navigationState.set('logs');
   renderActiveView();
   const accepted = await palcmApi.backup.verify({ backupId: backupIds[0] ?? '' });
-  await pollOperation(accepted.operationId);
+  if (!(await pollOperation(accepted.operationId))) {
+    return;
+  }
   latestBackupSummary = null;
   navigationState.set('backups');
   await refreshState();
@@ -2323,7 +2341,7 @@ function showBackupRestoreConfirmation(backupIds: string[]): void {
     ]
   });
   document.querySelector<HTMLButtonElement>('#confirm-backup')?.addEventListener('click', () => {
-    void restoreBackup(backupId);
+    runUiAction('No se pudo restaurar el backup', () => restoreBackup(backupId));
   });
   document.querySelector<HTMLButtonElement>('#cancel-backup')?.addEventListener('click', hideBackupConfirmation);
 }
@@ -2346,7 +2364,7 @@ function showBackupDeleteConfirmation(backupIds: string[]): void {
     ]
   });
   document.querySelector<HTMLButtonElement>('#confirm-backup')?.addEventListener('click', () => {
-    void deleteBackups(backupIds);
+    runUiAction('No se pudieron enviar los backups a la papelera', () => deleteBackups(backupIds));
   });
   document.querySelector<HTMLButtonElement>('#cancel-backup')?.addEventListener('click', hideBackupConfirmation);
 }
@@ -2382,7 +2400,9 @@ async function createBackup(kind: 'configuration' | 'world'): Promise<void> {
       ? await palcmApi.backup.createConfiguration({ confirmed: true })
       : await palcmApi.backup.createWorld({ confirmed: true });
 
-  await pollOperation(accepted.operationId);
+  if (!(await pollOperation(accepted.operationId))) {
+    return;
+  }
   latestBackupSummary = null;
   navigationState.set('backups');
   await refreshState();
@@ -2403,7 +2423,12 @@ async function deleteBackups(backupIds: string[]): Promise<void> {
       confirmed: true,
       backupId
     });
-    await pollOperation(accepted.operationId);
+    if (!(await pollOperation(accepted.operationId))) {
+      latestBackupSummary = null;
+      navigationState.set('backups');
+      await refreshState();
+      return;
+    }
   }
 
   latestBackupSummary = null;
@@ -2430,7 +2455,9 @@ async function restoreBackup(backupId: string): Promise<void> {
     backupId
   });
 
-  await pollOperation(accepted.operationId);
+  if (!(await pollOperation(accepted.operationId))) {
+    return;
+  }
   latestBackupSummary = null;
   showToast('Backup restaurado');
   navigationState.set('backups');
@@ -2611,7 +2638,7 @@ function renderServerFooter(parsed: ParsedPalworldSettings): void {
     </button>
   `;
   document.querySelector<HTMLButtonElement>('#save-config')?.addEventListener('click', () => {
-    void saveConfiguration(parsed);
+    runUiAction('No se pudo guardar la configuracion', () => saveConfiguration(parsed));
   });
   document.querySelector<HTMLButtonElement>('#discard-config')?.addEventListener('click', () => {
     discardServerChanges(parsed);
@@ -2641,10 +2668,10 @@ function showMaintenanceMenu(): void {
     ]
   });
   document.querySelector<HTMLButtonElement>('#repair-steamcmd')?.addEventListener('click', () => {
-    void repairSteamCmd();
+    runUiAction('No se pudo reparar SteamCMD', repairSteamCmd);
   });
   document.querySelector<HTMLButtonElement>('#repair-server')?.addEventListener('click', () => {
-    void repairServerInstallation();
+    runUiAction('No se pudo reparar el servidor', repairServerInstallation);
   });
   document.querySelector<HTMLButtonElement>('#cancel-maintenance')?.addEventListener('click', () => {
     void renderServerConfigurationView();
@@ -2659,7 +2686,9 @@ async function repairSteamCmd(): Promise<void> {
   navigationState.set('logs');
   renderActiveView();
   const accepted = await palcmApi.steamCmd.repair({ confirmed: true });
-  await pollOperation(accepted.operationId);
+  if (!(await pollOperation(accepted.operationId))) {
+    return;
+  }
   showToast('Reparacion de SteamCMD finalizada');
   navigationState.set('server');
   await refreshState();
@@ -2673,7 +2702,9 @@ async function repairServerInstallation(): Promise<void> {
   navigationState.set('logs');
   renderActiveView();
   const accepted = await palcmApi.server.repair({ confirmed: true });
-  await pollOperation(accepted.operationId);
+  if (!(await pollOperation(accepted.operationId))) {
+    return;
+  }
   showToast('Reparacion del servidor finalizada');
   navigationState.set('server');
   await refreshState();
@@ -2702,7 +2733,7 @@ function showServerUpdateConfirmation(): void {
     ]
   });
   document.querySelector<HTMLButtonElement>('#confirm-server-update')?.addEventListener('click', () => {
-    void updateServerInstallation();
+    runUiAction('No se pudo actualizar el servidor', updateServerInstallation);
   });
   document.querySelector<HTMLButtonElement>('#cancel-server-update')?.addEventListener('click', () => {
     void renderServerConfigurationView();
@@ -2718,7 +2749,9 @@ async function updateServerInstallation(): Promise<void> {
   navigationState.set('logs');
   renderActiveView();
   const accepted = await palcmApi.server.update({ confirmed: true });
-  await pollOperation(accepted.operationId);
+  if (!(await pollOperation(accepted.operationId))) {
+    return;
+  }
   showToast('Actualizacion del servidor finalizada');
   navigationState.set('server');
   await refreshState();
@@ -2890,12 +2923,12 @@ function renderFirewallStatusView(
   });
   document.querySelector<HTMLButtonElement>('#apply-firewall')?.addEventListener('click', showFirewallConfirmation);
   document.querySelector<HTMLButtonElement>('#confirm-firewall')?.addEventListener('click', () => {
-    void applyFirewallRules();
+    runUiAction('No se pudieron configurar las reglas de Firewall', applyFirewallRules);
   });
   document.querySelector<HTMLButtonElement>('#cancel-firewall')?.addEventListener('click', hideFirewallConfirmation);
   document.querySelector<HTMLButtonElement>('#stop-query-port-owner')?.addEventListener('click', showQueryPortStopConfirmation);
   document.querySelector<HTMLButtonElement>('#confirm-query-port-stop')?.addEventListener('click', () => {
-    void stopQueryPortOwner();
+    runUiAction('No se pudo detener el proceso de Steam Query', stopQueryPortOwner);
   });
   document.querySelector<HTMLButtonElement>('#cancel-query-port-stop')?.addEventListener('click', hideQueryPortStopConfirmation);
 }
@@ -3403,7 +3436,9 @@ async function applyFirewallRules(): Promise<void> {
   navigationState.set('logs');
   renderActiveView();
   const accepted = await palcmApi.firewall.applyRules({ confirmed: true });
-  await pollOperation(accepted.operationId);
+  if (!(await pollOperation(accepted.operationId))) {
+    return;
+  }
   latestFirewallStatus = null;
   latestFirewallCheckedAt = null;
   latestPublicNetwork = null;
@@ -3424,7 +3459,9 @@ async function stopQueryPortOwner(): Promise<void> {
   navigationState.set('logs');
   renderActiveView();
   const accepted = await palcmApi.server.stopQueryPortOwner({ confirmed: true });
-  await pollOperation(accepted.operationId);
+  if (!(await pollOperation(accepted.operationId))) {
+    return;
+  }
   showToast('Verificacion de Steam Query actualizada');
   navigationState.set('network');
   await refreshState();
@@ -3959,6 +3996,15 @@ function discardServerChanges(parsed: ParsedPalworldSettings): void {
   clearServerConfigurationDraft();
   updateServerDirtyState(parsed);
   showToast('Cambios descartados');
+}
+
+function runUiAction(label: string, action: () => Promise<void>): void {
+  void action().catch(async (error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    appendConsoleLine(`${label}: ${message}`);
+    showToast(label, 'error');
+    await refreshState();
+  });
 }
 
 function showToast(message: string, tone: 'info' | 'error' = 'info'): void {
