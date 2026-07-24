@@ -55,6 +55,7 @@ if (!appRoot) {
 const rootElement = appRoot;
 
 rootElement.innerHTML = `
+  <a class="skip-link" href="#content-view">Saltar al contenido</a>
   <header class="titlebar">
     <div class="titlebar__brand">
       <img class="titlebar__logo" src="${palcmLogoUrl}" alt="" />
@@ -192,13 +193,14 @@ rootElement.innerHTML = `
         <div class="action-row">
           <button id="confirm-action" class="primary-button" type="button">Aceptar y continuar</button>
           <button id="cancel-action" class="secondary-button" type="button">Cancelar</button>
-          <span id="operation-message" class="operation-message">Sin operacion activa.</span>
+          <span id="operation-message" class="operation-message" aria-live="polite">Sin operacion activa.</span>
         </div>
       </div>
-      <div id="content-view" class="content-view hidden"></div>
+      <div id="content-view" class="content-view hidden" role="main" tabindex="-1"></div>
     </section>
   </main>
   <footer id="app-footer" class="app-footer hidden"></footer>
+  <p id="view-announcer" class="sr-only" aria-live="polite" aria-atomic="true"></p>
   <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
 `;
 
@@ -234,6 +236,7 @@ const confirmActionButton = document.querySelector<HTMLButtonElement>('#confirm-
 const cancelActionButton = document.querySelector<HTMLButtonElement>('#cancel-action');
 const contentView = document.querySelector<HTMLDivElement>('#content-view');
 const appFooter = document.querySelector<HTMLElement>('#app-footer');
+const viewAnnouncer = document.querySelector<HTMLElement>('#view-announcer');
 const toastRegion = document.querySelector<HTMLElement>('#toast-region');
 const sidebarRuntimeStatus = document.querySelector<HTMLElement>('#sidebar-runtime-status');
 const startServerAction = document.querySelector<HTMLButtonElement>('#start-server-action');
@@ -272,6 +275,9 @@ const navigationState = new NavigationState();
 let latestStatus: ApplicationStatus = ApplicationStatus.BOOTSTRAPPING;
 let latestActions: AllowedActionsDto | null = null;
 let lastCopyToast: { value: string; copiedAt: number } | null = null;
+let confirmationReturnFocus: HTMLElement | null = null;
+let confirmationFocusActive = false;
+let inlineConfirmationReturnFocus: HTMLElement | null = null;
 let latestSummary: {
   steamCmdStatus: string;
   serverStatus: string;
@@ -392,8 +398,21 @@ if (!palcmApi) {
       navigationState.set(nextView);
       renderActiveView();
       updateNavigation(latestStatus);
+      announceAndFocusView();
     });
   });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') {
+      return;
+    }
+    closeSettingInfoPanels();
+    closeActiveFooterConfirmation();
+    hideFirewallConfirmation();
+    hideQueryPortStopConfirmation();
+  });
+
+  observeConfirmationFocus();
 }
 
 async function refreshState(): Promise<void> {
@@ -891,12 +910,20 @@ function updateNavigation(status: ApplicationStatus): void {
     link.classList.toggle('sidebar__link--locked', !enabled);
     link.classList.toggle('sidebar__link--active', isSidebarNavActive(link));
     link.setAttribute('aria-disabled', enabled ? 'false' : 'true');
+    link.tabIndex = enabled ? 0 : -1;
+    if (isSidebarNavActive(link)) {
+      link.setAttribute('aria-current', 'page');
+    } else {
+      link.removeAttribute('aria-current');
+    }
   });
 
   if (adminNavGroup) {
     adminNavGroup.classList.toggle('hidden', !serverRunning);
     adminNavGroup.classList.toggle('sidebar__group--open', serverRunning && (adminViewState.isMenuOpen() || navigationState.is('admin')));
     adminNavGroup.classList.toggle('sidebar__group--collapsed', !serverRunning || (!adminViewState.isMenuOpen() && !navigationState.is('admin')));
+    adminNavGroup.querySelector<HTMLElement>('[data-admin-group-toggle]')
+      ?.setAttribute('aria-expanded', serverRunning && (adminViewState.isMenuOpen() || navigationState.is('admin')) ? 'true' : 'false');
   }
 }
 
@@ -1839,7 +1866,7 @@ function showRestoreDefaultConfirmation(): void {
   }
 
   appFooter.classList.remove('hidden');
-  appFooter.classList.remove('app-footer--confirm');
+  appFooter.classList.add('app-footer--confirm');
   appFooter.innerHTML = renderInlineConfirm({
     message: 'Se creara un backup y se reemplazara la configuracion activa por los valores default instalados.',
     actions: [
@@ -2539,6 +2566,21 @@ function updateFooterChrome(): void {
   }
 }
 
+function closeActiveFooterConfirmation(): void {
+  if (!appFooter?.classList.contains('app-footer--confirm')) {
+    return;
+  }
+  if (navigationState.is('backups')) {
+    hideBackupConfirmation();
+    return;
+  }
+  if (navigationState.is('server') && latestServerSettings) {
+    renderServerFooter(latestServerSettings);
+    return;
+  }
+  updateFooterChrome();
+}
+
 function renderServerFooter(parsed: ParsedPalworldSettings): void {
   if (!appFooter) {
     return;
@@ -2819,7 +2861,7 @@ function renderFirewallStatusView(
           ${renderFirewallSection('Acceso externo', firewall.external.message, firewall.external.ports)}
           ${renderNetworkDiagnostics(firewall.external.network)}
         </section>
-        <div id="firewall-confirmation" class="inline-confirm hidden">
+        <div id="firewall-confirmation" class="inline-confirm hidden" role="alertdialog" aria-label="Confirmar configuracion del Firewall de Windows">
           <span>Se crearan reglas de entrada en el Firewall de Windows para los puertos activos. Windows puede pedir permisos de administrador.</span>
           <button id="confirm-firewall" class="primary-button primary-button--warning button-with-icon" type="button">
             ${renderIcon('check')}
@@ -2830,7 +2872,7 @@ function renderFirewallStatusView(
             <span>Cancelar</span>
           </button>
         </div>
-        <div id="query-port-confirmation" class="inline-confirm hidden">
+        <div id="query-port-confirmation" class="inline-confirm hidden" role="alertdialog" aria-label="Confirmar detencion del proceso que ocupa Steam Query">
           <span>Se detendra el proceso que Windows informa como dueño actual de UDP 27015. Usalo si quedo una instancia previa del servidor ocupando Steam Query.</span>
           <button id="confirm-query-port-stop" class="primary-button primary-button--warning button-with-icon" type="button">
             ${renderIcon('stop')}
@@ -3314,19 +3356,42 @@ function mapFirewallState(state: FirewallStatusDto['local']['state']): {
 }
 
 function showFirewallConfirmation(): void {
-  document.querySelector('#firewall-confirmation')?.classList.remove('hidden');
+  showInlineConfirmation('firewall-confirmation');
 }
 
 function hideFirewallConfirmation(): void {
-  document.querySelector('#firewall-confirmation')?.classList.add('hidden');
+  hideInlineConfirmation('firewall-confirmation');
 }
 
 function showQueryPortStopConfirmation(): void {
-  document.querySelector('#query-port-confirmation')?.classList.remove('hidden');
+  showInlineConfirmation('query-port-confirmation');
 }
 
 function hideQueryPortStopConfirmation(): void {
-  document.querySelector('#query-port-confirmation')?.classList.add('hidden');
+  hideInlineConfirmation('query-port-confirmation');
+}
+
+function showInlineConfirmation(id: string): void {
+  const confirmation = document.querySelector<HTMLElement>(`#${id}`);
+  if (!confirmation) {
+    return;
+  }
+  inlineConfirmationReturnFocus =
+    document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  confirmation.classList.remove('hidden');
+  window.requestAnimationFrame(() => {
+    confirmation.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
+  });
+}
+
+function hideInlineConfirmation(id: string): void {
+  const confirmation = document.querySelector<HTMLElement>(`#${id}`);
+  if (!confirmation || confirmation.classList.contains('hidden')) {
+    return;
+  }
+  confirmation.classList.add('hidden');
+  inlineConfirmationReturnFocus?.focus({ preventScroll: true });
+  inlineConfirmationReturnFocus = null;
 }
 
 async function applyFirewallRules(): Promise<void> {
@@ -3903,6 +3968,7 @@ function showToast(message: string, tone: 'info' | 'error' = 'info'): void {
 
   const toast = document.createElement('div');
   toast.className = `toast toast--${tone}`;
+  toast.setAttribute('role', tone === 'error' ? 'alert' : 'status');
   toast.textContent = message;
   toastRegion.append(toast);
 
@@ -3940,4 +4006,47 @@ async function wait(milliseconds: number): Promise<void> {
   await new Promise((resolve) => {
     setTimeout(resolve, milliseconds);
   });
+}
+
+function announceAndFocusView(): void {
+  const labels: Record<string, string> = {
+    home: 'General',
+    server: 'Servidor',
+    admin: `Administracion, ${adminViewState.getTab() === 'general' ? 'Servidor' : adminViewState.getTab() === 'players' ? 'Jugadores' : 'Mapa'}`,
+    network: 'Red y Firewall',
+    backups: 'Backups',
+    logs: 'Logs'
+  };
+  const label = labels[navigationState.current] ?? 'Contenido';
+  setText(viewAnnouncer, `Vista ${label}`);
+  window.requestAnimationFrame(() => {
+    contentView?.focus({ preventScroll: true });
+  });
+}
+
+function observeConfirmationFocus(): void {
+  if (!appFooter) {
+    return;
+  }
+  const observer = new MutationObserver(() => {
+    const isActive = appFooter.classList.contains('app-footer--confirm') && !appFooter.classList.contains('hidden');
+    if (isActive && !confirmationFocusActive) {
+      confirmationFocusActive = true;
+      confirmationReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      appFooter.setAttribute('role', 'alertdialog');
+      appFooter.setAttribute('aria-label', 'Confirmar accion');
+      window.requestAnimationFrame(() => {
+        appFooter.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
+      });
+      return;
+    }
+    if (!isActive && confirmationFocusActive) {
+      confirmationFocusActive = false;
+      appFooter.removeAttribute('role');
+      appFooter.removeAttribute('aria-label');
+      confirmationReturnFocus?.focus({ preventScroll: true });
+      confirmationReturnFocus = null;
+    }
+  });
+  observer.observe(appFooter, { attributes: true, childList: true });
 }
