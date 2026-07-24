@@ -185,7 +185,8 @@ logs/
 - El renderer no tiene acceso directo a Node.js.
 - `nodeIntegration` debe permanecer en `false`.
 - `contextIsolation` debe permanecer en `true`.
-- `sandbox` queda temporalmente en `false` por un workaround de Electron/Windows: con `sandbox: true` y fallback GPU el renderer falla al cargar en esta maquina.
+- `sandbox` permanece en `true`.
+- El renderer aplica una Content Security Policy local que bloquea scripts remotos, evaluacion dinamica y objetos embebidos.
 - El renderer solo puede usar metodos concretos expuestos por preload.
 - No se exponen comandos, PowerShell, filesystem ni procesos al renderer.
 - Las pruebas normales deben usar mocks/fixtures; no deben descargar SteamCMD ni Palworld ni tocar Firewall real.

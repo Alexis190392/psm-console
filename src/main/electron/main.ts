@@ -8,6 +8,17 @@ import { registerIpcHandlers } from '../ipc/register-ipc-handlers';
 import { createMainWindowOptions } from './window-options';
 
 const RENDERER_PROTOCOL = 'palcm';
+const RENDERER_CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data:",
+  "connect-src 'self'",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "frame-ancestors 'none'",
+  "form-action 'none'"
+].join('; ');
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -28,8 +39,6 @@ function configureElectronRuntime(): void {
   mkdirSync(userDataPath, { recursive: true });
   app.setPath('userData', userDataPath);
   app.disableHardwareAcceleration();
-  app.commandLine.appendSwitch('disable-gpu-sandbox');
-  app.commandLine.appendSwitch('use-angle', 'swiftshader');
 }
 
 function configureAppIdentity(): void {
@@ -83,7 +92,8 @@ function registerRendererProtocol(): void {
 
     return new Response(fileBody, {
       headers: {
-        'content-type': resolveContentType(filePath)
+        'content-type': resolveContentType(filePath),
+        'content-security-policy': RENDERER_CSP
       }
     });
   });

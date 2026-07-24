@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ipcChannels } from '../src/shared/contracts/ipc-channels';
 
@@ -50,5 +52,24 @@ describe('IPC channel surface', () => {
   it('keeps admin actions behind concrete domain channels', () => {
     expect(ipcChannels.adminGetStatus).toBe('admin:get-status');
     expect(ipcChannels.adminExecuteAction).toBe('admin:execute-action');
+  });
+
+  it('keeps the shared contract aligned with preload and registered handlers', () => {
+    const preloadSource = readFileSync(join(process.cwd(), 'src/main/preload/preload.ts'), 'utf8');
+    const handlersSource = readFileSync(join(process.cwd(), 'src/main/ipc/register-ipc-handlers.ts'), 'utf8');
+
+    for (const [key, channel] of Object.entries(ipcChannels)) {
+      expect(preloadSource, `${key} falta en preload`).toContain(`${key}: '${channel}'`);
+      expect(handlersSource, `${key} no tiene handler`).toContain(`ipcChannels.${key}`);
+    }
+  });
+
+  it('does not advertise maintenance channels before they are implemented', () => {
+    const channels = Object.values(ipcChannels);
+
+    expect(channels).not.toContain('operation:cancel');
+    expect(channels).not.toContain('steamcmd:repair');
+    expect(channels).not.toContain('server:repair');
+    expect(channels).not.toContain('server:restart');
   });
 });
