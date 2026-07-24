@@ -7,6 +7,7 @@ import { OperationManagerService } from '../operations/operation-manager.service
 import { NetworkService } from '../network/network.service';
 import type {
   FirewallApplyRulesRequestDto,
+  FirewallDiagnosticProgressDto,
   FirewallPortCheckDto,
   FirewallPortRequirementDto,
   FirewallStatusDto
@@ -14,6 +15,7 @@ import type {
 import type { OperationAcceptedDto } from '../../shared/dto/operation-progress.dto';
 
 const execFileAsync = promisify(execFile);
+type FirewallDiagnosticReporter = (progress: Omit<FirewallDiagnosticProgressDto, 'requestId'>) => void;
 
 @Injectable()
 export class FirewallService {
@@ -24,17 +26,63 @@ export class FirewallService {
     private readonly networkService: NetworkService
   ) {}
 
-  async getStatus(): Promise<FirewallStatusDto> {
+  async getStatus(reportProgress: FirewallDiagnosticReporter = () => undefined): Promise<FirewallStatusDto> {
+    reportProgress({
+      step: 'configuration',
+      state: 'active',
+      title: 'Leyendo configuracion activa',
+      detail: 'Abriendo PalWorldSettings.ini y localizando PublicPort, RCONEnabled y RCONPort.'
+    });
     const requirements = await this.getRequiredPorts();
-    const [localPorts, network] = await Promise.all([
-      this.checkLocalPorts(requirements),
-      this.networkService.getDiagnostics()
-    ]);
+    reportProgress({
+      step: 'configuration',
+      state: 'done',
+      title: 'Configuracion leida',
+      detail: createRequiredPortsDetail(requirements)
+    });
+    reportProgress({
+      step: 'windows-firewall',
+      state: 'active',
+      title: 'Consultando Firewall de Windows',
+      detail: 'Ejecutando Get-NetFirewallRule y comparando protocolo, puerto y PalServer.exe.'
+    });
+    reportProgress({
+      step: 'public-network',
+      state: 'active',
+      title: 'Detectando conectividad',
+      detail: 'Enumerando IPv4 LAN y consultando proveedores de IP publica con tiempo limite.'
+    });
+
+    const localPortsPromise = this.checkLocalPorts(requirements).then((ports) => {
+      reportProgress({
+        step: 'windows-firewall',
+        state: 'done',
+        title: 'Firewall de Windows revisado',
+        detail: createLocalPortsDetail(ports)
+      });
+      return ports;
+    });
+    const networkPromise = this.networkService.getDiagnostics().then((network) => {
+      reportProgress({
+        step: 'public-network',
+        state: 'done',
+        title: 'Direcciones de red detectadas',
+        detail: createNetworkDetail(network.publicIp, network.localIpv4)
+      });
+      return network;
+    });
+    const [localPorts, network] = await Promise.all([localPortsPromise, networkPromise]);
+    reportProgress({
+      step: 'summary',
+      state: 'active',
+      title: 'Preparando resultado',
+      detail: 'Consolidando reglas faltantes y advertencias informativas sin bloquear el servidor.'
+    });
     const missingLocalPorts = localPorts.filter((port) => port.enabled && port.state === 'MISSING');
     const hasLocalError = localPorts.some((port) => ['ERROR', 'UNSUPPORTED'].includes(port.state));
     const externalPorts = requirements.map((requirement) => this.createExternalCheck(requirement));
 
-    return {
+    const status: FirewallStatusDto = {
       local: {
         state: hasLocalError ? 'ERROR' : missingLocalPorts.length > 0 ? 'MISSING' : 'READY',
         ports: localPorts,
@@ -52,6 +100,17 @@ export class FirewallService {
       },
       updatedAt: new Date().toISOString()
     };
+
+    reportProgress({
+      step: 'summary',
+      state: 'done',
+      title: 'Diagnostico completado',
+      detail: missingLocalPorts.length > 0
+        ? `Faltan ${String(missingLocalPorts.length)} reglas locales; el acceso publico queda como informacion.`
+        : 'Windows local esta listo; el acceso publico queda informado por separado.'
+    });
+
+    return status;
   }
 
   applyRequiredRules(request: FirewallApplyRulesRequestDto): OperationAcceptedDto {
@@ -231,6 +290,25 @@ $results | ConvertTo-Json -Compress
     };
   }
 
+}
+
+function createRequiredPortsDetail(requirements: FirewallPortRequirementDto[]): string {
+  return requirements
+    .map((requirement) => `${requirement.protocol} ${String(requirement.port)} (${requirement.enabled ? 'activo' : 'desactivado'})`)
+    .join('; ');
+}
+
+function createLocalPortsDetail(ports: FirewallPortCheckDto[]): string {
+  const enabled = ports.filter((port) => port.enabled);
+  const ready = enabled.filter((port) => port.state === 'READY').length;
+  const missing = enabled.filter((port) => port.state === 'MISSING').length;
+
+  return `${String(ready)} reglas encontradas y ${String(missing)} pendientes entre los puertos activos.`;
+}
+
+function createNetworkDetail(publicIp: string | null, localIpv4: string[]): string {
+  const local = localIpv4.length > 0 ? localIpv4.join(', ') : 'sin IPv4 LAN';
+  return `LAN: ${local}; IP publica: ${publicIp ?? 'no disponible'}.`;
 }
 
 export function resolveFirewallPortRequirements(configurationContent: string): FirewallPortRequirementDto[] {

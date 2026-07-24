@@ -26,6 +26,7 @@ export const ipcChannels = {
   configCreateDefault: 'config:create-default',
   configRestoreDefault: 'config:restore-default',
   firewallGetStatus: 'firewall:get-status',
+  firewallDiagnosticProgress: 'firewall:diagnostic-progress',
   firewallCreateRule: 'firewall:create-rule',
   networkGetLocalAddresses: 'network:get-local-addresses',
   networkGetPublicAddress: 'network:get-public-address',

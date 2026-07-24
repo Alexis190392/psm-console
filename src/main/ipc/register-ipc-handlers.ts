@@ -32,7 +32,10 @@ import type {
 import type { PalworldAdminActionRequestDto } from '../../shared/dto/palworld-admin.dto';
 import type { SteamCmdInstallRequestDto, SteamCmdRepairRequestDto } from '../../shared/dto/steamcmd-status.dto';
 import type { OperationCancelRequestDto } from '../../shared/dto/operation-progress.dto';
-import type { FirewallApplyRulesRequestDto } from '../../shared/dto/firewall-status.dto';
+import type {
+  FirewallApplyRulesRequestDto,
+  FirewallDiagnosticRequestDto
+} from '../../shared/dto/firewall-status.dto';
 import type {
   BackupCreateRequestDto,
   BackupDeleteRequestDto,
@@ -157,7 +160,16 @@ export function registerIpcHandlers(
     operationManagerService.cancel(request)
   );
 
-  ipcMain.handle(ipcChannels.firewallGetStatus, () => firewallService.getStatus());
+  ipcMain.handle(ipcChannels.firewallGetStatus, (event, request: FirewallDiagnosticRequestDto) =>
+    firewallService.getStatus((progress) => {
+      if (!event.sender.isDestroyed()) {
+        event.sender.send(ipcChannels.firewallDiagnosticProgress, {
+          ...progress,
+          requestId: request.requestId
+        });
+      }
+    })
+  );
 
   ipcMain.handle(ipcChannels.firewallCreateRule, (_event, request: FirewallApplyRulesRequestDto) =>
     firewallService.applyRequiredRules(request)

@@ -10,6 +10,7 @@ export default tseslint.config(
       'ejecucionPruebas/**',
       '.tmp-tests/**',
       'scripts/capture-screenshots.js',
+      'scripts/capture-responsive-screenshots.js',
       'eslint.config.mjs'
     ]
   },

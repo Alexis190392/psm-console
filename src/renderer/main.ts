@@ -5,7 +5,13 @@ import { ApplicationStatus } from '../shared/enums/application-status';
 import type { AllowedActionsDto } from '../shared/dto/allowed-actions.dto';
 import type { AppProcessMetricDto, AppProcessMetricsDto } from '../shared/dto/app-process-metrics.dto';
 import type { BackupSummaryDto, BackupUpdatePolicyRequestDto } from '../shared/dto/backup-status.dto';
-import type { FirewallPortCheckDto, FirewallStatusDto } from '../shared/dto/firewall-status.dto';
+import type {
+  FirewallDiagnosticProgressDto,
+  FirewallDiagnosticStepId,
+  FirewallDiagnosticStepState,
+  FirewallPortCheckDto,
+  FirewallStatusDto
+} from '../shared/dto/firewall-status.dto';
 import type { NetworkDiagnosticsDto } from '../shared/dto/network-diagnostics.dto';
 import type { LogModule } from '../shared/dto/log-status.dto';
 import type { OperationProgressDto } from '../shared/dto/operation-progress.dto';
@@ -246,11 +252,11 @@ const navLinks = Array.from(document.querySelectorAll<HTMLAnchorElement>('[data-
 const adminNavGroup = document.querySelector<HTMLElement>('[data-nav-group="admin"]');
 const consoleLines: string[] = [];
 const operationLogOffsets = new Map<string, number>();
-let firewallLoadingTimers: number[] = [];
 let latestFirewallStatus: FirewallStatusDto | null = null;
 let firewallStatusRequest: Promise<FirewallStatusDto> | null = null;
 let latestFirewallError: string | null = null;
-let firewallRequestStartedAt = 0;
+let activeFirewallRequestId: string | null = null;
+const firewallDiagnosticProgress = new Map<FirewallDiagnosticStepId, FirewallDiagnosticProgressDto>();
 let latestFirewallCheckedAt: Date | null = null;
 let latestLocalAddresses: string[] = [];
 let latestPublicNetwork: NetworkDiagnosticsDto | null = null;
@@ -288,45 +294,18 @@ let latestSummary: {
   serverPath: string;
 } | null = null;
 
-type DiagnosticStepState = 'done' | 'active' | 'pending' | 'error';
-
-interface DiagnosticStepDefinition {
-  title: string;
-  detail: string;
-  activeDetail: string;
-}
-
-const FIREWALL_DIAGNOSTIC_STEPS: DiagnosticStepDefinition[] = [
-  {
-    title: 'Leyendo configuracion del servidor',
-    detail: 'Se leyo PalWorldSettings.ini y se ubicaron los puertos activos.',
-    activeDetail: 'Abriendo PalWorldSettings.ini para leer PublicPort y RCON.'
-  },
-  {
-    title: 'Detectando direcciones y puertos',
-    detail: 'Se detectaron las IP LAN disponibles y los puertos que debe usar el servidor.',
-    activeDetail: 'Buscando IP LAN disponible y preparando la validacion de UDP/TCP configurada.'
-  },
-  {
-    title: 'Revisando Firewall de Windows',
-    detail: 'Se consultaron reglas de entrada asociadas a PalServer.exe y a los puertos activos.',
-    activeDetail: 'Consultando reglas locales de entrada para saber si Windows permite conexiones al servidor.'
-  },
-  {
-    title: 'Comprobando acceso externo',
-    detail: 'Se consulto IP publica, posible NAT/CGNAT y respuesta externa del puerto.',
-    activeDetail: 'Consultando IP publica y probando el puerto desde fuera para diferenciar router, NAT o CGNAT.'
-  }
+const FIREWALL_DIAGNOSTIC_ORDER: FirewallDiagnosticStepId[] = [
+  'configuration',
+  'windows-firewall',
+  'public-network',
+  'query-port',
+  'summary'
 ];
-const DEFAULT_FIREWALL_DIAGNOSTIC_STEP: DiagnosticStepDefinition = FIREWALL_DIAGNOSTIC_STEPS[0] ?? {
-  title: 'Preparando diagnostico',
-  detail: 'Diagnostico inicializado.',
-  activeDetail: 'Preparando lectura de red y firewall.'
-};
 
 if (!palcmApi) {
   showIpcError('El preload seguro no expuso window.palcm. Revisar preload, sandbox y build.');
 } else {
+  palcmApi.firewall.onDiagnosticProgress(updateFirewallDiagnosticProgress);
   await refreshState();
 
   confirmActionButton?.addEventListener('click', () => {
@@ -2779,9 +2758,10 @@ async function getFirewallStatus(forceRefresh = false): Promise<FirewallStatusDt
   }
 
   latestFirewallError = null;
-  firewallRequestStartedAt = Date.now();
+  activeFirewallRequestId = crypto.randomUUID();
+  firewallDiagnosticProgress.clear();
   firewallStatusRequest = palcmApi.firewall
-    .getStatus()
+    .getStatus({ requestId: activeFirewallRequestId })
     .then((status) => {
       latestFirewallStatus = status;
       latestLocalAddresses = status.external.network.localIpv4;
@@ -2806,16 +2786,17 @@ async function renderFirewallView(forceRefresh = false): Promise<void> {
   }
 
   if (!forceRefresh && latestFirewallStatus) {
-    clearFirewallLoadingTimers();
     const queryPortStatus = await palcmApi.server.getQueryPortStatus();
     renderFirewallStatusView(latestFirewallStatus, queryPortStatus);
     return;
   }
 
   updateReadyChrome();
-  clearFirewallLoadingTimers();
-  const activeStep = getFirewallLoadingStep();
-  const activeDiagnostic = getFirewallDiagnosticStep(activeStep);
+  if (forceRefresh || !firewallStatusRequest) {
+    firewallDiagnosticProgress.clear();
+  }
+  const visibleProgress = renderFirewallDiagnosticProgress();
+  const currentProgress = getCurrentFirewallDiagnosticProgress();
   setContent(`
     <div class="view-stack view-stack--scroll">
       <div class="view-header view-header--contained">
@@ -2829,23 +2810,41 @@ async function renderFirewallView(forceRefresh = false): Promise<void> {
           <span class="loading-diagnostic__spinner" aria-hidden="true"></span>
           <div>
             <h4>Diagnostico en curso</h4>
-            <p id="firewall-diagnostic-current">${escapeHtml(activeDiagnostic.activeDetail)}</p>
+            <p id="firewall-diagnostic-current">${escapeHtml(currentProgress?.detail ?? 'Preparando una solicitud segura al backend.')}</p>
           </div>
         </div>
         <ol id="firewall-diagnostic-steps" class="diagnostic-steps" aria-label="Pasos de verificacion">
-          ${renderFirewallLoadingSteps(activeStep)}
+          ${visibleProgress || renderDiagnosticStep(0, 'active', 'Iniciando diagnostico', 'Creando la solicitud y preparando los verificadores locales.')}
         </ol>
       </section>
     </div>
   `);
-  startFirewallLoadingTimeline(activeStep);
 
   try {
-    const [firewall, queryPortStatus] = await Promise.all([
-      getFirewallStatus(forceRefresh),
-      palcmApi.server.getQueryPortStatus()
-    ]);
-    clearFirewallLoadingTimers();
+    const firewallPromise = getFirewallStatus(forceRefresh);
+    const requestId = activeFirewallRequestId;
+    const queryPortPromise = palcmApi.server.getQueryPortStatus().then((status) => {
+      if (requestId) {
+        updateFirewallDiagnosticProgress({
+          requestId,
+          step: 'query-port',
+          state: 'done',
+          title: 'Steam Query revisado',
+          detail: createQueryPortDiagnosticDetail(status)
+        });
+      }
+      return status;
+    });
+    if (requestId) {
+      updateFirewallDiagnosticProgress({
+        requestId,
+        step: 'query-port',
+        state: 'active',
+        title: 'Revisando Steam Query',
+        detail: 'Consultando si UDP 27015 esta libre o identificando el PID que lo utiliza.'
+      });
+    }
+    const [firewall, queryPortStatus] = await Promise.all([firewallPromise, queryPortPromise]);
 
     if (!navigationState.is('network')) {
       return;
@@ -2853,7 +2852,6 @@ async function renderFirewallView(forceRefresh = false): Promise<void> {
 
     renderFirewallStatusView(firewall, queryPortStatus);
   } catch (error) {
-    clearFirewallLoadingTimers();
     if (!navigationState.is('network')) {
       return;
     }
@@ -2956,9 +2954,8 @@ function renderFirewallErrorView(message: string): void {
           </div>
         </div>
         <ol class="diagnostic-steps" aria-label="Pasos de verificacion">
-          ${renderDiagnosticStep(0, 'done', getFirewallDiagnosticStep(0).title, getFirewallDiagnosticStep(0).detail)}
-          ${renderDiagnosticStep(1, 'done', getFirewallDiagnosticStep(1).title, getFirewallDiagnosticStep(1).detail)}
-          ${renderDiagnosticStep(2, 'error', 'Diagnostico interrumpido', 'No se pudo completar la consulta local. Reintenta para continuar con acceso externo.')}
+          ${renderFirewallDiagnosticProgress()}
+          ${renderDiagnosticStep(firewallDiagnosticProgress.size, 'error', 'Diagnostico interrumpido', 'La consulta actual no pudo completarse. Reintenta para continuar desde el primer paso.')}
         </ol>
       </section>
     </div>
@@ -3136,7 +3133,7 @@ function createExternalAccessSummary(firewall: FirewallStatusDto): SummaryCardVi
 
 function renderDiagnosticStep(
   index: number,
-  state: DiagnosticStepState,
+  state: FirewallDiagnosticStepState,
   title: string,
   detail: string
 ): string {
@@ -3151,78 +3148,55 @@ function renderDiagnosticStep(
   `;
 }
 
-function getFirewallDiagnosticStep(index: number): DiagnosticStepDefinition {
-  return FIREWALL_DIAGNOSTIC_STEPS[index] ?? DEFAULT_FIREWALL_DIAGNOSTIC_STEP;
-}
-
-function renderFirewallLoadingSteps(activeIndex: number): string {
-  const visibleSteps = FIREWALL_DIAGNOSTIC_STEPS.slice(0, Math.min(activeIndex + 1, FIREWALL_DIAGNOSTIC_STEPS.length));
-
-  return visibleSteps
-    .map((step, index) =>
-      renderDiagnosticStep(
-        index,
-        getDiagnosticStepState(index, activeIndex),
-        step.title,
-        index === activeIndex ? step.activeDetail : step.detail
-      )
-    )
-    .join('');
-}
-
-function getFirewallLoadingStep(): number {
-  if (!firewallStatusRequest || firewallRequestStartedAt === 0) {
-    return 0;
+function updateFirewallDiagnosticProgress(progress: FirewallDiagnosticProgressDto): void {
+  if (progress.requestId !== activeFirewallRequestId) {
+    return;
   }
 
-  return Math.min(3, Math.floor((Date.now() - firewallRequestStartedAt) / 700));
-}
-
-function getDiagnosticStepState(index: number, activeIndex: number): DiagnosticStepState {
-  if (index < activeIndex) {
-    return 'done';
+  firewallDiagnosticProgress.set(progress.step, progress);
+  if (!navigationState.is('network')) {
+    return;
   }
 
-  if (index === activeIndex) {
-    return 'active';
-  }
-
-  return 'pending';
-}
-
-function startFirewallLoadingTimeline(startIndex = 0): void {
-  FIREWALL_DIAGNOSTIC_STEPS.forEach((_step, index) => {
-    if (index < startIndex) {
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      updateDiagnosticSteps(index);
-    }, (index - startIndex) * 700);
-    firewallLoadingTimers.push(timer);
-  });
-}
-
-function updateDiagnosticSteps(activeIndex: number): void {
-  const clampedIndex = Math.min(activeIndex, FIREWALL_DIAGNOSTIC_STEPS.length - 1);
-  const currentStep = getFirewallDiagnosticStep(clampedIndex);
   const currentDetail = document.querySelector<HTMLElement>('#firewall-diagnostic-current');
   const stepList = document.querySelector<HTMLElement>('#firewall-diagnostic-steps');
 
   if (currentDetail) {
-    currentDetail.textContent = currentStep.activeDetail;
+    currentDetail.textContent = getCurrentFirewallDiagnosticProgress()?.detail ?? progress.detail;
   }
 
   if (stepList) {
-    stepList.innerHTML = renderFirewallLoadingSteps(clampedIndex);
+    stepList.innerHTML = renderFirewallDiagnosticProgress();
   }
 }
 
-function clearFirewallLoadingTimers(): void {
-  firewallLoadingTimers.forEach((timer) => {
-    window.clearTimeout(timer);
-  });
-  firewallLoadingTimers = [];
+function renderFirewallDiagnosticProgress(): string {
+  return FIREWALL_DIAGNOSTIC_ORDER
+    .map((step) => firewallDiagnosticProgress.get(step))
+    .filter((step): step is FirewallDiagnosticProgressDto => Boolean(step))
+    .map((step, index) => renderDiagnosticStep(index, step.state, step.title, step.detail))
+    .join('');
+}
+
+function getCurrentFirewallDiagnosticProgress(): FirewallDiagnosticProgressDto | undefined {
+  const progress = Array.from(firewallDiagnosticProgress.values());
+  return progress.filter((step) => step.state === 'active').at(-1) ?? progress.at(-1);
+}
+
+function createQueryPortDiagnosticDetail(status: PalworldQueryPortStatusDto | null): string {
+  if (!status) {
+    return 'No se recibio informacion del puerto Steam Query.';
+  }
+
+  if (status.state === 'AVAILABLE') {
+    return `UDP ${String(status.port)} esta libre para iniciar el servidor.`;
+  }
+
+  if (status.state === 'IN_USE' && status.pid) {
+    return `UDP ${String(status.port)} esta en uso por PID ${String(status.pid)} (${status.processName ?? 'proceso sin nombre'}).`;
+  }
+
+  return status.message;
 }
 
 function renderExternalPortRecommendations(ports: FirewallPortCheckDto[]): string {

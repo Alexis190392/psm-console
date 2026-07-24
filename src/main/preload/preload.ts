@@ -15,7 +15,12 @@ import type {
   OperationCancelRequestDto,
   OperationProgressDto
 } from '../../shared/dto/operation-progress.dto';
-import type { FirewallApplyRulesRequestDto, FirewallStatusDto } from '../../shared/dto/firewall-status.dto';
+import type {
+  FirewallApplyRulesRequestDto,
+  FirewallDiagnosticProgressDto,
+  FirewallDiagnosticRequestDto,
+  FirewallStatusDto
+} from '../../shared/dto/firewall-status.dto';
 import type { LogsRecentDto, LogsRecentRequestDto } from '../../shared/dto/log-status.dto';
 import type {
   PalworldConfigurationFileDto,
@@ -81,6 +86,7 @@ const ipcChannels = {
   configCreateDefault: 'config:create-default',
   configRestoreDefault: 'config:restore-default',
   firewallGetStatus: 'firewall:get-status',
+  firewallDiagnosticProgress: 'firewall:diagnostic-progress',
   firewallCreateRule: 'firewall:create-rule',
   networkGetLocalAddresses: 'network:get-local-addresses',
   networkGetPublicAddress: 'network:get-public-address',
@@ -139,7 +145,8 @@ export interface PalcmApi {
     createDefault: (request: PalworldCreateDefaultConfigurationRequestDto) => Promise<OperationAcceptedDto>;
   };
   firewall: {
-    getStatus: () => Promise<FirewallStatusDto>;
+    getStatus: (request: FirewallDiagnosticRequestDto) => Promise<FirewallStatusDto>;
+    onDiagnosticProgress: (listener: (progress: FirewallDiagnosticProgressDto) => void) => () => void;
     applyRules: (request: FirewallApplyRulesRequestDto) => Promise<OperationAcceptedDto>;
   };
   network: {
@@ -225,7 +232,17 @@ const api: PalcmApi = {
       ipcRenderer.invoke(ipcChannels.configCreateDefault, request) as Promise<OperationAcceptedDto>
   },
   firewall: {
-    getStatus: () => ipcRenderer.invoke(ipcChannels.firewallGetStatus) as Promise<FirewallStatusDto>,
+    getStatus: (request) =>
+      ipcRenderer.invoke(ipcChannels.firewallGetStatus, request) as Promise<FirewallStatusDto>,
+    onDiagnosticProgress: (listener) => {
+      const handler = (_event: Electron.IpcRendererEvent, progress: FirewallDiagnosticProgressDto): void => {
+        listener(progress);
+      };
+      ipcRenderer.on(ipcChannels.firewallDiagnosticProgress, handler);
+      return () => {
+        ipcRenderer.removeListener(ipcChannels.firewallDiagnosticProgress, handler);
+      };
+    },
     applyRules: (request) =>
       ipcRenderer.invoke(ipcChannels.firewallCreateRule, request) as Promise<OperationAcceptedDto>
   },

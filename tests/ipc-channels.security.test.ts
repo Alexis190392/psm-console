@@ -15,6 +15,7 @@ describe('IPC channel surface', () => {
 
   it('keeps firewall actions behind concrete domain channels', () => {
     expect(ipcChannels.firewallGetStatus).toBe('firewall:get-status');
+    expect(ipcChannels.firewallDiagnosticProgress).toBe('firewall:diagnostic-progress');
     expect(ipcChannels.firewallCreateRule).toBe('firewall:create-rule');
   });
 
