@@ -2,6 +2,8 @@ export const ipcChannels = {
   appGetStatus: 'app:get-status',
   appGetActions: 'app:get-actions',
   appGetProcessMetrics: 'app:get-process-metrics',
+  updateGetStatus: 'update:get-status',
+  updateOpenRelease: 'update:open-release',
   operationGet: 'operation:get',
   operationCancel: 'operation:cancel',
   steamCmdGetStatus: 'steamcmd:get-status',

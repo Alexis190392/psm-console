@@ -4,6 +4,7 @@ import { formatLocalLogTimestamp } from '../shared/utils/local-time';
 import { ApplicationStatus } from '../shared/enums/application-status';
 import type { AllowedActionsDto } from '../shared/dto/allowed-actions.dto';
 import type { AppProcessMetricDto, AppProcessMetricsDto } from '../shared/dto/app-process-metrics.dto';
+import type { AppUpdateStatusDto } from '../shared/dto/app-update-status.dto';
 import type { BackupSummaryDto, BackupUpdatePolicyRequestDto } from '../shared/dto/backup-status.dto';
 import type {
   FirewallDiagnosticProgressDto,
@@ -269,6 +270,9 @@ let latestPublicNetworkPort: string | null = null;
 let publicNetworkRequestPort: string | null = null;
 let latestConfiguredPort: string | null = null;
 let latestBackupSummary: BackupSummaryDto | null = null;
+let latestUpdateStatus: AppUpdateStatusDto | null = null;
+let updateStatusRequest: Promise<AppUpdateStatusDto> | null = null;
+let announcedUpdateVersion: string | null = null;
 let adminRefreshTimer: number | null = null;
 const adminViewState = new AdminViewState();
 let consoleSearchTerm = '';
@@ -1090,6 +1094,7 @@ async function renderGeneralView(): Promise<void> {
 
   setContent(renderGeneralViewHtml({
     networkFreshness,
+    update: latestUpdateStatus,
     primaryCards: [
       {
           title: 'Servidor',
@@ -1157,9 +1162,56 @@ async function renderGeneralView(): Promise<void> {
     ]
   }));
   bindSummaryCards();
+  bindReleaseUpdateAction();
   void hydrateGeneralLocalPreview(port);
   void hydrateGeneralPublicPreview(port);
   void hydrateGeneralNetworkSummary(port);
+  void loadReleaseUpdateStatus();
+}
+
+function bindReleaseUpdateAction(): void {
+  document.querySelector<HTMLButtonElement>('[data-open-release="true"]')?.addEventListener('click', () => {
+    if (!palcmApi) {
+      return;
+    }
+
+    void palcmApi.update.openRelease()
+      .then(() => {
+        showToast('Se abrió la página oficial de descarga.');
+      })
+      .catch((error: unknown) => {
+        appendConsoleLine(`No se pudo abrir la release: ${error instanceof Error ? error.message : String(error)}`);
+        showToast('No se pudo abrir la página de descarga', 'error');
+      });
+  });
+}
+
+async function loadReleaseUpdateStatus(): Promise<void> {
+  if (!palcmApi || latestUpdateStatus || updateStatusRequest) {
+    return;
+  }
+
+  updateStatusRequest = palcmApi.update.getStatus();
+
+  try {
+    latestUpdateStatus = await updateStatusRequest;
+
+    const availableVersion = latestUpdateStatus.state === 'AVAILABLE'
+      ? latestUpdateStatus.latestVersion
+      : undefined;
+    if (availableVersion && availableVersion !== announcedUpdateVersion) {
+      announcedUpdateVersion = availableVersion;
+      showToast(`Nueva versión disponible: v${availableVersion}.`);
+    }
+
+    if (navigationState.is('home')) {
+      await renderGeneralView();
+    }
+  } catch (error) {
+    appendConsoleLine(`No se pudo consultar actualizaciones: ${error instanceof Error ? error.message : String(error)}`);
+  } finally {
+    updateStatusRequest = null;
+  }
 }
 
 async function readBackupSummaryForGeneral(): Promise<BackupSummaryDto | null> {

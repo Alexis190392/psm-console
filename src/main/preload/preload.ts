@@ -57,11 +57,14 @@ import type {
   SteamCmdStatusDto
 } from '../../shared/dto/steamcmd-status.dto';
 import type { NetworkDiagnosticsDto, PublicAddressRequestDto } from '../../shared/dto/network-diagnostics.dto';
+import type { AppUpdateStatusDto } from '../../shared/dto/app-update-status.dto';
 
 const ipcChannels = {
   appGetStatus: 'app:get-status',
   appGetActions: 'app:get-actions',
   appGetProcessMetrics: 'app:get-process-metrics',
+  updateGetStatus: 'update:get-status',
+  updateOpenRelease: 'update:open-release',
   operationGet: 'operation:get',
   operationCancel: 'operation:cancel',
   steamCmdGetStatus: 'steamcmd:get-status',
@@ -108,6 +111,10 @@ export interface PalcmApi {
     getStatus: () => Promise<ApplicationStatusDto>;
     getActions: () => Promise<AllowedActionsDto>;
     getProcessMetrics: () => Promise<AppProcessMetricsDto>;
+  };
+  update: {
+    getStatus: () => Promise<AppUpdateStatusDto>;
+    openRelease: () => Promise<void>;
   };
   operation: {
     get: (operationId: string) => Promise<OperationProgressDto>;
@@ -178,6 +185,10 @@ const api: PalcmApi = {
     getActions: () => ipcRenderer.invoke(ipcChannels.appGetActions) as Promise<AllowedActionsDto>,
     getProcessMetrics: () =>
       ipcRenderer.invoke(ipcChannels.appGetProcessMetrics) as Promise<AppProcessMetricsDto>
+  },
+  update: {
+    getStatus: () => ipcRenderer.invoke(ipcChannels.updateGetStatus) as Promise<AppUpdateStatusDto>,
+    openRelease: () => ipcRenderer.invoke(ipcChannels.updateOpenRelease) as Promise<void>
   },
   operation: {
     get: (operationId) =>

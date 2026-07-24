@@ -12,6 +12,7 @@ import { PalworldInstallationService } from '../../backend/palworld-installation
 import { PalworldPlayersService } from '../../backend/palworld-players/palworld-players.service';
 import { PalworldProcessService } from '../../backend/palworld-process/palworld-process.service';
 import { SteamCmdService } from '../../backend/steamcmd/steamcmd.service';
+import { ReleaseUpdateService } from '../../backend/release-update/release-update.service';
 import { ipcChannels } from '../../shared/contracts/ipc-channels';
 import type {
   PalworldRestoreDefaultConfigurationRequestDto,
@@ -63,6 +64,7 @@ export function registerIpcHandlers(
   const networkService = nestContext.get(NetworkService);
   const backupService = nestContext.get(BackupService);
   const loggingService = nestContext.get(LoggingService);
+  const releaseUpdateService = nestContext.get(ReleaseUpdateService);
 
   ipcMain.handle(ipcChannels.appGetStatus, () =>
     applicationStateService.getStatus()
@@ -73,6 +75,13 @@ export function registerIpcHandlers(
   );
 
   ipcMain.handle(ipcChannels.appGetProcessMetrics, () => getAppProcessMetrics());
+
+  ipcMain.handle(ipcChannels.updateGetStatus, () => releaseUpdateService.getStatus());
+
+  ipcMain.handle(ipcChannels.updateOpenRelease, async () => {
+    const releaseUrl = await releaseUpdateService.getReleaseUrl();
+    await shell.openExternal(releaseUrl);
+  });
 
   ipcMain.handle(ipcChannels.steamCmdGetStatus, () => steamCmdService.getStatus());
 

@@ -1399,6 +1399,19 @@ input[type="range"] {
   white-space: nowrap;
 }
 
+.view-meta-pill--update {
+  cursor: pointer;
+  border-color: rgba(255, 205, 78, 0.34);
+  background: rgba(255, 205, 78, 0.1);
+  color: #ffe2a1;
+}
+
+.view-meta-pill--update:hover,
+.view-meta-pill--update:focus-visible {
+  border-color: rgba(255, 205, 78, 0.68);
+  background: rgba(255, 205, 78, 0.16);
+}
+
 .view-meta-path {
   max-width: min(540px, 42vw);
   overflow: hidden;

@@ -17,6 +17,7 @@ import { PalworldProcessService } from './palworld-process/palworld-process.serv
 import { PortablePathService } from './portable-path/portable-path.service';
 import { PortableStateService } from './portable-state/portable-state.service';
 import { SteamCmdService } from './steamcmd/steamcmd.service';
+import { ReleaseUpdateService } from './release-update/release-update.service';
 
 @Module({
   providers: [
@@ -29,6 +30,7 @@ import { SteamCmdService } from './steamcmd/steamcmd.service';
     BackupPolicyService,
     BackupService,
     SteamCmdService,
+    ReleaseUpdateService,
     PalworldInstallationService,
     PalworldMaintenanceSnapshotService,
     PalworldAdminService,
@@ -49,6 +51,7 @@ import { SteamCmdService } from './steamcmd/steamcmd.service';
     BackupPolicyService,
     BackupService,
     SteamCmdService,
+    ReleaseUpdateService,
     PalworldInstallationService,
     PalworldMaintenanceSnapshotService,
     PalworldAdminService,
