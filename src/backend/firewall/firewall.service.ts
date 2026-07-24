@@ -15,6 +15,8 @@ import type {
 import type { OperationAcceptedDto } from '../../shared/dto/operation-progress.dto';
 
 const execFileAsync = promisify(execFile);
+const FIREWALL_QUERY_TIMEOUT_MS = 8_000;
+const ELEVATED_POWERSHELL_TIMEOUT_MS = 5 * 60_000;
 type FirewallDiagnosticReporter = (progress: Omit<FirewallDiagnosticProgressDto, 'requestId'>) => void;
 
 @Injectable()
@@ -44,7 +46,7 @@ export class FirewallService {
       step: 'windows-firewall',
       state: 'active',
       title: 'Consultando Firewall de Windows',
-      detail: 'Ejecutando Get-NetFirewallRule y comparando protocolo, puerto y PalServer.exe.'
+      detail: 'Buscando filtros por protocolo y puerto, y validando solo las reglas asociadas a PalServer.exe.'
     });
     reportProgress({
       step: 'public-network',
@@ -223,33 +225,7 @@ export class FirewallService {
     try {
       const server = this.palworldInstallationService.getStatus();
       const executablePath = server.status === 'READY' ? server.executablePath : '';
-      const requirementJson = JSON.stringify(
-        enabledRequirements.map((requirement) => ({
-          key: requirement.key,
-          port: requirement.port,
-          protocol: requirement.protocol
-        }))
-      );
-      const script = `
-$requirements = '${escapePowerShellSingleQuoted(requirementJson)}' | ConvertFrom-Json
-$rules = Get-NetFirewallRule -Direction Inbound -Action Allow -Enabled True -ErrorAction SilentlyContinue
-$results = @()
-foreach ($requirement in $requirements) {
-  $matches = @()
-  foreach ($rule in $rules) {
-    $port = $rule | Get-NetFirewallPortFilter -ErrorAction SilentlyContinue
-    $app = $rule | Get-NetFirewallApplicationFilter -ErrorAction SilentlyContinue
-    if ($null -eq $port) { continue }
-    if ($port.Protocol -ne $requirement.protocol) { continue }
-    if ([string]$port.LocalPort -ne [string]$requirement.port) { continue }
-    if ('${escapePowerShellSingleQuoted(executablePath)}' -ne '' -and $null -ne $app -and $app.Program -ne 'Any' -and $app.Program -ne '${escapePowerShellSingleQuoted(executablePath)}') { continue }
-    $matches += $rule.DisplayName
-  }
-  $results += @{ key = $requirement.key; ok = ($matches.Count -gt 0); rules = $matches }
-}
-$results | ConvertTo-Json -Compress
-`;
-      const output = await runPowerShell(script);
+      const output = await runPowerShell(buildFirewallCheckScript(enabledRequirements, executablePath));
       const parsed = parsePowerShellChecks(output);
       const enabledChecks = enabledRequirements.map((requirement) => {
         const result = parsed.get(requirement.key);
@@ -267,7 +243,7 @@ $results | ConvertTo-Json -Compress
       const errorChecks = enabledRequirements.map((requirement) => ({
         ...requirement,
         state: 'ERROR' as const,
-        message: error instanceof Error ? error.message : String(error)
+        message: createFirewallCheckErrorMessage(error)
       }));
 
       return mergeChecks(requirements, [...disabledChecks, ...errorChecks]);
@@ -290,6 +266,48 @@ $results | ConvertTo-Json -Compress
     };
   }
 
+}
+
+export function buildFirewallCheckScript(
+  requirements: FirewallPortRequirementDto[],
+  executablePath: string
+): string {
+  const requirementJson = JSON.stringify(
+    requirements.map((requirement) => ({
+      key: requirement.key,
+      port: requirement.port,
+      protocol: requirement.protocol
+    }))
+  );
+  const escapedExecutablePath = escapePowerShellSingleQuoted(executablePath);
+
+  return `
+$requirements = '${escapePowerShellSingleQuoted(requirementJson)}' | ConvertFrom-Json
+$results = @()
+foreach ($requirement in $requirements) {
+  $matches = @()
+  $portFilters = @(
+    Get-NetFirewallPortFilter -Protocol $requirement.protocol -ErrorAction SilentlyContinue |
+      Where-Object { [string]$_.LocalPort -eq [string]$requirement.port }
+  )
+  foreach ($portFilter in $portFilters) {
+    $rules = @(
+      Get-NetFirewallRule -AssociatedNetFirewallPortFilter $portFilter -ErrorAction SilentlyContinue
+    )
+    foreach ($rule in $rules) {
+      if ([string]$rule.Direction -ne 'Inbound') { continue }
+      if ([string]$rule.Action -ne 'Allow') { continue }
+      if ([string]$rule.Enabled -ne 'True') { continue }
+      $app = $rule | Get-NetFirewallApplicationFilter -ErrorAction SilentlyContinue
+      $programs = @($app | ForEach-Object { [string]$_.Program })
+      if ('${escapedExecutablePath}' -ne '' -and $programs.Count -gt 0 -and $programs -notcontains 'Any' -and $programs -notcontains '${escapedExecutablePath}') { continue }
+      $matches += $rule.DisplayName
+    }
+  }
+  $results += @{ key = $requirement.key; ok = ($matches.Count -gt 0); rules = @($matches | Select-Object -Unique) }
+}
+$results | ConvertTo-Json -Compress
+`;
 }
 
 function createRequiredPortsDetail(requirements: FirewallPortRequirementDto[]): string {
@@ -349,16 +367,7 @@ New-NetFirewallRule -DisplayName '${escapePowerShellSingleQuoted(displayName)}' 
 }
 
 async function runPowerShell(script: string): Promise<string> {
-  const { stdout } = await execFileAsync('powershell.exe', [
-    '-NoProfile',
-    '-NonInteractive',
-    '-ExecutionPolicy',
-    'Bypass',
-    '-Command',
-    script
-  ]);
-
-  return stdout.trim();
+  return runPowerShellWithTimeout(script, FIREWALL_QUERY_TIMEOUT_MS);
 }
 
 async function runPowerShellElevated(script: string): Promise<void> {
@@ -367,7 +376,41 @@ async function runPowerShellElevated(script: string): Promise<void> {
 $process = Start-Process -FilePath powershell.exe -Verb RunAs -Wait -PassThru -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-EncodedCommand','${encoded}'
 if ($process.ExitCode -ne 0) { throw "Elevated PowerShell exited with code $($process.ExitCode)" }
 `;
-  await runPowerShell(launcher);
+  await runPowerShellWithTimeout(launcher, ELEVATED_POWERSHELL_TIMEOUT_MS);
+}
+
+async function runPowerShellWithTimeout(script: string, timeout: number): Promise<string> {
+  const { stdout } = await execFileAsync('powershell.exe', [
+    '-NoProfile',
+    '-NonInteractive',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-Command',
+    script
+  ], {
+    timeout,
+    windowsHide: true,
+    maxBuffer: 1024 * 1024
+  });
+
+  return stdout.trim();
+}
+
+export function createFirewallCheckErrorMessage(error: unknown): string {
+  if (isPowerShellTimeout(error)) {
+    return `Windows Firewall no respondio dentro de ${String(FIREWALL_QUERY_TIMEOUT_MS / 1000)} segundos. Reintenta el diagnostico.`;
+  }
+
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isPowerShellTimeout(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const candidate = error as { code?: unknown; killed?: unknown; signal?: unknown };
+  return candidate.code === 'ETIMEDOUT' || candidate.killed === true || candidate.signal === 'SIGTERM';
 }
 
 function parsePowerShellChecks(output: string): Map<string, { ok: boolean; rules: string[] }> {
