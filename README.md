@@ -1,207 +1,63 @@
-# PalCM
+# PSM Console by &gt;GR477&lt;
 
-PalCM es una aplicacion portable para Windows destinada a administrar un servidor dedicado de Palworld desde una unica ventana.
+<p align="center">
+  <img src="src/renderer/assets/palcm-logo.png" alt="Logo de PSM Console" width="128" />
+</p>
 
-Stack actual:
+PSM Console es una aplicación portable para Windows que instala, configura, inicia y administra un servidor dedicado de Palworld desde una única interfaz.
 
-- Electron.
-- NestJS como `ApplicationContext` dentro del proceso principal.
-- TypeScript estricto.
-- Renderer con Vite.
-- IPC seguro mediante preload y `contextBridge`.
+Está desarrollada con Electron, NestJS y TypeScript. La interfaz no accede directamente al sistema: utiliza una capa IPC tipada, restringida y aislada.
+
+## Funcionalidades
+
+- Detecta, descarga y valida SteamCMD con confirmación explícita.
+- Instala, actualiza y repara Palworld Dedicated Server.
+- Crea y edita `PalWorldSettings.ini` mediante controles agrupados y perfiles.
+- Crea backups, verifica su integridad y los restaura de forma segura.
+- Revisa Firewall de Windows, acceso local y datos de conexión pública.
+- Inicia, detiene y supervisa el servidor con logs en tiempo real.
+- Habilita controles de administración, jugadores y mundo mientras el servidor está activo.
+
+## Interfaz
+
+![Vista general de PSM Console](resources/screenshots/general.png)
+
+<p align="center">
+  <img src="resources/screenshots/servidor.png" alt="Configuración del servidor" width="49%" />
+  <img src="resources/screenshots/red-firewall.png" alt="Red y Firewall" width="49%" />
+</p>
 
 ## Requisitos
 
-- Windows.
+### Para usar el portable
+
+- Windows 10 u Windows 11 de 64 bits.
+- Conexión a Internet solo para descargar SteamCMD, el servidor o consultar la red pública.
+- Aprobación de administrador únicamente cuando sea necesario crear o actualizar reglas del Firewall de Windows.
+
+### Para desarrollar desde el código fuente
+
+- Windows 10 u Windows 11 de 64 bits.
 - Node.js 22.x.
 - npm 10.x.
 
-> En PowerShell puede fallar `npm` por politica de ejecucion de scripts. Usar `npm.cmd` evita ese problema.
-
-## Instalar dependencias
-
 ```powershell
 npm.cmd install
-```
-
-## Ejecutar en desarrollo
-
-```powershell
 npm.cmd run start:dev
 ```
 
-Este comando:
+`start:dev` utiliza `ejecucionPruebas/` como directorio aislado, por lo que las descargas y datos de prueba no afectan una instalación portable.
 
-1. Compila main/preload/backend y renderer.
-2. Abre Electron usando los archivos generados en `dist/`.
-3. Define `PALCM_RUNTIME_ENV=development`.
-4. Usa `ejecucionPruebas/` como raiz portable aislada para descargas e instalaciones de prueba.
+## Uso rápido
 
-Alias disponibles, siguiendo el formato usado en otras apps Electron locales:
+1. Abre PSM Console y revisa el estado del entorno.
+2. Confirma las descargas de SteamCMD o del servidor cuando la aplicación las solicite.
+3. Ajusta la configuración y guarda los cambios.
+4. Revisa el Firewall local y configúralo desde la aplicación si es necesario.
+5. Inicia el servidor, consulta los logs y copia la dirección local o pública para compartirla.
 
-```powershell
-npm.cmd run electron:dev
-npm.cmd run dev
-```
+## Estado del proyecto
 
-`electron:dev` abre Electron con el ultimo build disponible. `dev` ejecuta el mismo flujo que `start:dev`.
+Versión actual: `0.10.9 Dev`.
 
-Nota sobre identidad visual en desarrollo:
-
-- `start:dev` usa el binario `electron.exe` de desarrollo, por eso el Administrador de tareas puede agrupar procesos hijos como `Electron`.
-- La app define nombre, AppUserModelID e icono de ventana propios, pero el nombre/descripcion del ejecutable de desarrollo sigue dependiendo de Electron.
-- El portable generado con `npm.cmd run dist:portable` usa los metadatos e icono propios de PSM Console.
-
-## Ejecutar en modo test local
-
-```powershell
-npm.cmd run start:test
-```
-
-Este comando tambien compila y abre Electron, pero define `PALCM_RUNTIME_ENV=test`. Ese modo queda reservado para flujos con mocks/adaptadores de prueba. No descarga SteamCMD, no descarga Palworld Dedicated Server y no modifica Firewall.
-
-## Validar el proyecto
-
-```powershell
-npm.cmd run typecheck
-npm.cmd run lint
-npm.cmd test
-npm.cmd run build
-```
-
-## Build normal
-
-```powershell
-npm.cmd run build
-```
-
-Genera:
-
-```text
-dist/
-├── main/
-└── renderer/
-```
-
-Tambien existe el alias:
-
-```powershell
-npm.cmd run build:backend
-```
-
-En PalCM ese alias compila el proceso principal, preload y backend NestJS embebido.
-
-## Crear el portable
-
-```powershell
-npm.cmd run dist:portable
-```
-
-El portable queda en:
-
-```text
-release/
-```
-
-Despues de generarlo, valida el artefacto:
-
-```powershell
-npm.cmd run validate:portable
-```
-
-El nombre final lo define `electron-builder` usando `productName` y `version`, por ejemplo:
-
-```text
-release/PalCM-Portable-0.1.0.exe
-```
-
-La marca visible de la app es `PSM Console by >GR477<`. Para evitar caracteres invalidos en rutas de Windows, el `productName` de empaquetado usa `PSM Console by GR477`.
-
-Otros comandos de empaquetado:
-
-```powershell
-npm.cmd run pack
-npm.cmd run dist
-```
-
-- `pack` genera una carpeta desempaquetada para inspeccion.
-- `dist` genera un instalador NSIS en `release/`, por ejemplo `PalCM-Setup-0.1.0.exe`.
-
-Ese `.exe` es el artefacto portable. Al ejecutarse empaquetado, la aplicacion debe resolver su raiz portable desde la ubicacion real del ejecutable con `app.getPath('exe')` y `path.dirname(...)`; no se debe hardcodear la ruta de desarrollo `D:\MyAPIS\PalCM`.
-
-## Versionado
-
-PalCM usa versionado `x.y.z`:
-
-- `x`: version final productiva. Se mantiene en `0` hasta que el creador indique que corresponde publicar estable.
-- `y`: ciclo de prueba con funcionalidades nuevas.
-- `z`: fixes, ajustes chicos, refactors internos o mejoras de UX/UI dentro del ciclo actual.
-
-La version visible de la app se centraliza en `src/shared/constants/app-info.ts` y la version del artefacto se define en `package.json`. Al cambiar una, cambiar ambas.
-
-## SteamCMD en desarrollo
-
-En `start:dev`, SteamCMD se instala dentro de:
-
-```text
-ejecucionPruebas/tools/steamcmd/
-```
-
-La aplicacion descarga SteamCMD desde la URL oficial indicada por Valve:
-
-```text
-https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip
-```
-
-Antes de descargar se pide confirmacion explicita. Durante la descarga y extraccion se muestra porcentaje de progreso.
-
-## Palworld Dedicated Server en desarrollo
-
-Cuando SteamCMD ya existe, la aplicacion pasa a `SERVER_MISSING` y habilita la instalacion del servidor.
-
-En `start:dev`, Palworld Dedicated Server se instala dentro de:
-
-```text
-ejecucionPruebas/server/palworld/
-```
-
-La instalacion usa SteamCMD con el AppID oficial del servidor dedicado:
-
-```text
-2394010
-```
-
-Antes de ejecutar SteamCMD se pide confirmacion explicita. Durante la ejecucion se muestra porcentaje y el ultimo mensaje recibido desde SteamCMD.
-
-## Estructura editable esperada junto al portable
-
-En fases posteriores, la aplicacion creara o usara estas carpetas junto al ejecutable:
-
-```text
-tools/steamcmd/
-server/palworld/
-config/
-backups/configuration/
-backups/world/
-logs/
-```
-
-## Backups
-
-- Los backups manuales se crean desde la pestana `Backups` y nunca se eliminan por retencion automatica.
-- La automatizacion esta deshabilitada inicialmente. Puede configurarse con intervalo de 1 a 168 horas y retencion de 1 a 100 copias por tipo.
-- Los backups automaticos solo se ejecutan cuando el servidor esta detenido.
-- Cada copia nueva incluye un manifiesto SHA-256. La interfaz permite verificarlo antes de restaurar.
-- El mundo puede guardarse como carpeta o comprimido en `.tar.gz`.
-- Toda restauracion crea primero una copia preventiva `safety` y aplica el cambio de forma transaccional.
-
-## Notas de seguridad
-
-- El renderer no tiene acceso directo a Node.js.
-- `nodeIntegration` debe permanecer en `false`.
-- `contextIsolation` debe permanecer en `true`.
-- `sandbox` permanece en `true`.
-- El renderer aplica una Content Security Policy local que bloquea scripts remotos, evaluacion dinamica y objetos embebidos.
-- El renderer solo puede usar metodos concretos expuestos por preload.
-- No se exponen comandos, PowerShell, filesystem ni procesos al renderer.
-- Las pruebas normales deben usar mocks/fixtures; no deben descargar SteamCMD ni Palworld ni tocar Firewall real.
+Palworld, Steam y SteamCMD son marcas de sus respectivos propietarios. Este proyecto es una herramienta independiente y no está afiliado con Pocketpair ni Valve.
