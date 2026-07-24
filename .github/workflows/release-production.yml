@@ -1,0 +1,55 @@
+name: Publicar versión estable
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  portable:
+    name: Generar portable estable
+    runs-on: windows-latest
+
+    steps:
+      - name: Obtener código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Leer versión de la aplicación
+        shell: pwsh
+        run: |
+          $version = node -p "require('./package.json').version"
+          "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Validar código
+        run: npm run typecheck && npm run lint && npm test
+
+      - name: Generar portable
+        run: npm run dist:portable
+
+      - name: Publicar artefacto estable
+        uses: actions/upload-artifact@v4
+        with:
+          name: PSM-Console-portable
+          path: release/*Portable*.exe
+          if-no-files-found: error
+
+      - name: Crear release estable
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}
+          name: PSM Console v${{ env.VERSION }}
+          generate_release_notes: true
+          files: release/*Portable*.exe
