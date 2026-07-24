@@ -26,8 +26,10 @@ import type {
   PalworldUpdateRequestDto
 } from '../../shared/dto/palworld-installation-status.dto';
 import type {
+  PalworldQueryPortStatusDto,
   PalworldRuntimeStatusDto,
   PalworldStartRequestDto,
+  PalworldStopQueryPortOwnerRequestDto,
   PalworldStopRequestDto
 } from '../../shared/dto/palworld-runtime-status.dto';
 import type {
@@ -52,6 +54,8 @@ const ipcChannels = {
   serverStart: 'server:start',
   serverStop: 'server:stop',
   serverGetRuntimeStatus: 'server:get-runtime-status',
+  serverGetQueryPortStatus: 'server:get-query-port-status',
+  serverStopQueryPortOwner: 'server:stop-query-port-owner',
   playersGetStatus: 'players:get-status',
   adminGetStatus: 'admin:get-status',
   adminExecuteAction: 'admin:execute-action',
@@ -95,6 +99,8 @@ export interface PalcmApi {
     start: (request: PalworldStartRequestDto) => Promise<OperationAcceptedDto>;
     stop: (request: PalworldStopRequestDto) => Promise<OperationAcceptedDto>;
     getRuntimeStatus: () => Promise<PalworldRuntimeStatusDto>;
+    getQueryPortStatus: () => Promise<PalworldQueryPortStatusDto>;
+    stopQueryPortOwner: (request: PalworldStopQueryPortOwnerRequestDto) => Promise<OperationAcceptedDto>;
   };
   players: {
     getStatus: () => Promise<PalworldPlayersStatusDto>;
@@ -163,7 +169,11 @@ const api: PalcmApi = {
     stop: (request) =>
       ipcRenderer.invoke(ipcChannels.serverStop, request) as Promise<OperationAcceptedDto>,
     getRuntimeStatus: () =>
-      ipcRenderer.invoke(ipcChannels.serverGetRuntimeStatus) as Promise<PalworldRuntimeStatusDto>
+      ipcRenderer.invoke(ipcChannels.serverGetRuntimeStatus) as Promise<PalworldRuntimeStatusDto>,
+    getQueryPortStatus: () =>
+      ipcRenderer.invoke(ipcChannels.serverGetQueryPortStatus) as Promise<PalworldQueryPortStatusDto>,
+    stopQueryPortOwner: (request) =>
+      ipcRenderer.invoke(ipcChannels.serverStopQueryPortOwner, request) as Promise<OperationAcceptedDto>
   },
   players: {
     getStatus: () => ipcRenderer.invoke(ipcChannels.playersGetStatus) as Promise<PalworldPlayersStatusDto>

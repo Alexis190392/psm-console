@@ -11,7 +11,7 @@ import type { LogModule } from '../shared/dto/log-status.dto';
 import type { OperationProgressDto } from '../shared/dto/operation-progress.dto';
 import type { PalworldAdminAction, PalworldAdminStatusDto } from '../shared/dto/palworld-admin.dto';
 import type { PalworldPlayersStatusDto } from '../shared/dto/palworld-players-status.dto';
-import type { PalworldRuntimeStatusDto } from '../shared/dto/palworld-runtime-status.dto';
+import type { PalworldQueryPortStatusDto, PalworldRuntimeStatusDto } from '../shared/dto/palworld-runtime-status.dto';
 import {
   createSummaryCardState,
   renderSummaryCard,
@@ -2889,7 +2889,8 @@ async function renderFirewallView(forceRefresh = false): Promise<void> {
 
   if (!forceRefresh && latestFirewallStatus) {
     clearFirewallLoadingTimers();
-    renderFirewallStatusView(latestFirewallStatus);
+    const queryPortStatus = await palcmApi.server.getQueryPortStatus();
+    renderFirewallStatusView(latestFirewallStatus, queryPortStatus);
     return;
   }
 
@@ -2922,14 +2923,17 @@ async function renderFirewallView(forceRefresh = false): Promise<void> {
   startFirewallLoadingTimeline(activeStep);
 
   try {
-    const firewall = await getFirewallStatus(forceRefresh);
+    const [firewall, queryPortStatus] = await Promise.all([
+      getFirewallStatus(forceRefresh),
+      palcmApi.server.getQueryPortStatus()
+    ]);
     clearFirewallLoadingTimers();
 
     if (!navigationState.is('network')) {
       return;
     }
 
-    renderFirewallStatusView(firewall);
+    renderFirewallStatusView(firewall, queryPortStatus);
   } catch (error) {
     clearFirewallLoadingTimers();
     if (!navigationState.is('network')) {
@@ -2941,7 +2945,10 @@ async function renderFirewallView(forceRefresh = false): Promise<void> {
   }
 }
 
-function renderFirewallStatusView(firewall: FirewallStatusDto): void {
+function renderFirewallStatusView(
+  firewall: FirewallStatusDto,
+  queryPortStatus: PalworldQueryPortStatusDto | null
+): void {
   setContent(`
       <div class="view-stack view-stack--scroll">
         <div class="view-header view-header--contained">
@@ -2965,6 +2972,7 @@ function renderFirewallStatusView(firewall: FirewallStatusDto): void {
         </section>
         <section class="firewall-layout">
           ${renderFirewallSection('PC local', firewall.local.message, firewall.local.ports)}
+          ${renderSteamQueryPortDiagnostics(queryPortStatus)}
           ${renderFirewallSection('Acceso externo', firewall.external.message, firewall.external.ports)}
           ${renderNetworkDiagnostics(firewall.external.network)}
         </section>
@@ -2979,6 +2987,17 @@ function renderFirewallStatusView(firewall: FirewallStatusDto): void {
             <span>Cancelar</span>
           </button>
         </div>
+        <div id="query-port-confirmation" class="inline-confirm hidden">
+          <span>Se detendra el proceso que Windows informa como dueño actual de UDP 27015. Usalo si quedo una instancia previa del servidor ocupando Steam Query.</span>
+          <button id="confirm-query-port-stop" class="primary-button primary-button--warning button-with-icon" type="button">
+            ${renderIcon('stop')}
+            <span>Detener proceso</span>
+          </button>
+          <button id="cancel-query-port-stop" class="secondary-button button-with-icon" type="button">
+            ${renderIcon('x')}
+            <span>Cancelar</span>
+          </button>
+        </div>
       </div>
     `);
   document.querySelector<HTMLButtonElement>('#refresh-firewall')?.addEventListener('click', () => {
@@ -2989,6 +3008,11 @@ function renderFirewallStatusView(firewall: FirewallStatusDto): void {
     void applyFirewallRules();
   });
   document.querySelector<HTMLButtonElement>('#cancel-firewall')?.addEventListener('click', hideFirewallConfirmation);
+  document.querySelector<HTMLButtonElement>('#stop-query-port-owner')?.addEventListener('click', showQueryPortStopConfirmation);
+  document.querySelector<HTMLButtonElement>('#confirm-query-port-stop')?.addEventListener('click', () => {
+    void stopQueryPortOwner();
+  });
+  document.querySelector<HTMLButtonElement>('#cancel-query-port-stop')?.addEventListener('click', hideQueryPortStopConfirmation);
 }
 
 function renderFirewallErrorView(message: string): void {
@@ -3037,6 +3061,42 @@ function renderFirewallSection(title: string, message: string, ports: FirewallPo
         ${ports.map((port) => renderFirewallPortCard(port)).join('')}
       </div>
       ${title === 'Acceso externo' ? renderExternalPortRecommendations(ports) : ''}
+    </section>
+  `;
+}
+
+function renderSteamQueryPortDiagnostics(status: PalworldQueryPortStatusDto | null): string {
+  const state = status ? mapQueryPortState(status.state) : createSummaryCardState('optional');
+  const port = status?.port ?? 27015;
+  const details = status?.state === 'IN_USE'
+    ? [
+        status.processName ? `Proceso: ${status.processName}` : null,
+        status.pid ? `PID ${String(status.pid)}` : null,
+        status.executablePath ?? null
+      ].filter((item): item is string => Boolean(item))
+    : [];
+
+  return `
+    <section class="firewall-section">
+      <div class="firewall-section__header">
+        <h4>Steam Query local</h4>
+        <p>Verificacion local de Windows. No se prueba desde Internet.</p>
+      </div>
+      <article class="summary-card summary-card--${state.tone} firewall-port query-port-card">
+        <span class="summary-card__body">
+          <span class="summary-card__title">Steam Query</span>
+          <strong>UDP ${String(port)}</strong>
+          <small>${escapeHtml(status?.message ?? 'No se pudo consultar el estado local de Steam Query.')}</small>
+          ${details.length > 0 ? `<span class="firewall-port__source">${details.map(escapeHtml).join(' · ')}</span>` : ''}
+        </span>
+        <span class="summary-card__icon" aria-label="${escapeHtml(state.label)}">${renderIcon(state.icon)}</span>
+        ${status?.state === 'IN_USE'
+          ? `<button id="stop-query-port-owner" class="secondary-button secondary-button--warning button-with-icon query-port-card__action" type="button">
+              ${renderIcon('stop')}
+              <span>Detener PID</span>
+            </button>`
+          : ''}
+      </article>
     </section>
   `;
 }
@@ -3249,20 +3309,12 @@ function clearFirewallLoadingTimers(): void {
 
 function renderExternalPortRecommendations(ports: FirewallPortCheckDto[]): string {
   const configuredPorts = ports.filter((port) => port.enabled);
-  const recommendations = [
-    ...configuredPorts.map((port) => ({
+  const recommendations = configuredPorts.map((port) => ({
       label: port.label,
       value: `${port.protocol} ${String(port.port)}`,
       detail: 'Configurado en el INI activo.',
       checked: true
-    })),
-    {
-      label: 'Steam Query',
-      value: 'UDP 27015',
-      detail: 'Puerto comun para consulta/listado si el router lo permite.',
-      checked: false
-    }
-  ];
+    }));
   const unique = recommendations.filter(
     (item, index, list) => list.findIndex((candidate) => candidate.value === item.value) === index
   );
@@ -3378,6 +3430,26 @@ function renderFirewallPortCard(port: FirewallPortCheckDto): string {
   `;
 }
 
+function mapQueryPortState(state: PalworldQueryPortStatusDto['state']): {
+  icon: string;
+  tone: string;
+  label: string;
+} {
+  if (state === 'AVAILABLE') {
+    return createSummaryCardState('ok');
+  }
+
+  if (state === 'IN_USE') {
+    return createSummaryCardState('warning');
+  }
+
+  if (state === 'UNSUPPORTED') {
+    return createSummaryCardState('optional');
+  }
+
+  return createSummaryCardState('warning');
+}
+
 function mapFirewallState(state: FirewallStatusDto['local']['state']): {
   icon: string;
   tone: string;
@@ -3406,6 +3478,14 @@ function hideFirewallConfirmation(): void {
   document.querySelector('#firewall-confirmation')?.classList.add('hidden');
 }
 
+function showQueryPortStopConfirmation(): void {
+  document.querySelector('#query-port-confirmation')?.classList.remove('hidden');
+}
+
+function hideQueryPortStopConfirmation(): void {
+  document.querySelector('#query-port-confirmation')?.classList.add('hidden');
+}
+
 async function applyFirewallRules(): Promise<void> {
   if (!palcmApi) {
     return;
@@ -3423,6 +3503,21 @@ async function applyFirewallRules(): Promise<void> {
   publicNetworkRequestPort = null;
   latestPublicNetworkError = null;
   showToast('Reglas de Firewall actualizadas');
+  navigationState.set('network');
+  await refreshState();
+}
+
+async function stopQueryPortOwner(): Promise<void> {
+  if (!palcmApi) {
+    return;
+  }
+
+  appendConsoleLine('Confirmado: detener proceso que usa UDP 27015.');
+  navigationState.set('logs');
+  renderActiveView();
+  const accepted = await palcmApi.server.stopQueryPortOwner({ confirmed: true });
+  await pollOperation(accepted.operationId);
+  showToast('Verificacion de Steam Query actualizada');
   navigationState.set('network');
   await refreshState();
 }

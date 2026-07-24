@@ -1,7 +1,10 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { resolvePalworldRuntimeExecutable } from '../src/backend/palworld-process/palworld-process.service';
+import {
+  parseUdpPortOwner,
+  resolvePalworldRuntimeExecutable
+} from '../src/backend/palworld-process/palworld-process.service';
 
 describe('PalworldProcessService runtime executable', () => {
   const portableRoot = join(process.cwd(), '.tmp-tests', 'palworld-process');
@@ -40,5 +43,23 @@ describe('PalworldProcessService runtime executable', () => {
       workingDirectory: serverRoot,
       displayName: 'PalServer.exe'
     });
+  });
+});
+
+describe('PalworldProcessService query port owner parser', () => {
+  it('reads the process that owns the Steam Query UDP port', () => {
+    const owner = parseUdpPortOwner(
+      '{"OwningProcess":1234,"ProcessName":"PalServer-Win64-Shipping-Cmd","Path":"D:\\\\PalCM\\\\PalServer-Win64-Shipping-Cmd.exe"}'
+    );
+
+    expect(owner).toEqual({
+      pid: 1234,
+      processName: 'PalServer-Win64-Shipping-Cmd',
+      executablePath: 'D:\\PalCM\\PalServer-Win64-Shipping-Cmd.exe'
+    });
+  });
+
+  it('returns an empty owner when Windows reports no UDP endpoint', () => {
+    expect(parseUdpPortOwner('')).toEqual({});
   });
 });

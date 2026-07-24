@@ -18,6 +18,8 @@ describe('IPC channel surface', () => {
 
   it('keeps server maintenance actions behind concrete domain channels', () => {
     expect(ipcChannels.serverUpdate).toBe('server:update');
+    expect(ipcChannels.serverGetQueryPortStatus).toBe('server:get-query-port-status');
+    expect(ipcChannels.serverStopQueryPortOwner).toBe('server:stop-query-port-owner');
   });
 
   it('keeps backup actions behind concrete domain channels', () => {

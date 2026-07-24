@@ -24,6 +24,7 @@ import type {
 } from '../../shared/dto/palworld-installation-status.dto';
 import type {
   PalworldStartRequestDto,
+  PalworldStopQueryPortOwnerRequestDto,
   PalworldStopRequestDto
 } from '../../shared/dto/palworld-runtime-status.dto';
 import type { PalworldAdminActionRequestDto } from '../../shared/dto/palworld-admin.dto';
@@ -93,6 +94,14 @@ export function registerIpcHandlers(
 
   ipcMain.handle(ipcChannels.serverGetRuntimeStatus, () =>
     palworldProcessService.getRuntimeStatus()
+  );
+
+  ipcMain.handle(ipcChannels.serverGetQueryPortStatus, () =>
+    palworldProcessService.getQueryPortStatus()
+  );
+
+  ipcMain.handle(ipcChannels.serverStopQueryPortOwner, (_event, request: PalworldStopQueryPortOwnerRequestDto) =>
+    palworldProcessService.stopQueryPortOwner(request)
   );
 
   ipcMain.handle(ipcChannels.playersGetStatus, () =>

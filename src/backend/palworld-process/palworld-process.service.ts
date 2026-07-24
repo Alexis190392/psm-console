@@ -9,9 +9,11 @@ import { PalworldConfigurationService } from '../palworld-configuration/palworld
 import { PalworldInstallationService } from '../palworld-installation/palworld-installation.service';
 import type { OperationAcceptedDto } from '../../shared/dto/operation-progress.dto';
 import type {
+  PalworldQueryPortStatusDto,
   PalworldRuntimeState,
   PalworldRuntimeStatusDto,
   PalworldStartRequestDto,
+  PalworldStopQueryPortOwnerRequestDto,
   PalworldStopRequestDto
 } from '../../shared/dto/palworld-runtime-status.dto';
 
@@ -28,6 +30,12 @@ interface PalworldRuntimeExecutable {
 
 interface PowerShellProcessRow {
   Id?: unknown;
+  Path?: unknown;
+}
+
+interface PowerShellUdpPortOwnerRow {
+  OwningProcess?: unknown;
+  ProcessName?: unknown;
   Path?: unknown;
 }
 
@@ -70,6 +78,10 @@ export class PalworldProcessService {
       message: this.message,
       logs: [...this.logs]
     };
+  }
+
+  getQueryPortStatus(): PalworldQueryPortStatusDto {
+    return createQueryPortStatus(getUdpPortOwner(STEAM_QUERY_PORT), STEAM_QUERY_PORT);
   }
 
   start(request: PalworldStartRequestDto): OperationAcceptedDto {
@@ -136,6 +148,23 @@ export class PalworldProcessService {
     };
   }
 
+  stopQueryPortOwner(request: PalworldStopQueryPortOwnerRequestDto): OperationAcceptedDto {
+    if (!request.confirmed) {
+      throw new Error('QUERY_PORT_OWNER_STOP_REQUIRES_CONFIRMATION');
+    }
+
+    const operation = this.operationManagerService.create(
+      'Detencion de Steam Query',
+      `Preparando cierre del proceso que usa UDP ${String(STEAM_QUERY_PORT)}.`
+    );
+
+    this.stopQueryPortOwnerAsync(operation.operationId);
+
+    return {
+      operationId: operation.operationId
+    };
+  }
+
   private startAsync(operationId: string, executablePath: string): void {
     void this.startProcessAsync(operationId, executablePath);
   }
@@ -159,7 +188,7 @@ export class PalworldProcessService {
       });
       const runtimeExecutable = resolvePalworldRuntimeExecutable(executablePath);
       this.appendLog(operationId, `"${runtimeExecutable.executablePath}"`);
-      await assertUdpPortAvailable(STEAM_QUERY_PORT);
+      await assertSteamQueryPortAvailable(STEAM_QUERY_PORT);
 
       this.operationManagerService.update(operationId, {
         status: 'RUNNING',
@@ -246,6 +275,55 @@ export class PalworldProcessService {
     }
 
     this.waitForStop(operationId, executablePath, 0);
+  }
+
+  private stopQueryPortOwnerAsync(operationId: string): void {
+    this.operationManagerService.update(operationId, {
+      status: 'RUNNING',
+      percent: 20,
+      message: `Verificando que UDP ${String(STEAM_QUERY_PORT)} siga ocupado.`,
+      canCancel: false
+    });
+
+    const owner = getUdpPortOwner(STEAM_QUERY_PORT);
+
+    if (!owner.pid) {
+      this.operationManagerService.update(operationId, {
+        status: 'COMPLETED',
+        percent: 100,
+        message: `UDP ${String(STEAM_QUERY_PORT)} ya esta libre.`
+      });
+      return;
+    }
+
+    this.operationManagerService.update(operationId, {
+      status: 'RUNNING',
+      percent: 55,
+      message: `Deteniendo PID ${String(owner.pid)} que usa UDP ${String(STEAM_QUERY_PORT)}.`,
+      canCancel: false
+    });
+    this.operationManagerService.appendLog(
+      operationId,
+      `taskkill /PID ${String(owner.pid)} /T /F (${owner.processName ?? 'proceso desconocido'})`
+    );
+
+    const result = killProcessTree([owner.pid]);
+
+    if (!result.ok) {
+      this.operationManagerService.update(operationId, {
+        status: 'FAILED',
+        percent: 100,
+        message: `No se pudo detener el proceso que usa UDP ${String(STEAM_QUERY_PORT)}.`,
+        error: result.message
+      });
+      return;
+    }
+
+    this.operationManagerService.update(operationId, {
+      status: 'COMPLETED',
+      percent: 100,
+      message: `PID ${String(owner.pid)} detenido. UDP ${String(STEAM_QUERY_PORT)} deberia quedar libre.`
+    });
   }
 
   private waitForStop(operationId: string, executablePath: string, attempt: number): void {
@@ -539,7 +617,7 @@ function parsePowerShellProcesses(output: string): DetectedPalServerProcess[] {
 
   try {
     const parsed = JSON.parse(trimmedOutput) as unknown;
-    const rows = Array.isArray(parsed) ? parsed : [parsed];
+    const rows: unknown[] = Array.isArray(parsed) ? parsed : [parsed];
 
     return rows
       .map((row) => normalizePowerShellProcessRow(row))
@@ -568,11 +646,124 @@ function normalizePowerShellProcessRow(row: unknown): DetectedPalServerProcess |
   };
 }
 
+interface UdpPortOwner {
+  pid?: number;
+  processName?: string;
+  executablePath?: string;
+}
+
+function getUdpPortOwner(port: number): UdpPortOwner {
+  if (process.platform !== 'win32') {
+    return {};
+  }
+
+  const result = spawnSync(
+    'powershell.exe',
+    [
+      '-NoProfile',
+      '-NonInteractive',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-Command',
+      `$endpoint = Get-NetUDPEndpoint -LocalPort ${String(port)} -ErrorAction SilentlyContinue | Select-Object -First 1
+if ($null -eq $endpoint) { return }
+$process = Get-Process -Id $endpoint.OwningProcess -ErrorAction SilentlyContinue
+[pscustomobject]@{ OwningProcess = $endpoint.OwningProcess; ProcessName = $process.ProcessName; Path = $process.Path } | ConvertTo-Json -Compress`
+    ],
+    {
+      encoding: 'utf8',
+      windowsHide: true,
+      shell: false,
+      timeout: 2000
+    }
+  );
+
+  if (result.error || result.status !== 0 || !result.stdout.trim()) {
+    return {};
+  }
+
+  return parseUdpPortOwner(result.stdout);
+}
+
+export function parseUdpPortOwner(output: string): UdpPortOwner {
+  const trimmedOutput = output.trim();
+
+  if (!trimmedOutput) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(trimmedOutput) as unknown;
+    const rows: unknown[] = Array.isArray(parsed) ? parsed : [parsed];
+    const row = rows[0];
+
+    if (!row || typeof row !== 'object') {
+      return {};
+    }
+
+    const ownerRow = row as PowerShellUdpPortOwnerRow;
+    const pid = Number(ownerRow.OwningProcess);
+
+    if (!Number.isInteger(pid) || pid <= 0) {
+      return {};
+    }
+
+    return {
+      pid,
+      processName: typeof ownerRow.ProcessName === 'string' ? ownerRow.ProcessName : undefined,
+      executablePath: typeof ownerRow.Path === 'string' ? ownerRow.Path : undefined
+    };
+  } catch {
+    return {};
+  }
+}
+
+function createQueryPortStatus(owner: UdpPortOwner, port: number): PalworldQueryPortStatusDto {
+  if (process.platform !== 'win32') {
+    return {
+      port,
+      protocol: 'UDP',
+      state: 'UNSUPPORTED',
+      message: 'La verificacion local de Steam Query solo aplica en Windows.',
+      updatedAt: new Date().toISOString()
+    };
+  }
+
+  if (!owner.pid) {
+    return {
+      port,
+      protocol: 'UDP',
+      state: 'AVAILABLE',
+      message: `UDP ${String(port)} esta libre en Windows.`,
+      updatedAt: new Date().toISOString()
+    };
+  }
+
+  return {
+    port,
+    protocol: 'UDP',
+    state: 'IN_USE',
+    pid: owner.pid,
+    processName: owner.processName,
+    executablePath: owner.executablePath,
+    message: `UDP ${String(port)} esta ocupado por PID ${String(owner.pid)}${owner.processName ? ` (${owner.processName})` : ''}.`,
+    updatedAt: new Date().toISOString()
+  };
+}
+
 function windowlessTimeout(callback: () => void, milliseconds: number): void {
   setTimeout(callback, milliseconds);
 }
 
-async function assertUdpPortAvailable(port: number): Promise<void> {
+async function assertSteamQueryPortAvailable(port: number): Promise<void> {
+  const owner = getUdpPortOwner(port);
+
+  if (owner.pid) {
+    throw new Error(
+      `SERVER_QUERY_PORT_IN_USE: UDP ${String(port)} esta ocupado por PID ${String(owner.pid)}${owner.processName ? ` (${owner.processName})` : ''}. Ve a Red y Firewall para detener ese proceso o cierra la instancia manualmente.`
+    );
+  }
+
   await new Promise<void>((resolve, reject) => {
     const socket = createSocket('udp4');
     let settled = false;
@@ -596,7 +787,7 @@ async function assertUdpPortAvailable(port: number): Promise<void> {
     socket.once('error', () => {
       finish(
         new Error(
-          `SERVER_QUERY_PORT_IN_USE: el puerto UDP ${String(port)} esta ocupado. Cierra otra instancia del servidor o cambia el puerto query antes de iniciar.`
+          `SERVER_QUERY_PORT_IN_USE: UDP ${String(port)} esta ocupado. Ve a Red y Firewall para revisar el PID en Windows.`
         )
       );
     });

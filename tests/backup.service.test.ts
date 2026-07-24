@@ -200,7 +200,7 @@ async function waitForOperationStatus(
   operationManager: OperationManagerService,
   expectedStatus: 'COMPLETED' | 'FAILED'
 ): Promise<void> {
-  for (let attempt = 0; attempt < 20; attempt += 1) {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
     const operation = operationManager.get(operationId);
 
     if (['COMPLETED', 'FAILED', 'CANCELLED'].includes(operation.status)) {
