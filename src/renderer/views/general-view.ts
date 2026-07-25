@@ -15,9 +15,7 @@ export function renderGeneralView(model: GeneralViewModel): string {
       <div class="view-header view-header--contained">
         <h3>General</h3>
         <div class="view-actions">
-          ${model.update?.state === 'AVAILABLE' && model.update.latestVersion
-            ? `<button class="view-meta-pill view-meta-pill--update" type="button" data-open-release="true">Nueva versión v${escapeHtml(model.update.latestVersion)}</button>`
-            : ''}
+          <span id="general-update-action">${renderGeneralUpdateAction(model.update)}</span>
           <span class="view-meta-pill">Red: ${escapeHtml(model.networkFreshness)}</span>
         </div>
       </div>
@@ -29,4 +27,10 @@ export function renderGeneralView(model: GeneralViewModel): string {
       </section>
     </div>
   `;
+}
+
+export function renderGeneralUpdateAction(update?: AppUpdateStatusDto | null): string {
+  return update?.state === 'AVAILABLE' && update.latestVersion
+    ? `<button class="view-meta-pill view-meta-pill--update" type="button" data-open-release="true">Nueva versión v${escapeHtml(update.latestVersion)}</button>`
+    : '';
 }

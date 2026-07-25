@@ -16,7 +16,7 @@ import type {
 import type { NetworkDiagnosticsDto } from '../shared/dto/network-diagnostics.dto';
 import type { LogModule } from '../shared/dto/log-status.dto';
 import type { OperationProgressDto } from '../shared/dto/operation-progress.dto';
-import type { PalworldAdminAction } from '../shared/dto/palworld-admin.dto';
+import type { PalworldAdminAction, PalworldAdminStatusDto } from '../shared/dto/palworld-admin.dto';
 import type { PalworldPlayersStatusDto } from '../shared/dto/palworld-players-status.dto';
 import type { PalworldQueryPortStatusDto, PalworldRuntimeStatusDto } from '../shared/dto/palworld-runtime-status.dto';
 import {
@@ -47,7 +47,10 @@ import {
   renderSettingsFilterBar,
   renderSettingsForm
 } from './views/server-configuration-view';
-import { renderGeneralView as renderGeneralViewHtml } from './views/general-view';
+import {
+  renderGeneralUpdateAction,
+  renderGeneralView as renderGeneralViewHtml
+} from './views/general-view';
 import { renderPreflightSummaryView, renderSimpleView as renderSimpleViewHtml } from './views/status-views';
 import { NavigationState } from './state/navigation-state';
 import { AdminViewState } from './state/admin-view-state';
@@ -274,6 +277,7 @@ let latestUpdateStatus: AppUpdateStatusDto | null = null;
 let updateStatusRequest: Promise<AppUpdateStatusDto> | null = null;
 let announcedUpdateVersion: string | null = null;
 let adminRefreshTimer: number | null = null;
+let adminStatusRequest: Promise<[PalworldAdminStatusDto, PalworldPlayersStatusDto]> | null = null;
 const adminViewState = new AdminViewState();
 let consoleSearchTerm = '';
 let consoleSelectedModule: LogModule | 'all' = 'all';
@@ -293,6 +297,7 @@ let lastCopyToast: { value: string; copiedAt: number } | null = null;
 let confirmationReturnFocus: HTMLElement | null = null;
 let confirmationFocusActive = false;
 let inlineConfirmationReturnFocus: HTMLElement | null = null;
+let activeViewRenderId = 0;
 let latestSummary: {
   steamCmdStatus: string;
   serverStatus: string;
@@ -1022,6 +1027,7 @@ function renderActiveView(): void {
     return;
   }
 
+  const renderId = ++activeViewRenderId;
   stopRuntimeViewRefreshers();
   rootElement.dataset['view'] = navigationState.current;
   hideConfirmation();
@@ -1038,27 +1044,27 @@ function renderActiveView(): void {
   });
 
   if (navigationState.is('home')) {
-    void renderGeneralView();
+    void renderGeneralView(renderId);
     return;
   }
 
   if (navigationState.is('server')) {
-    void renderServerConfigurationView();
+    void renderServerConfigurationView(renderId);
     return;
   }
 
   if (navigationState.is('admin')) {
-    void renderAdminView();
+    void renderAdminView(renderId);
     return;
   }
 
   if (navigationState.is('network')) {
-    void renderFirewallView();
+    void renderFirewallView(false, renderId);
     return;
   }
 
   if (navigationState.is('backups')) {
-    void renderBackupsView();
+    void renderBackupsView(renderId);
     return;
   }
 
@@ -1069,26 +1075,57 @@ function renderActiveView(): void {
 
 }
 
-async function renderGeneralView(): Promise<void> {
+function isCurrentViewRender(renderId: number, view: NavigationState['current']): boolean {
+  return activeViewRenderId === renderId && navigationState.is(view);
+}
+
+function renderViewLoading(title: string, detail: string): void {
+  setContent(`
+    <div class="view-stack">
+      <div class="view-header view-header--contained">
+        <h3>${escapeHtml(title)}</h3>
+      </div>
+      <section class="content-card players-loading view-loading" aria-busy="true" aria-live="polite">
+        <span class="inline-loader" aria-hidden="true"></span>
+        <div>
+          <strong>Cargando</strong>
+          <p>${escapeHtml(detail)}</p>
+        </div>
+      </section>
+    </div>
+  `);
+}
+
+async function renderGeneralView(renderId: number): Promise<void> {
   updateReadyChrome();
 
   if (!isOperationalStatus(latestStatus)) {
-    renderPreflightSummary();
+    if (isCurrentViewRender(renderId, 'home')) {
+      renderPreflightSummary();
+    }
     return;
   }
 
-  const port = await readConfiguredPort();
+  renderViewLoading('General', 'Actualizando servidor, conexiones, jugadores y backups.');
+  const [port, backupSummary, serverRuntime, playersSummary] = await Promise.all([
+    readConfiguredPort(),
+    readBackupSummaryForGeneral(),
+    readServerRuntimeForGeneral(),
+    readPlayersStatusForGeneral()
+  ]);
+
+  if (!isCurrentViewRender(renderId, 'home')) {
+    return;
+  }
+
   latestConfiguredPort = port;
   const portState = port ? createSummaryCardState('ok') : createSummaryCardState('warning');
   const isNetworkLoading = !latestFirewallStatus && !latestFirewallError;
   const localPlay = createLocalPlaySummary(latestFirewallStatus, port, isNetworkLoading, latestLocalAddresses);
   const isPublicNetworkLoading = !latestFirewallStatus && !latestFirewallError && !latestPublicNetwork && !latestPublicNetworkError;
   const publicPlay = createPublicPlaySummary(latestFirewallStatus, isPublicNetworkLoading, latestPublicNetwork, port);
-  const backupSummary = await readBackupSummaryForGeneral();
   const backupState = createBackupSummaryCard(backupSummary);
-  const serverRuntime = await readServerRuntimeForGeneral();
   const serverState = createServerRuntimeSummary(serverRuntime);
-  const playersSummary = await readPlayersStatusForGeneral();
   const playersState = createPlayersSummaryCard(playersSummary);
   const networkFreshness = formatLastVerification(latestFirewallCheckedAt);
 
@@ -1163,9 +1200,9 @@ async function renderGeneralView(): Promise<void> {
   }));
   bindSummaryCards();
   bindReleaseUpdateAction();
-  void hydrateGeneralLocalPreview(port);
-  void hydrateGeneralPublicPreview(port);
-  void hydrateGeneralNetworkSummary(port);
+  void hydrateGeneralLocalPreview(port, renderId);
+  void hydrateGeneralPublicPreview(port, renderId);
+  void hydrateGeneralNetworkSummary(port, renderId);
   void loadReleaseUpdateStatus();
 }
 
@@ -1205,7 +1242,11 @@ async function loadReleaseUpdateStatus(): Promise<void> {
     }
 
     if (navigationState.is('home')) {
-      await renderGeneralView();
+      const updateAction = document.querySelector<HTMLElement>('#general-update-action');
+      if (updateAction) {
+        updateAction.innerHTML = renderGeneralUpdateAction(latestUpdateStatus);
+        bindReleaseUpdateAction();
+      }
     }
   } catch (error) {
     appendConsoleLine(`No se pudo consultar actualizaciones: ${error instanceof Error ? error.message : String(error)}`);
@@ -1384,7 +1425,7 @@ function createBackupSummaryCard(summary: BackupSummaryDto | null): SummaryCardV
   };
 }
 
-async function hydrateGeneralLocalPreview(port: string | null): Promise<void> {
+async function hydrateGeneralLocalPreview(port: string | null, renderId: number): Promise<void> {
   const addresses = await readLocalAddressesForGeneral();
 
   if (addresses.length > 0) {
@@ -1392,7 +1433,7 @@ async function hydrateGeneralLocalPreview(port: string | null): Promise<void> {
   }
   refreshStartButtonState();
 
-  if (!navigationState.is('home') || !isOperationalStatus(latestStatus) || latestFirewallStatus) {
+  if (!isCurrentViewRender(renderId, 'home') || !isOperationalStatus(latestStatus) || latestFirewallStatus) {
     return;
   }
 
@@ -1412,12 +1453,12 @@ async function hydrateGeneralLocalPreview(port: string | null): Promise<void> {
   bindSummaryCards();
 }
 
-async function hydrateGeneralNetworkSummary(port: string | null): Promise<void> {
+async function hydrateGeneralNetworkSummary(port: string | null, renderId: number): Promise<void> {
   const firewall = await readFirewallStatusForGeneral();
 
   refreshStartButtonState();
 
-  if (!navigationState.is('home') || !isOperationalStatus(latestStatus)) {
+  if (!isCurrentViewRender(renderId, 'home') || !isOperationalStatus(latestStatus)) {
     return;
   }
 
@@ -1450,10 +1491,10 @@ async function hydrateGeneralNetworkSummary(port: string | null): Promise<void> 
   bindSummaryCards();
 }
 
-async function hydrateGeneralPublicPreview(port: string | null): Promise<void> {
+async function hydrateGeneralPublicPreview(port: string | null, renderId: number): Promise<void> {
   const publicNetwork = await readPublicNetworkForGeneral(port);
 
-  if (!navigationState.is('home') || !isOperationalStatus(latestStatus) || latestFirewallStatus) {
+  if (!isCurrentViewRender(renderId, 'home') || !isOperationalStatus(latestStatus) || latestFirewallStatus) {
     return;
   }
 
@@ -1783,16 +1824,22 @@ function renderPreflightSummary(): void {
   setContent(renderPreflightSummaryView(latestStatus, latestActions));
 }
 
-async function renderServerConfigurationView(): Promise<void> {
+async function renderServerConfigurationView(renderId = ++activeViewRenderId): Promise<void> {
   if (!palcmApi) {
     return;
   }
 
   updateReadyChrome();
+  renderViewLoading('Configuracion', 'Leyendo el INI activo y preparando los parametros.');
 
   try {
     const file = await palcmApi.config.read();
     const parsed = parsePalworldSettings(file.content);
+
+    if (!isCurrentViewRender(renderId, 'server')) {
+      return;
+    }
+
     latestServerSettings = parsed;
     latestServerSettingsPath = file.path;
     setContent(`
@@ -1823,6 +1870,10 @@ async function renderServerConfigurationView(): Promise<void> {
     bindSettingsControls(parsed);
     restoreServerConfigurationDraft(parsed, file.path);
   } catch (error) {
+    if (!isCurrentViewRender(renderId, 'server')) {
+      return;
+    }
+
     latestServerSettings = null;
     latestServerSettingsPath = null;
     appFooter?.classList.add('hidden');
@@ -1931,16 +1982,21 @@ function showRestoreDefaultConfirmation(): void {
   );
 }
 
-async function renderBackupsView(): Promise<void> {
+async function renderBackupsView(renderId = ++activeViewRenderId): Promise<void> {
   if (!palcmApi) {
     return;
   }
 
   updateReadyChrome();
+  renderViewLoading('Backups', 'Leyendo copias, integridad y politica de respaldo.');
 
   try {
     latestBackupSummary = await palcmApi.backup.getSummary();
     const summary = latestBackupSummary;
+
+    if (!isCurrentViewRender(renderId, 'backups')) {
+      return;
+    }
 
     setContent(renderBackupsViewHtml(summary));
     bindBackupPolicyControls();
@@ -1951,6 +2007,10 @@ async function renderBackupsView(): Promise<void> {
     });
     updateSelectedBackupsState();
   } catch (error) {
+    if (!isCurrentViewRender(renderId, 'backups')) {
+      return;
+    }
+
     const message = error instanceof Error ? error.message : String(error);
     renderSimpleView('Backups', `No se pudo leer el estado de backups. ${message}`);
   }
@@ -2039,14 +2099,16 @@ function stopRuntimeViewRefreshers(): void {
   }
 }
 
-async function renderAdminView(): Promise<void> {
+async function renderAdminView(renderId = ++activeViewRenderId): Promise<void> {
   if (!palcmApi) {
     return;
   }
 
   renderAdminLoading();
-  await refreshAdminView();
-  startAdminAutoRefresh();
+  await refreshAdminView({}, renderId);
+  if (isCurrentViewRender(renderId, 'admin')) {
+    startAdminAutoRefresh();
+  }
 }
 
 function renderAdminLoading(): void {
@@ -2064,28 +2126,30 @@ function renderAdminLoading(): void {
   `);
 }
 
-async function refreshAdminView(options: { force?: boolean } = {}): Promise<void> {
-  if (!palcmApi || !navigationState.is('admin') || !adminViewState.beginRefresh()) {
+async function refreshAdminView(options: { force?: boolean } = {}, renderId?: number): Promise<void> {
+  if (!palcmApi || !navigationState.is('admin')) {
     return;
   }
 
   try {
-    const [adminStatus, playersStatus] = await Promise.all([
+    adminStatusRequest ??= Promise.all([
       palcmApi.admin.getStatus(),
       palcmApi.players.getStatus()
-    ]);
+    ]).finally(() => {
+      adminStatusRequest = null;
+    });
+    const [adminStatus, playersStatus] = await adminStatusRequest;
 
-    if (navigationState.is('admin') && (options.force || !isEditingAdminForm())) {
+    const belongsToCurrentView = renderId === undefined || isCurrentViewRender(renderId, 'admin');
+    if (belongsToCurrentView && navigationState.is('admin') && (options.force || !isEditingAdminForm())) {
       setContent(renderAdminStatus(adminStatus, playersStatus, adminViewState.getTab()));
       bindAdminControls();
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    if (navigationState.is('admin')) {
+    if ((renderId === undefined || isCurrentViewRender(renderId, 'admin')) && navigationState.is('admin')) {
       renderSimpleView('Administracion', `No se pudo cargar el panel administrativo. ${message}`);
     }
-  } finally {
-    adminViewState.endRefresh();
   }
 }
 
@@ -2857,13 +2921,17 @@ async function getFirewallStatus(forceRefresh = false): Promise<FirewallStatusDt
   return firewallStatusRequest;
 }
 
-async function renderFirewallView(forceRefresh = false): Promise<void> {
+async function renderFirewallView(forceRefresh = false, renderId = ++activeViewRenderId): Promise<void> {
   if (!palcmApi) {
     return;
   }
 
   if (!forceRefresh && latestFirewallStatus) {
+    renderViewLoading('Red y Firewall', 'Actualizando el estado local de Steam Query.');
     const queryPortStatus = await palcmApi.server.getQueryPortStatus();
+    if (!isCurrentViewRender(renderId, 'network')) {
+      return;
+    }
     renderFirewallStatusView(latestFirewallStatus, queryPortStatus);
     return;
   }
@@ -2923,13 +2991,13 @@ async function renderFirewallView(forceRefresh = false): Promise<void> {
     }
     const [firewall, queryPortStatus] = await Promise.all([firewallPromise, queryPortPromise]);
 
-    if (!navigationState.is('network')) {
+    if (!isCurrentViewRender(renderId, 'network')) {
       return;
     }
 
     renderFirewallStatusView(firewall, queryPortStatus);
   } catch (error) {
-    if (!navigationState.is('network')) {
+    if (!isCurrentViewRender(renderId, 'network')) {
       return;
     }
 
