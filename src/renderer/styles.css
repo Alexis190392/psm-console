@@ -2394,14 +2394,58 @@ input[type="range"] {
   display: flex;
   align-items: center;
   gap: 9px;
+  width: fit-content;
+  max-width: 100%;
   color: var(--color-text-muted);
   font-size: 12px;
+  cursor: pointer;
 }
 
-.settings-check-row input {
-  width: 18px;
-  height: 18px;
-  accent-color: var(--color-primary);
+.admin-card .settings-check-row input {
+  position: relative;
+  display: grid;
+  width: 22px;
+  min-width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  margin: 0;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(186, 201, 204, 0.35);
+  border-radius: 6px;
+  appearance: none;
+  background: rgba(16, 20, 24, 0.88);
+}
+
+.admin-card .settings-check-row input::after {
+  width: 5px;
+  height: 10px;
+  border: solid #00363d;
+  border-width: 0 2px 2px 0;
+  content: "";
+  opacity: 0;
+  transform: translateY(-1px) rotate(45deg) scale(0.7);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.admin-card .settings-check-row input:checked {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(0, 229, 255, 0.1);
+}
+
+.admin-card .settings-check-row input:checked::after {
+  opacity: 1;
+  transform: translateY(-1px) rotate(45deg) scale(1);
+}
+
+.admin-card .settings-check-row input:focus-visible {
+  outline: 2px solid var(--color-primary-soft);
+  outline-offset: 3px;
+}
+
+.settings-check-row span {
+  line-height: 1.35;
 }
 
 @media (max-width: 900px) {

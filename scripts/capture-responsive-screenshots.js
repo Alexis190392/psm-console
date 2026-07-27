@@ -20,6 +20,11 @@ const views = [
   { name: 'logs', nav: 'logs' },
   { name: 'configuracion-resumen', nav: 'settings' },
   {
+    name: 'configuracion-automatizaciones',
+    nav: 'settings',
+    selector: '[data-settings-sidebar-tab="automation"]'
+  },
+  {
     name: 'configuracion-api-web',
     nav: 'settings',
     selector: '[data-settings-sidebar-tab="remote-api"]'
