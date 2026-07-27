@@ -84,45 +84,70 @@ describe('RemoteApiService', () => {
     expect((await fetch(`${baseUrl}/health`)).status).toBe(200);
   });
 
-  it('serves the client profile on its own port and enforces configured permissions', async () => {
+  it('serves admin and client profiles on the same port with different permissions', async () => {
     const port = await getFreePort();
     const appSettings = new AppSettingsService(paths);
     const fixture = createRemoteApiFixture(appSettings, portableRoot);
     remoteApi = fixture.service;
 
+    await remoteApi.update({
+      confirmed: true,
+      profile: 'ADMIN',
+      enabled: true,
+      bindMode: 'LOCAL_ONLY',
+      port,
+      username: 'operator',
+      password: 'secure-password'
+    });
     const status = await remoteApi.update({
       confirmed: true,
       profile: 'CLIENT',
       enabled: true,
       bindMode: 'LOCAL_ONLY',
-      port,
+      port: port + 1,
       username: 'friend',
       password: 'abcde',
       permissions: ['PLAYERS']
     });
     const baseUrl = `http://127.0.0.1:${String(port)}/api/v1`;
     expect(status.client.state).toBe('RUNNING');
+    expect(status.state).toBe('RUNNING');
+    expect(status.endpoint).toBe(status.client.endpoint);
+    expect(status.settings.client.port).toBe(port);
 
-    const loginResponse = await fetch(`${baseUrl}/auth/login`, {
+    const clientLoginResponse = await fetch(`${baseUrl}/auth/login`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ username: 'friend', password: 'abcde' })
     });
-    const login = await loginResponse.json() as {
+    const clientLogin = await clientLoginResponse.json() as {
       token: string;
       profile: string;
       permissions: string[];
     };
-    const headers = { authorization: `Bearer ${login.token}` };
+    const clientHeaders = { authorization: `Bearer ${clientLogin.token}` };
 
-    expect(login.profile).toBe('CLIENT');
-    expect(login.permissions).toEqual(['PLAYERS']);
-    expect((await fetch(`${baseUrl}/session`, { headers })).status).toBe(200);
-    expect((await fetch(`${baseUrl}/players`, { headers })).status).toBe(200);
-    expect((await fetch(`${baseUrl}/status`, { headers })).status).toBe(403);
-    expect((await fetch(`${baseUrl}/logs`, { headers })).status).toBe(403);
-    expect((await fetch(`${baseUrl}/server/start`, { method: 'POST', headers })).status).toBe(403);
+    expect(clientLogin.profile).toBe('CLIENT');
+    expect(clientLogin.permissions).toEqual(['PLAYERS']);
+    expect((await fetch(`${baseUrl}/session`, { headers: clientHeaders })).status).toBe(200);
+    expect((await fetch(`${baseUrl}/players`, { headers: clientHeaders })).status).toBe(200);
+    expect((await fetch(`${baseUrl}/status`, { headers: clientHeaders })).status).toBe(403);
+    expect((await fetch(`${baseUrl}/logs`, { headers: clientHeaders })).status).toBe(403);
+    expect((await fetch(`${baseUrl}/server/start`, {
+      method: 'POST',
+      headers: clientHeaders
+    })).status).toBe(403);
     expect(fixture.start).not.toHaveBeenCalled();
+
+    const adminLoginResponse = await fetch(`${baseUrl}/auth/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username: 'operator', password: 'secure-password' })
+    });
+    const adminLogin = await adminLoginResponse.json() as { token: string; profile: string };
+    const adminHeaders = { authorization: `Bearer ${adminLogin.token}` };
+    expect(adminLogin.profile).toBe('ADMIN');
+    expect((await fetch(`${baseUrl}/status`, { headers: adminHeaders })).status).toBe(200);
   });
 });
 

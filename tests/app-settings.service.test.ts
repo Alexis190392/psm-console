@@ -22,12 +22,12 @@ describe('AppSettingsService', () => {
       await readFile(join(paths.getConfigRoot(), 'app-settings.json'), 'utf8')
     ) as { schemaVersion: number };
 
-    expect(settings.schemaVersion).toBe(3);
+    expect(settings.schemaVersion).toBe(4);
     expect(settings.automation.idleShutdown.enabled).toBe(false);
     expect(settings.remoteApi.enabled).toBe(false);
     expect(settings.remoteApi.passwordConfigured).toBe(false);
     expect(settings.remoteApi.client.enabled).toBe(false);
-    expect(stored.schemaVersion).toBe(3);
+    expect(stored.schemaVersion).toBe(4);
   });
 
   it('migrates existing backup and idle policies without changing their values', async () => {
@@ -76,10 +76,10 @@ describe('AppSettingsService', () => {
       await readFile(join(paths.getConfigRoot(), 'app-settings.json'), 'utf8')
     ) as { schemaVersion: number };
 
-    expect(settings.schemaVersion).toBe(3);
+    expect(settings.schemaVersion).toBe(4);
     expect(settings.automation.idleShutdown.emptySeconds).toBe(180);
     expect(settings.automation.backups.automaticIntervalHours).toBe(8);
-    expect(stored.schemaVersion).toBe(3);
+    expect(stored.schemaVersion).toBe(4);
   });
 
   it('migrates schema 2 administrative API settings and adds a disabled client profile', async () => {
@@ -110,11 +110,11 @@ describe('AppSettingsService', () => {
 
     const settings = await service.read();
 
-    expect(settings.schemaVersion).toBe(3);
+    expect(settings.schemaVersion).toBe(4);
     expect(settings.remoteApi.port).toBe(9213);
     expect(settings.remoteApi.username).toBe('operator');
     expect(settings.remoteApi.client.enabled).toBe(false);
-    expect(settings.remoteApi.client.port).toBe(8214);
+    expect(settings.remoteApi.client.port).toBe(9213);
   });
 
   it('stores a remote API password as a salted hash and verifies it', async () => {
@@ -142,7 +142,7 @@ describe('AppSettingsService', () => {
       profile: 'CLIENT',
       enabled: true,
       bindMode: 'LOCAL_ONLY',
-      port: 8214,
+      port: 9999,
       username: 'guest',
       password: 'abcde',
       permissions: ['GENERAL', 'PLAYERS']
@@ -154,14 +154,14 @@ describe('AppSettingsService', () => {
     expect(await service.verifyRemoteApiCredentials('ADMIN', 'guest', 'abcde')).toBe(false);
   });
 
-  it('rejects shorter passwords and enabled profiles sharing one port', async () => {
+  it('rejects shorter passwords and keeps both profiles on the shared connection', async () => {
     await service.read();
     await expect(service.updateRemoteApi({
       confirmed: true,
       profile: 'CLIENT',
       enabled: true,
       bindMode: 'LOCAL_ONLY',
-      port: 8214,
+      port: 9999,
       username: 'guest',
       password: '1234',
       permissions: ['GENERAL']
@@ -175,15 +175,18 @@ describe('AppSettingsService', () => {
       username: 'admin',
       password: 'abcde'
     });
-    await expect(service.updateRemoteApi({
+    const status = await service.updateRemoteApi({
       confirmed: true,
       profile: 'CLIENT',
       enabled: true,
-      bindMode: 'LOCAL_ONLY',
-      port: 8213,
+      bindMode: 'LOCAL_NETWORK',
+      port: 9999,
       username: 'guest',
       password: 'abcde',
       permissions: ['GENERAL']
-    })).rejects.toThrow('REMOTE_API_PORT_CONFLICT');
+    });
+
+    expect(status.client.bindMode).toBe('LOCAL_ONLY');
+    expect(status.client.port).toBe(8213);
   });
 });

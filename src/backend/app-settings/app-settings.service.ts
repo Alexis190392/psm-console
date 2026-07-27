@@ -24,12 +24,12 @@ import type {
   StoredRemoteApiSettings
 } from '../remote-api/remote-api-settings.types';
 
-const APP_SETTINGS_SCHEMA_VERSION = 3;
+const APP_SETTINGS_SCHEMA_VERSION = 4;
 const PASSWORD_KEY_LENGTH = 64;
 const scryptAsync = promisify(scrypt);
 
 interface StoredAppSettings {
-  schemaVersion: 3;
+  schemaVersion: 4;
   automation: {
     idleShutdown: ServerIdlePolicyDto;
     backups: BackupPolicyDto;
@@ -123,8 +123,8 @@ export class AppSettingsService {
     if (profile === 'CLIENT') {
       settings.remoteApi.client = validateStoredRemoteApiClient({
         enabled: request.enabled,
-        bindMode: request.bindMode,
-        port: request.port,
+        bindMode: settings.remoteApi.bindMode,
+        port: settings.remoteApi.port,
         username,
         passwordSalt,
         passwordHash,
@@ -143,14 +143,8 @@ export class AppSettingsService {
         passwordSalt,
         passwordHash
       });
-    }
-
-    if (
-      settings.remoteApi.enabled
-      && settings.remoteApi.client.enabled
-      && settings.remoteApi.port === settings.remoteApi.client.port
-    ) {
-      throw new Error('REMOTE_API_PORT_CONFLICT');
+      settings.remoteApi.client.bindMode = settings.remoteApi.bindMode;
+      settings.remoteApi.client.port = settings.remoteApi.port;
     }
     await this.write(settings);
     return toPublicRemoteApiSettings(settings.remoteApi);
@@ -281,6 +275,9 @@ function validateStoredRemoteApi(settings: Partial<StoredRemoteApiSettings>): St
     throw new Error('REMOTE_API_PORT_OUT_OF_RANGE');
   }
 
+  const client = validateStoredRemoteApiClient(settings.client);
+  client.bindMode = settings.bindMode;
+  client.port = settings.port;
   return {
     enabled: settings.enabled,
     bindMode: settings.bindMode,
@@ -288,7 +285,7 @@ function validateStoredRemoteApi(settings: Partial<StoredRemoteApiSettings>): St
     username: validateRemoteApiUsername(settings.username ?? ''),
     passwordSalt: typeof settings.passwordSalt === 'string' ? settings.passwordSalt : '',
     passwordHash: typeof settings.passwordHash === 'string' ? settings.passwordHash : '',
-    client: validateStoredRemoteApiClient(settings.client)
+    client
   };
 }
 

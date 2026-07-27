@@ -222,7 +222,7 @@ function renderRemoteApiSettings(status: RemoteApiStatusDto): string {
         <div class="admin-card__title-row">
           <div>
             <span class="view-kicker">ACCESO HTTP</span>
-            <h4>API administrativa</h4>
+            <h4>Conexion compartida y API administrativa</h4>
           </div>
           <label class="toggle-control">
             <input name="enabled" type="checkbox" ${enabled ? 'checked' : ''} />
@@ -295,17 +295,8 @@ function renderClientApiProfile(status: RemoteApiProfileStatusDto): string {
         </label>
       </div>
       <div class="settings-api-form__fields">
-        <label>
-          <span>Acceso</span>
-          <select name="bindMode">
-            <option value="LOCAL_ONLY" ${settings.bindMode === 'LOCAL_ONLY' ? 'selected' : ''}>Solo este equipo</option>
-            <option value="LOCAL_NETWORK" ${settings.bindMode === 'LOCAL_NETWORK' ? 'selected' : ''}>Red local</option>
-          </select>
-        </label>
-        <label>
-          <span>Puerto</span>
-          <input name="port" type="number" min="1024" max="65535" step="1" value="${String(settings.port)}" required />
-        </label>
+        <input name="bindMode" type="hidden" value="${settings.bindMode}" />
+        <input name="port" type="hidden" value="${String(settings.port)}" />
         <label>
           <span>Usuario cliente</span>
           <input name="username" type="text" minlength="3" maxlength="64" pattern="[A-Za-z0-9._-]+" value="${escapeHtml(settings.username)}" autocomplete="username" required />
@@ -316,6 +307,9 @@ function renderClientApiProfile(status: RemoteApiProfileStatusDto): string {
           <small>${settings.passwordConfigured ? 'Deja el campo vacio para conservarla.' : 'Minimo 5 caracteres.'}</small>
         </label>
       </div>
+      <p class="settings-api-shared-access">
+        Usa la misma conexion de la API administrativa: <code>${escapeHtml(status.endpoint ?? `puerto ${String(settings.port)}`)}</code>.
+      </p>
       ${renderClientPermissions(permissions)}
       <div class="admin-card__actions">
         <button class="primary-button button-with-icon" type="submit">${renderIcon('save')}<span>Guardar API cliente</span></button>

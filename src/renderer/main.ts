@@ -2172,7 +2172,7 @@ function bindRemoteApiControls(): void {
     const bindMode = form.elements.namedItem('bindMode');
     const password = form.elements.namedItem('password');
     if (!(enabled instanceof HTMLInputElement)
-      || !(bindMode instanceof HTMLSelectElement)
+      || !(bindMode instanceof HTMLSelectElement || bindMode instanceof HTMLInputElement)
       || !(password instanceof HTMLInputElement)) {
       return;
     }

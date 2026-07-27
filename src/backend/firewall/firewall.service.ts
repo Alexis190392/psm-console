@@ -457,11 +457,10 @@ export function resolveFirewallPortRequirements(configurationContent: string): F
 }
 
 function getRemoteApiFirewallDisplayName(
-  profile: RemoteApiFirewallCheckRequestDto['profile'],
+  _profile: RemoteApiFirewallCheckRequestDto['profile'],
   port: number
 ): string {
-  const label = profile === 'ADMIN' ? 'Admin' : 'Cliente';
-  return `PSM Console API ${label} TCP ${String(port)}`;
+  return `PSM Console API TCP ${String(port)}`;
 }
 
 function validateRemoteApiPort(port: number): void {

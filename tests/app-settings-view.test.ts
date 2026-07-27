@@ -4,7 +4,7 @@ import type { RemoteApiPermission } from '../src/shared/dto/remote-api.dto';
 
 const appStatus = {
   settings: {
-    schemaVersion: 3 as const,
+    schemaVersion: 4 as const,
     automation: {
       idleShutdown: { enabled: true, emptySeconds: 120 },
       backups: {
@@ -23,7 +23,7 @@ const appStatus = {
       client: {
         enabled: false,
         bindMode: 'LOCAL_ONLY' as const,
-        port: 8214,
+        port: 8213,
         username: 'cliente',
         passwordConfigured: false,
         permissions: ['GENERAL', 'SERVER_CONTROL', 'PLAYERS', 'LOGS'] as RemoteApiPermission[]
@@ -174,6 +174,8 @@ describe('app settings view', () => {
     expect(html).toContain('minlength="5"');
     expect(html).toContain('http://127.0.0.1:8213/api/v1');
     expect(html).toContain('<dt>Sesion</dt><dd>8 h</dd>');
+    expect(html.match(/name="port" type="number"/g)).toHaveLength(1);
+    expect(html).toContain('misma conexion de la API administrativa');
     expect(html).not.toContain('passwordHash');
   });
 });

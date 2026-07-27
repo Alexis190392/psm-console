@@ -24,7 +24,6 @@ import { PalworldConfigurationService } from '../palworld-configuration/palworld
 import { PalworldPlayersService } from '../palworld-players/palworld-players.service';
 import { PalworldProcessService } from '../palworld-process/palworld-process.service';
 import type {
-  StoredRemoteApiClientSettings,
   StoredRemoteApiSettings
 } from './remote-api-settings.types';
 
@@ -62,7 +61,6 @@ interface LoginAttempt {
 }
 
 interface ProfileRuntime {
-  server: Server | null;
   state: RemoteApiProfileStatusDto['state'];
   message: string;
   endpoint?: string;
@@ -71,6 +69,7 @@ interface ProfileRuntime {
 
 @Injectable()
 export class RemoteApiService implements OnApplicationBootstrap, OnApplicationShutdown {
+  private server: Server | null = null;
   private readonly runtimes: Record<RemoteApiProfile, ProfileRuntime> = {
     ADMIN: createDisabledRuntime('API administrativa deshabilitada.'),
     CLIENT: createDisabledRuntime('API cliente deshabilitada.')
@@ -122,27 +121,25 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
   private async applyCurrentSettings(): Promise<void> {
     await this.stopAll();
     const settings = await this.appSettingsService.getRemoteApiSettings();
-    if (settings.enabled) {
-      await this.start('ADMIN', settings);
-    } else {
+    if (!settings.enabled) {
       this.setState('ADMIN', 'DISABLED', 'API administrativa deshabilitada.');
     }
-    if (settings.client.enabled) {
-      await this.start('CLIENT', settings.client);
-    } else {
+    if (!settings.client.enabled) {
       this.setState('CLIENT', 'DISABLED', 'API cliente deshabilitada.');
+    }
+    if (settings.enabled || settings.client.enabled) {
+      await this.start(settings);
     }
   }
 
-  private async start(
-    profile: RemoteApiProfile,
-    settings: StoredRemoteApiSettings | StoredRemoteApiClientSettings
-  ): Promise<void> {
-    const label = profile === 'ADMIN' ? 'API administrativa' : 'API cliente';
-    this.setState(profile, 'STARTING', `Iniciando ${label}.`);
+  private async start(settings: StoredRemoteApiSettings): Promise<void> {
+    const enabledProfiles = getEnabledProfiles(settings);
+    enabledProfiles.forEach((profile) => {
+      this.setState(profile, 'STARTING', 'Iniciando API web compartida.');
+    });
     const host = settings.bindMode === 'LOCAL_ONLY' ? '127.0.0.1' : '0.0.0.0';
     const server = createServer((request, response) => {
-      void this.handleRequest(profile, request, response);
+      void this.handleRequest(request, response);
     });
 
     try {
@@ -156,32 +153,40 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
           resolve();
         });
       });
-      const runtime = this.runtimes[profile];
-      runtime.server = server;
-      runtime.endpoint = createEndpoint(settings, this.networkService.getLocalAddresses());
-      this.setState(profile, 'RUNNING', `${label} disponible en ${runtime.endpoint}.`);
-      void this.loggingService.write('api', 'INFO', runtime.message);
+      this.server = server;
+      const endpoint = createEndpoint(settings, this.networkService.getLocalAddresses());
+      enabledProfiles.forEach((profile) => {
+        this.runtimes[profile].endpoint = endpoint;
+        this.setState(
+          profile,
+          'RUNNING',
+          `${profile === 'ADMIN' ? 'API administrativa' : 'API cliente'} disponible en ${endpoint}.`
+        );
+      });
+      void this.loggingService.write('api', 'INFO', `API web compartida disponible en ${endpoint}.`);
     } catch (error) {
       server.close();
-      const runtime = this.runtimes[profile];
-      runtime.server = null;
-      runtime.endpoint = undefined;
-      this.setState(profile, 'ERROR', `No se pudo iniciar ${label}: ${toErrorMessage(error)}`);
-      void this.loggingService.write('api', 'ERROR', runtime.message);
+      this.server = null;
+      enabledProfiles.forEach((profile) => {
+        this.runtimes[profile].endpoint = undefined;
+        this.setState(profile, 'ERROR', `No se pudo iniciar la API web: ${toErrorMessage(error)}`);
+      });
+      void this.loggingService.write(
+        'api',
+        'ERROR',
+        `No se pudo iniciar la API web: ${toErrorMessage(error)}`
+      );
     }
   }
 
   private async stopAll(): Promise<void> {
     this.sessions.clear();
     this.loginAttempts.clear();
-    await Promise.all((['ADMIN', 'CLIENT'] as const).map((profile) => this.stopProfile(profile)));
-  }
-
-  private async stopProfile(profile: RemoteApiProfile): Promise<void> {
-    const runtime = this.runtimes[profile];
-    const server = runtime.server;
-    runtime.server = null;
-    runtime.endpoint = undefined;
+    const server = this.server;
+    this.server = null;
+    (['ADMIN', 'CLIENT'] as const).forEach((profile) => {
+      this.runtimes[profile].endpoint = undefined;
+    });
     if (!server) {
       return;
     }
@@ -192,15 +197,10 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
       });
       server.closeAllConnections();
     });
-    void this.loggingService.write(
-      'api',
-      'INFO',
-      profile === 'ADMIN' ? 'API administrativa detenida.' : 'API cliente detenida.'
-    );
+    void this.loggingService.write('api', 'INFO', 'API web compartida detenida.');
   }
 
   private async handleRequest(
-    profile: RemoteApiProfile,
     request: IncomingMessage,
     response: ServerResponse
   ): Promise<void> {
@@ -224,24 +224,26 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
       }
 
       if (method === 'GET' && requestUrl.pathname === `${API_PREFIX}/health`) {
-        const runtime = this.runtimes[profile];
         sendJson(response, 200, {
           status: 'ok',
           application: APP_INFO.shortName,
           version: APP_INFO.version,
-          api: runtime.state,
-          profile,
+          api: 'RUNNING',
+          profiles: {
+            admin: this.runtimes.ADMIN.state === 'RUNNING',
+            client: this.runtimes.CLIENT.state === 'RUNNING'
+          },
           updatedAt: new Date().toISOString()
         });
         return;
       }
 
       if (method === 'POST' && requestUrl.pathname === `${API_PREFIX}/auth/login`) {
-        await this.login(profile, request, response);
+        await this.login(request, response);
         return;
       }
 
-      const { token, session } = this.requireSession(profile, request);
+      const { token, session } = this.requireSession(request);
       if (method === 'POST' && requestUrl.pathname === `${API_PREFIX}/auth/logout`) {
         this.sessions.delete(token);
         sendJson(response, 200, { status: 'ok' });
@@ -413,18 +415,29 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
   }
 
   private async login(
-    profile: RemoteApiProfile,
     request: IncomingMessage,
     response: ServerResponse
   ): Promise<void> {
-    const clientId = `${profile}:${request.socket.remoteAddress ?? 'unknown'}`;
+    const clientId = request.socket.remoteAddress ?? 'unknown';
     this.assertLoginAllowed(clientId);
     const body = await readJsonBody(request);
     const username = requireString(body, 'username');
     const password = requireString(body, 'password');
-    const valid = await this.appSettingsService.verifyRemoteApiCredentials(profile, username, password);
+    const settings = await this.appSettingsService.getRemoteApiSettings();
+    let profile: RemoteApiProfile | null = null;
+    if (
+      settings.enabled
+      && await this.appSettingsService.verifyRemoteApiCredentials('ADMIN', username, password)
+    ) {
+      profile = 'ADMIN';
+    } else if (
+      settings.client.enabled
+      && await this.appSettingsService.verifyRemoteApiCredentials('CLIENT', username, password)
+    ) {
+      profile = 'CLIENT';
+    }
 
-    if (!valid) {
+    if (!profile) {
       this.registerLoginFailure(clientId);
       void this.loggingService.write('api', 'WARN', `Inicio de sesion rechazado desde ${clientId}.`);
       throw new ApiHttpError(401, 'REMOTE_API_INVALID_CREDENTIALS');
@@ -433,7 +446,6 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
     this.loginAttempts.delete(clientId);
     const token = randomBytes(32).toString('base64url');
     const expiresAt = Date.now() + SESSION_DURATION_MS;
-    const settings = await this.appSettingsService.getRemoteApiSettings();
     const permissions = profile === 'ADMIN'
       ? allRemoteApiPermissions()
       : [...settings.client.permissions];
@@ -449,13 +461,12 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
   }
 
   private requireSession(
-    profile: RemoteApiProfile,
     request: IncomingMessage
   ): { token: string; session: ApiSession } {
     const authorization = request.headers.authorization ?? '';
     const token = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
     const session = this.sessions.get(token);
-    if (!token || !session || session.expiresAt <= Date.now() || session.profile !== profile) {
+    if (!token || !session || session.expiresAt <= Date.now()) {
       if (token) {
         this.sessions.delete(token);
       }
@@ -542,11 +553,17 @@ class ApiHttpError extends Error {
 
 function createDisabledRuntime(message: string): ProfileRuntime {
   return {
-    server: null,
     state: 'DISABLED',
     message,
     updatedAt: new Date().toISOString()
   };
+}
+
+function getEnabledProfiles(settings: StoredRemoteApiSettings): RemoteApiProfile[] {
+  return [
+    ...(settings.enabled ? ['ADMIN' as const] : []),
+    ...(settings.client.enabled ? ['CLIENT' as const] : [])
+  ];
 }
 
 function allRemoteApiPermissions(): RemoteApiPermission[] {
