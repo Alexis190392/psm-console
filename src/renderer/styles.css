@@ -1718,7 +1718,9 @@ input[type="range"] {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
+  min-width: 0;
 }
 
 .players-list-card__header .eyebrow {
@@ -1735,6 +1737,7 @@ input[type="range"] {
   color: var(--color-text-muted);
   font-family: "JetBrains Mono", Consolas, monospace;
   font-size: 12px;
+  white-space: nowrap;
 }
 
 .players-list {
@@ -1786,6 +1789,7 @@ input[type="range"] {
 
 .player-row {
   display: grid;
+  grid-template-areas: "identity details status actions";
   grid-template-columns: minmax(170px, 1fr) minmax(220px, 1.3fr) minmax(118px, auto) minmax(214px, auto);
   gap: 14px;
   align-items: center;
@@ -1794,6 +1798,20 @@ input[type="range"] {
   border: 1px solid rgba(0, 229, 255, 0.14);
   border-radius: 8px;
   background: rgba(11, 15, 19, 0.45);
+}
+
+.player-row__identity {
+  grid-area: identity;
+  min-width: 0;
+}
+
+.player-row__details {
+  grid-area: details;
+  overflow-wrap: anywhere;
+}
+
+.player-row__status {
+  grid-area: status;
 }
 
 .player-row--previous {
@@ -2024,7 +2042,7 @@ input[type="range"] {
 
 .admin-players-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.7fr) minmax(260px, 0.7fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
   align-items: start;
 }
@@ -2222,6 +2240,7 @@ input[type="range"] {
 }
 
 .player-row__actions {
+  grid-area: actions;
   display: flex;
   justify-content: flex-end;
   gap: 8px;
@@ -3534,6 +3553,7 @@ input[type="range"] {
 
   .settings-grid,
   .admin-players-layout,
+  .admin-map-layout,
   .admin-broadcast-bar__row,
   .firewall-port-grid,
   .summary-grid,
@@ -3614,12 +3634,30 @@ input[type="range"] {
   }
 
   .player-row {
-    grid-template-columns: minmax(170px, 1fr) minmax(180px, 1.2fr);
+    grid-template-areas:
+      "identity status"
+      "details details"
+      "actions actions";
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px 14px;
   }
 
-  .player-row em,
+  .player-row__status,
   .player-row__actions {
     justify-self: start;
+  }
+
+  .player-row__status {
+    align-self: start;
+    justify-self: end;
+  }
+
+  .player-row__actions {
+    width: 100%;
+  }
+
+  .admin-map-layout {
+    grid-template-columns: 1fr;
   }
 
   .inline-confirm {

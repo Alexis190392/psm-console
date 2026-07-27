@@ -61,6 +61,9 @@ describe('admin view', () => {
     expect(html).toContain('data-player-action="unban"');
     expect(html).toContain('data-admin-form="announce"');
     expect(html).toContain('data-admin-form="player"');
+    expect(html).toContain('player-row__identity');
+    expect(html).toContain('player-row__details');
+    expect(html).toContain('player-row__status');
     expect(html).toContain('Jugador &lt;Uno&gt;');
     expect(html).not.toContain('Jugador <Uno>');
   });
