@@ -16,6 +16,6 @@ describe('navigation state', () => {
     expect(isRendererView('network')).toBe(true);
     expect(isRendererView('admin')).toBe(true);
     expect(isRendererView('players')).toBe(false);
-    expect(isRendererView('settings')).toBe(false);
+    expect(isRendererView('settings')).toBe(true);
   });
 });

@@ -120,12 +120,26 @@ export class PalworldProcessService {
       throw new Error('PALWORLD_STOP_REQUIRES_CONFIRMATION');
     }
 
+    return this.requestStop(
+      'Detencion de Palworld Dedicated Server',
+      'Preparando detencion de PalServer.exe.'
+    );
+  }
+
+  stopAutomatically(): OperationAcceptedDto {
+    return this.requestStop(
+      'Detencion automatica de Palworld Dedicated Server',
+      'El servidor permanecio sin jugadores durante el tiempo configurado.'
+    );
+  }
+
+  private requestStop(title: string, initialMessage: string): OperationAcceptedDto {
     const installation = this.palworldInstallationService.getStatus();
     this.reconcileRuntimeStatus(installation.executablePath);
     const targetProcesses = this.getActiveProcesses(installation.executablePath);
     const operation = this.operationManagerService.create(
-      'Detencion de Palworld Dedicated Server',
-      'Preparando detencion de PalServer.exe.'
+      title,
+      initialMessage
     );
 
     if (targetProcesses.length === 0 || this.state === 'STOPPED') {

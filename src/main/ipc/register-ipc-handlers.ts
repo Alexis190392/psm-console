@@ -1,6 +1,7 @@
 import type { INestApplicationContext } from '@nestjs/common';
 import { app, BrowserWindow, shell, type IpcMain, type IpcMainInvokeEvent, type ProcessMetric } from 'electron';
 import { ApplicationStateService } from '../../backend/application-state/application-state.service';
+import { AppSettingsService } from '../../backend/app-settings/app-settings.service';
 import { BackupService } from '../../backend/backup/backup.service';
 import { FirewallService } from '../../backend/firewall/firewall.service';
 import { NetworkService } from '../../backend/network/network.service';
@@ -12,6 +13,8 @@ import { PalworldInstallationService } from '../../backend/palworld-installation
 import { PalworldPlayersService } from '../../backend/palworld-players/palworld-players.service';
 import { PalworldProcessService } from '../../backend/palworld-process/palworld-process.service';
 import { SteamCmdService } from '../../backend/steamcmd/steamcmd.service';
+import { ReleaseUpdateService } from '../../backend/release-update/release-update.service';
+import { ServerIdleShutdownService } from '../../backend/server-idle-shutdown/server-idle-shutdown.service';
 import { ipcChannels } from '../../shared/contracts/ipc-channels';
 import type {
   PalworldRestoreDefaultConfigurationRequestDto,
@@ -43,7 +46,8 @@ import type {
   BackupUpdatePolicyRequestDto,
   BackupVerifyRequestDto
 } from '../../shared/dto/backup-status.dto';
-import type { LogsRecentRequestDto } from '../../shared/dto/log-status.dto';
+import type { LogFileReadRequestDto, LogsRecentRequestDto } from '../../shared/dto/log-status.dto';
+import type { ServerIdlePolicyUpdateRequestDto } from '../../shared/dto/server-idle-policy.dto';
 import type { PublicAddressRequestDto } from '../../shared/dto/network-diagnostics.dto';
 import type { AppProcessKind, AppProcessMetricDto, AppProcessMetricsDto } from '../../shared/dto/app-process-metrics.dto';
 
@@ -52,6 +56,7 @@ export function registerIpcHandlers(
   nestContext: INestApplicationContext
 ): void {
   const applicationStateService = nestContext.get(ApplicationStateService);
+  const appSettingsService = nestContext.get(AppSettingsService);
   const steamCmdService = nestContext.get(SteamCmdService);
   const palworldInstallationService = nestContext.get(PalworldInstallationService);
   const palworldProcessService = nestContext.get(PalworldProcessService);
@@ -63,6 +68,8 @@ export function registerIpcHandlers(
   const networkService = nestContext.get(NetworkService);
   const backupService = nestContext.get(BackupService);
   const loggingService = nestContext.get(LoggingService);
+  const releaseUpdateService = nestContext.get(ReleaseUpdateService);
+  const serverIdleShutdownService = nestContext.get(ServerIdleShutdownService);
 
   ipcMain.handle(ipcChannels.appGetStatus, () =>
     applicationStateService.getStatus()
@@ -73,6 +80,15 @@ export function registerIpcHandlers(
   );
 
   ipcMain.handle(ipcChannels.appGetProcessMetrics, () => getAppProcessMetrics());
+
+  ipcMain.handle(ipcChannels.appSettingsGetStatus, () => appSettingsService.getStatus());
+
+  ipcMain.handle(ipcChannels.updateGetStatus, () => releaseUpdateService.getStatus());
+
+  ipcMain.handle(ipcChannels.updateOpenRelease, async () => {
+    const releaseUrl = await releaseUpdateService.getReleaseUrl();
+    await shell.openExternal(releaseUrl);
+  });
 
   ipcMain.handle(ipcChannels.steamCmdGetStatus, () => steamCmdService.getStatus());
 
@@ -126,6 +142,14 @@ export function registerIpcHandlers(
 
   ipcMain.handle(ipcChannels.playersGetStatus, () =>
     palworldPlayersService.getStatus()
+  );
+
+  ipcMain.handle(ipcChannels.serverIdleGetStatus, () =>
+    serverIdleShutdownService.getStatus()
+  );
+
+  ipcMain.handle(ipcChannels.serverIdleUpdatePolicy, (_event, request: ServerIdlePolicyUpdateRequestDto) =>
+    serverIdleShutdownService.updatePolicy(request)
   );
 
   ipcMain.handle(ipcChannels.adminGetStatus, () =>
@@ -209,6 +233,12 @@ export function registerIpcHandlers(
 
   ipcMain.handle(ipcChannels.logsGetRecent, (_event, request: LogsRecentRequestDto | undefined) =>
     loggingService.readRecent(request)
+  );
+
+  ipcMain.handle(ipcChannels.logsListFiles, () => loggingService.listFiles());
+
+  ipcMain.handle(ipcChannels.logsReadFile, (_event, request: LogFileReadRequestDto) =>
+    loggingService.readFile(request)
   );
 
   ipcMain.handle(ipcChannels.windowMinimize, (event) => {

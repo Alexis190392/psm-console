@@ -4,6 +4,7 @@ import { formatLocalLogTimestamp } from '../shared/utils/local-time';
 import { ApplicationStatus } from '../shared/enums/application-status';
 import type { AllowedActionsDto } from '../shared/dto/allowed-actions.dto';
 import type { AppProcessMetricDto, AppProcessMetricsDto } from '../shared/dto/app-process-metrics.dto';
+import type { AppUpdateStatusDto } from '../shared/dto/app-update-status.dto';
 import type { BackupSummaryDto, BackupUpdatePolicyRequestDto } from '../shared/dto/backup-status.dto';
 import type {
   FirewallDiagnosticProgressDto,
@@ -13,9 +14,9 @@ import type {
   FirewallStatusDto
 } from '../shared/dto/firewall-status.dto';
 import type { NetworkDiagnosticsDto } from '../shared/dto/network-diagnostics.dto';
-import type { LogModule } from '../shared/dto/log-status.dto';
+import type { LogFileSummaryDto, LogModule } from '../shared/dto/log-status.dto';
 import type { OperationProgressDto } from '../shared/dto/operation-progress.dto';
-import type { PalworldAdminAction } from '../shared/dto/palworld-admin.dto';
+import type { PalworldAdminAction, PalworldAdminStatusDto } from '../shared/dto/palworld-admin.dto';
 import type { PalworldPlayersStatusDto } from '../shared/dto/palworld-players-status.dto';
 import type { PalworldQueryPortStatusDto, PalworldRuntimeStatusDto } from '../shared/dto/palworld-runtime-status.dto';
 import {
@@ -41,15 +42,20 @@ import { getOperationFailureMessage, isOperationSuccessful } from './utils/opera
 import { cssEscape, escapeHtml, normalizeSearchText } from './utils/text';
 import { renderBackupsView as renderBackupsViewHtml } from './views/backups-view';
 import { renderAdminStatus } from './views/admin-view';
+import { renderAppSettingsView } from './views/app-settings-view';
 import {
   renderConfigurationPresets,
   renderSettingsFilterBar,
   renderSettingsForm
 } from './views/server-configuration-view';
-import { renderGeneralView as renderGeneralViewHtml } from './views/general-view';
+import {
+  renderGeneralUpdateAction,
+  renderGeneralView as renderGeneralViewHtml
+} from './views/general-view';
 import { renderPreflightSummaryView, renderSimpleView as renderSimpleViewHtml } from './views/status-views';
 import { NavigationState } from './state/navigation-state';
 import { AdminViewState } from './state/admin-view-state';
+import { SettingsViewState, type SettingsTab } from './state/settings-view-state';
 import { resolveServerActionState } from './state/server-action-state';
 
 const palcmLogoUrl = new URL('./assets/palcm-logo.png', import.meta.url).href;
@@ -122,6 +128,24 @@ rootElement.innerHTML = `
         ${renderIcon('logs', 'sidebar__link-icon')}
         <span>Logs</span>
       </a>
+      <div class="sidebar__group sidebar__group--collapsed" data-nav-group="settings">
+        <a class="sidebar__link sidebar__link--group" data-nav="settings" data-settings-group-toggle="true" href="#">
+          ${renderIcon('settings', 'sidebar__link-icon')}
+          <span>Configuracion</span>
+          <span class="sidebar__chevron" aria-hidden="true"></span>
+        </a>
+        <div class="sidebar__subnav" aria-label="Configuracion de la aplicacion">
+          <a class="sidebar__sublink" data-nav="settings" data-settings-sidebar-tab="summary" href="#">
+            <span>Resumen</span>
+          </a>
+          <a class="sidebar__sublink" data-nav="settings" data-settings-sidebar-tab="application" href="#">
+            <span>Aplicacion</span>
+          </a>
+          <a class="sidebar__sublink" data-nav="settings" data-settings-sidebar-tab="automation" href="#">
+            <span>Automatizaciones</span>
+          </a>
+        </div>
+      </div>
     </nav>
     <section id="sidebar-runtime-status" class="sidebar-status sidebar-status--blocked" aria-live="polite">
       <span class="sidebar-status__dot" aria-hidden="true"></span>
@@ -182,7 +206,12 @@ rootElement.innerHTML = `
           <button id="clear-console" class="console-tool-button icon-button" type="button" aria-label="Limpiar vista" title="Limpiar vista">
             ${renderIcon('clear')}
           </button>
+          <button id="open-log-history" class="console-tool-button icon-button" type="button" aria-label="Abrir logs anteriores" title="Abrir logs anteriores">
+            ${renderIcon('clock')}
+          </button>
         </div>
+        <div id="log-history-panel" class="log-history-panel hidden"></div>
+        <div id="historical-log-banner" class="historical-log-banner hidden"></div>
         <pre id="console-output" class="log">Consultando IPC seguro...</pre>
       </div>
       <div id="confirmation-panel" class="confirmation-panel hidden">
@@ -231,6 +260,9 @@ const consoleSearchInput = document.querySelector<HTMLInputElement>('#console-se
 const consoleModuleFilter = document.querySelector<HTMLSelectElement>('#console-module-filter');
 const pauseConsoleButton = document.querySelector<HTMLButtonElement>('#pause-console');
 const clearConsoleButton = document.querySelector<HTMLButtonElement>('#clear-console');
+const openLogHistoryButton = document.querySelector<HTMLButtonElement>('#open-log-history');
+const logHistoryPanel = document.querySelector<HTMLDivElement>('#log-history-panel');
+const historicalLogBanner = document.querySelector<HTMLDivElement>('#historical-log-banner');
 const processMetricsPanel = document.querySelector<HTMLElement>('#process-metrics-panel');
 const processMetricsList = document.querySelector<HTMLElement>('#process-metrics-list');
 const refreshProcessMetricsButton = document.querySelector<HTMLButtonElement>('#refresh-process-metrics');
@@ -253,6 +285,7 @@ const sidebarRuntimeStatus = document.querySelector<HTMLElement>('#sidebar-runti
 const startServerAction = document.querySelector<HTMLButtonElement>('#start-server-action');
 const navLinks = Array.from(document.querySelectorAll<HTMLAnchorElement>('[data-nav]'));
 const adminNavGroup = document.querySelector<HTMLElement>('[data-nav-group="admin"]');
+const settingsNavGroup = document.querySelector<HTMLElement>('[data-nav-group="settings"]');
 const consoleLines: string[] = [];
 const operationLogOffsets = new Map<string, number>();
 let latestFirewallStatus: FirewallStatusDto | null = null;
@@ -269,12 +302,19 @@ let latestPublicNetworkPort: string | null = null;
 let publicNetworkRequestPort: string | null = null;
 let latestConfiguredPort: string | null = null;
 let latestBackupSummary: BackupSummaryDto | null = null;
+let latestUpdateStatus: AppUpdateStatusDto | null = null;
+let updateStatusRequest: Promise<AppUpdateStatusDto> | null = null;
+let announcedUpdateVersion: string | null = null;
 let adminRefreshTimer: number | null = null;
+let adminStatusRequest: Promise<[PalworldAdminStatusDto, PalworldPlayersStatusDto]> | null = null;
 const adminViewState = new AdminViewState();
+const settingsViewState = new SettingsViewState();
 let consoleSearchTerm = '';
 let consoleSelectedModule: LogModule | 'all' = 'all';
 let consolePaused = false;
 let latestPersistentLogsSignature = '';
+let historicalLogLines: string[] | null = null;
+let selectedHistoricalLog: LogFileSummaryDto | null = null;
 let settingInfoDismissBound = false;
 let latestServerSettings: ParsedPalworldSettings | null = null;
 let latestServerSettingsPath: string | null = null;
@@ -289,6 +329,7 @@ let lastCopyToast: { value: string; copiedAt: number } | null = null;
 let confirmationReturnFocus: HTMLElement | null = null;
 let confirmationFocusActive = false;
 let inlineConfirmationReturnFocus: HTMLElement | null = null;
+let activeViewRenderId = 0;
 let latestSummary: {
   steamCmdStatus: string;
   serverStatus: string;
@@ -341,10 +382,16 @@ if (!palcmApi) {
     renderConsoleOutput();
   });
   clearConsoleButton?.addEventListener('click', () => {
+    if (selectedHistoricalLog) {
+      return;
+    }
     consoleLines.splice(0, consoleLines.length);
     operationLogOffsets.clear();
     latestPersistentLogsSignature = '';
     renderConsoleOutput();
+  });
+  openLogHistoryButton?.addEventListener('click', () => {
+    void toggleLogHistory();
   });
   refreshProcessMetricsButton?.addEventListener('click', () => {
     void loadAppProcessMetrics();
@@ -377,6 +424,13 @@ if (!palcmApi) {
         const requestedAdminTab = link.dataset['adminSidebarTab'];
         if (isAdminTab(requestedAdminTab)) {
           adminViewState.setTab(requestedAdminTab);
+        }
+      }
+      if (nextView === 'settings') {
+        settingsViewState.setMenuOpen(true);
+        const requestedSettingsTab = link.dataset['settingsSidebarTab'];
+        if (isSettingsTab(requestedSettingsTab)) {
+          settingsViewState.setTab(requestedSettingsTab);
         }
       }
 
@@ -885,9 +939,10 @@ function renderConsoleOutput(): void {
     return;
   }
 
+  const sourceLines = historicalLogLines ?? consoleLines;
   const visibleLines = consoleSearchTerm
-    ? consoleLines.filter((line) => line.toLowerCase().includes(consoleSearchTerm))
-    : consoleLines;
+    ? sourceLines.filter((line) => line.toLowerCase().includes(consoleSearchTerm))
+    : sourceLines;
 
   consoleOutput.textContent = visibleLines.join('\n');
 
@@ -913,6 +968,7 @@ function updateNavigation(status: ApplicationStatus): void {
     const nav = link.dataset['nav'];
     const enabled =
       nav === 'home' ||
+      nav === 'settings' ||
       (nav === 'server' && serverAvailable) ||
       (nav === 'admin' && serverRunning) ||
       (nav === 'logs' && logsAvailable) ||
@@ -937,6 +993,14 @@ function updateNavigation(status: ApplicationStatus): void {
     adminNavGroup.querySelector<HTMLElement>('[data-admin-group-toggle]')
       ?.setAttribute('aria-expanded', serverRunning && (adminViewState.isMenuOpen() || navigationState.is('admin')) ? 'true' : 'false');
   }
+
+  if (settingsNavGroup) {
+    const open = settingsViewState.isMenuOpen() || navigationState.is('settings');
+    settingsNavGroup.classList.toggle('sidebar__group--open', open);
+    settingsNavGroup.classList.toggle('sidebar__group--collapsed', !open);
+    settingsNavGroup.querySelector<HTMLElement>('[data-settings-group-toggle]')
+      ?.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
 }
 
 function isSidebarNavActive(link: HTMLAnchorElement): boolean {
@@ -946,7 +1010,14 @@ function isSidebarNavActive(link: HTMLAnchorElement): boolean {
   }
 
   if (nav !== 'admin') {
-    return true;
+    if (nav !== 'settings') {
+      return true;
+    }
+    if (link.dataset['settingsGroupToggle'] === 'true') {
+      return false;
+    }
+    const requestedSettingsTab = link.dataset['settingsSidebarTab'];
+    return isSettingsTab(requestedSettingsTab) && settingsViewState.isTab(requestedSettingsTab);
   }
 
   if (link.dataset['adminGroupToggle'] === 'true') {
@@ -959,6 +1030,10 @@ function isSidebarNavActive(link: HTMLAnchorElement): boolean {
   }
 
   return isAdminTab(requestedAdminTab) && adminViewState.isTab(requestedAdminTab);
+}
+
+function isSettingsTab(value: string | undefined): value is SettingsTab {
+  return value === 'summary' || value === 'application' || value === 'automation';
 }
 
 function isAdminTab(value: string | undefined): value is 'general' | 'players' | 'map' {
@@ -1018,6 +1093,7 @@ function renderActiveView(): void {
     return;
   }
 
+  const renderId = ++activeViewRenderId;
   stopRuntimeViewRefreshers();
   rootElement.dataset['view'] = navigationState.current;
   hideConfirmation();
@@ -1034,27 +1110,32 @@ function renderActiveView(): void {
   });
 
   if (navigationState.is('home')) {
-    void renderGeneralView();
+    void renderGeneralView(renderId);
     return;
   }
 
   if (navigationState.is('server')) {
-    void renderServerConfigurationView();
+    void renderServerConfigurationView(renderId);
     return;
   }
 
   if (navigationState.is('admin')) {
-    void renderAdminView();
+    void renderAdminView(renderId);
     return;
   }
 
   if (navigationState.is('network')) {
-    void renderFirewallView();
+    void renderFirewallView(false, renderId);
     return;
   }
 
   if (navigationState.is('backups')) {
-    void renderBackupsView();
+    void renderBackupsView(renderId);
+    return;
+  }
+
+  if (navigationState.is('settings')) {
+    void renderAppSettings(renderId);
     return;
   }
 
@@ -1065,31 +1146,63 @@ function renderActiveView(): void {
 
 }
 
-async function renderGeneralView(): Promise<void> {
+function isCurrentViewRender(renderId: number, view: NavigationState['current']): boolean {
+  return activeViewRenderId === renderId && navigationState.is(view);
+}
+
+function renderViewLoading(title: string, detail: string): void {
+  setContent(`
+    <div class="view-stack">
+      <div class="view-header view-header--contained">
+        <h3>${escapeHtml(title)}</h3>
+      </div>
+      <section class="content-card players-loading view-loading" aria-busy="true" aria-live="polite">
+        <span class="inline-loader" aria-hidden="true"></span>
+        <div>
+          <strong>Cargando</strong>
+          <p>${escapeHtml(detail)}</p>
+        </div>
+      </section>
+    </div>
+  `);
+}
+
+async function renderGeneralView(renderId: number): Promise<void> {
   updateReadyChrome();
 
   if (!isOperationalStatus(latestStatus)) {
-    renderPreflightSummary();
+    if (isCurrentViewRender(renderId, 'home')) {
+      renderPreflightSummary();
+    }
     return;
   }
 
-  const port = await readConfiguredPort();
+  renderViewLoading('General', 'Actualizando servidor, conexiones, jugadores y backups.');
+  const [port, backupSummary, serverRuntime, playersSummary] = await Promise.all([
+    readConfiguredPort(),
+    readBackupSummaryForGeneral(),
+    readServerRuntimeForGeneral(),
+    readPlayersStatusForGeneral()
+  ]);
+
+  if (!isCurrentViewRender(renderId, 'home')) {
+    return;
+  }
+
   latestConfiguredPort = port;
   const portState = port ? createSummaryCardState('ok') : createSummaryCardState('warning');
   const isNetworkLoading = !latestFirewallStatus && !latestFirewallError;
   const localPlay = createLocalPlaySummary(latestFirewallStatus, port, isNetworkLoading, latestLocalAddresses);
   const isPublicNetworkLoading = !latestFirewallStatus && !latestFirewallError && !latestPublicNetwork && !latestPublicNetworkError;
   const publicPlay = createPublicPlaySummary(latestFirewallStatus, isPublicNetworkLoading, latestPublicNetwork, port);
-  const backupSummary = await readBackupSummaryForGeneral();
   const backupState = createBackupSummaryCard(backupSummary);
-  const serverRuntime = await readServerRuntimeForGeneral();
   const serverState = createServerRuntimeSummary(serverRuntime);
-  const playersSummary = await readPlayersStatusForGeneral();
   const playersState = createPlayersSummaryCard(playersSummary);
   const networkFreshness = formatLastVerification(latestFirewallCheckedAt);
 
   setContent(renderGeneralViewHtml({
     networkFreshness,
+    update: latestUpdateStatus,
     primaryCards: [
       {
           title: 'Servidor',
@@ -1157,9 +1270,60 @@ async function renderGeneralView(): Promise<void> {
     ]
   }));
   bindSummaryCards();
-  void hydrateGeneralLocalPreview(port);
-  void hydrateGeneralPublicPreview(port);
-  void hydrateGeneralNetworkSummary(port);
+  bindReleaseUpdateAction();
+  void hydrateGeneralLocalPreview(port, renderId);
+  void hydrateGeneralPublicPreview(port, renderId);
+  void hydrateGeneralNetworkSummary(port, renderId);
+  void loadReleaseUpdateStatus();
+}
+
+function bindReleaseUpdateAction(): void {
+  document.querySelector<HTMLButtonElement>('[data-open-release="true"]')?.addEventListener('click', () => {
+    if (!palcmApi) {
+      return;
+    }
+
+    void palcmApi.update.openRelease()
+      .then(() => {
+        showToast('Se abrió la página oficial de descarga.');
+      })
+      .catch((error: unknown) => {
+        appendConsoleLine(`No se pudo abrir la release: ${error instanceof Error ? error.message : String(error)}`);
+        showToast('No se pudo abrir la página de descarga', 'error');
+      });
+  });
+}
+
+async function loadReleaseUpdateStatus(): Promise<void> {
+  if (!palcmApi || latestUpdateStatus || updateStatusRequest) {
+    return;
+  }
+
+  updateStatusRequest = palcmApi.update.getStatus();
+
+  try {
+    latestUpdateStatus = await updateStatusRequest;
+
+    const availableVersion = latestUpdateStatus.state === 'AVAILABLE'
+      ? latestUpdateStatus.latestVersion
+      : undefined;
+    if (availableVersion && availableVersion !== announcedUpdateVersion) {
+      announcedUpdateVersion = availableVersion;
+      showToast(`Nueva versión disponible: v${availableVersion}.`);
+    }
+
+    if (navigationState.is('home')) {
+      const updateAction = document.querySelector<HTMLElement>('#general-update-action');
+      if (updateAction) {
+        updateAction.innerHTML = renderGeneralUpdateAction(latestUpdateStatus);
+        bindReleaseUpdateAction();
+      }
+    }
+  } catch (error) {
+    appendConsoleLine(`No se pudo consultar actualizaciones: ${error instanceof Error ? error.message : String(error)}`);
+  } finally {
+    updateStatusRequest = null;
+  }
 }
 
 async function readBackupSummaryForGeneral(): Promise<BackupSummaryDto | null> {
@@ -1332,7 +1496,7 @@ function createBackupSummaryCard(summary: BackupSummaryDto | null): SummaryCardV
   };
 }
 
-async function hydrateGeneralLocalPreview(port: string | null): Promise<void> {
+async function hydrateGeneralLocalPreview(port: string | null, renderId: number): Promise<void> {
   const addresses = await readLocalAddressesForGeneral();
 
   if (addresses.length > 0) {
@@ -1340,7 +1504,7 @@ async function hydrateGeneralLocalPreview(port: string | null): Promise<void> {
   }
   refreshStartButtonState();
 
-  if (!navigationState.is('home') || !isOperationalStatus(latestStatus) || latestFirewallStatus) {
+  if (!isCurrentViewRender(renderId, 'home') || !isOperationalStatus(latestStatus) || latestFirewallStatus) {
     return;
   }
 
@@ -1360,12 +1524,12 @@ async function hydrateGeneralLocalPreview(port: string | null): Promise<void> {
   bindSummaryCards();
 }
 
-async function hydrateGeneralNetworkSummary(port: string | null): Promise<void> {
+async function hydrateGeneralNetworkSummary(port: string | null, renderId: number): Promise<void> {
   const firewall = await readFirewallStatusForGeneral();
 
   refreshStartButtonState();
 
-  if (!navigationState.is('home') || !isOperationalStatus(latestStatus)) {
+  if (!isCurrentViewRender(renderId, 'home') || !isOperationalStatus(latestStatus)) {
     return;
   }
 
@@ -1398,10 +1562,10 @@ async function hydrateGeneralNetworkSummary(port: string | null): Promise<void> 
   bindSummaryCards();
 }
 
-async function hydrateGeneralPublicPreview(port: string | null): Promise<void> {
+async function hydrateGeneralPublicPreview(port: string | null, renderId: number): Promise<void> {
   const publicNetwork = await readPublicNetworkForGeneral(port);
 
-  if (!navigationState.is('home') || !isOperationalStatus(latestStatus) || latestFirewallStatus) {
+  if (!isCurrentViewRender(renderId, 'home') || !isOperationalStatus(latestStatus) || latestFirewallStatus) {
     return;
   }
 
@@ -1731,16 +1895,22 @@ function renderPreflightSummary(): void {
   setContent(renderPreflightSummaryView(latestStatus, latestActions));
 }
 
-async function renderServerConfigurationView(): Promise<void> {
+async function renderServerConfigurationView(renderId = ++activeViewRenderId): Promise<void> {
   if (!palcmApi) {
     return;
   }
 
   updateReadyChrome();
+  renderViewLoading('Configuracion', 'Leyendo el INI activo y preparando los parametros.');
 
   try {
     const file = await palcmApi.config.read();
     const parsed = parsePalworldSettings(file.content);
+
+    if (!isCurrentViewRender(renderId, 'server')) {
+      return;
+    }
+
     latestServerSettings = parsed;
     latestServerSettingsPath = file.path;
     setContent(`
@@ -1771,6 +1941,10 @@ async function renderServerConfigurationView(): Promise<void> {
     bindSettingsControls(parsed);
     restoreServerConfigurationDraft(parsed, file.path);
   } catch (error) {
+    if (!isCurrentViewRender(renderId, 'server')) {
+      return;
+    }
+
     latestServerSettings = null;
     latestServerSettingsPath = null;
     appFooter?.classList.add('hidden');
@@ -1879,19 +2053,23 @@ function showRestoreDefaultConfirmation(): void {
   );
 }
 
-async function renderBackupsView(): Promise<void> {
+async function renderBackupsView(renderId = ++activeViewRenderId): Promise<void> {
   if (!palcmApi) {
     return;
   }
 
   updateReadyChrome();
+  renderViewLoading('Backups', 'Leyendo copias, integridad y politica de respaldo.');
 
   try {
     latestBackupSummary = await palcmApi.backup.getSummary();
     const summary = latestBackupSummary;
 
+    if (!isCurrentViewRender(renderId, 'backups')) {
+      return;
+    }
+
     setContent(renderBackupsViewHtml(summary));
-    bindBackupPolicyControls();
     bindBackupFilters();
     renderBackupsFooter();
     document.querySelectorAll<HTMLInputElement>('[data-backup-select]').forEach((checkbox) => {
@@ -1899,9 +2077,82 @@ async function renderBackupsView(): Promise<void> {
     });
     updateSelectedBackupsState();
   } catch (error) {
+    if (!isCurrentViewRender(renderId, 'backups')) {
+      return;
+    }
+
     const message = error instanceof Error ? error.message : String(error);
     renderSimpleView('Backups', `No se pudo leer el estado de backups. ${message}`);
   }
+}
+
+async function renderAppSettings(renderId = ++activeViewRenderId): Promise<void> {
+  if (!palcmApi) {
+    return;
+  }
+
+  renderViewLoading('Configuracion', 'Leyendo preferencias y automatizaciones de PSM Console.');
+  try {
+    await loadReleaseUpdateStatus();
+    const [settingsStatus, backupSummary, idleStatus] = await Promise.all([
+      palcmApi.appSettings.getStatus(),
+      palcmApi.backup.getSummary(),
+      palcmApi.serverIdle.getStatus()
+    ]);
+    if (!isCurrentViewRender(renderId, 'settings')) {
+      return;
+    }
+
+    latestBackupSummary = backupSummary;
+    setContent(renderAppSettingsView(
+      settingsStatus,
+      latestUpdateStatus,
+      backupSummary,
+      idleStatus,
+      settingsViewState.getTab()
+    ));
+    bindAppSettingsControls();
+  } catch (error) {
+    if (isCurrentViewRender(renderId, 'settings')) {
+      renderSimpleView('Configuracion', `No se pudieron cargar las preferencias. ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+}
+
+function bindAppSettingsControls(): void {
+  document.querySelectorAll<HTMLButtonElement>('[data-settings-target]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const target = button.dataset['settingsTarget'];
+      if (!isSettingsTab(target)) {
+        return;
+      }
+      settingsViewState.setTab(target);
+      renderActiveView();
+      updateNavigation(latestStatus);
+      announceAndFocusView();
+    });
+  });
+
+  document.querySelector<HTMLButtonElement>('#settings-open-release')?.addEventListener('click', () => {
+    void palcmApi?.update.openRelease();
+  });
+
+  const idleForm = document.querySelector<HTMLFormElement>('[data-idle-policy-form]');
+  const idleEnabled = idleForm?.elements.namedItem('enabled');
+  const idleSeconds = idleForm?.elements.namedItem('emptySeconds');
+  if (idleEnabled instanceof HTMLInputElement && idleSeconds instanceof HTMLInputElement) {
+    idleEnabled.addEventListener('change', () => {
+      idleSeconds.disabled = !idleEnabled.checked;
+    });
+    idleForm?.addEventListener('submit', (event) => {
+      event.preventDefault();
+      if (idleForm.reportValidity()) {
+        showIdlePolicyConfirmation(idleForm);
+      }
+    });
+  }
+
+  bindBackupPolicyControls();
 }
 
 function bindBackupFilters(): void {
@@ -1947,6 +2198,7 @@ function showBackupPolicyConfirmation(request: BackupUpdatePolicyRequestDto): vo
     return;
   }
 
+  rootElement.classList.add('app--footer-visible');
   appFooter.classList.remove('hidden');
   appFooter.classList.add('app-footer--confirm');
   appFooter.innerHTML = renderInlineConfirm({
@@ -1976,7 +2228,7 @@ async function updateBackupPolicy(request: BackupUpdatePolicyRequestDto): Promis
     return;
   }
   latestBackupSummary = null;
-  navigationState.set('backups');
+  navigationState.set('settings');
   await refreshState();
 }
 
@@ -1987,14 +2239,16 @@ function stopRuntimeViewRefreshers(): void {
   }
 }
 
-async function renderAdminView(): Promise<void> {
+async function renderAdminView(renderId = ++activeViewRenderId): Promise<void> {
   if (!palcmApi) {
     return;
   }
 
   renderAdminLoading();
-  await refreshAdminView();
-  startAdminAutoRefresh();
+  await refreshAdminView({}, renderId);
+  if (isCurrentViewRender(renderId, 'admin')) {
+    startAdminAutoRefresh();
+  }
 }
 
 function renderAdminLoading(): void {
@@ -2012,28 +2266,30 @@ function renderAdminLoading(): void {
   `);
 }
 
-async function refreshAdminView(options: { force?: boolean } = {}): Promise<void> {
-  if (!palcmApi || !navigationState.is('admin') || !adminViewState.beginRefresh()) {
+async function refreshAdminView(options: { force?: boolean } = {}, renderId?: number): Promise<void> {
+  if (!palcmApi || !navigationState.is('admin')) {
     return;
   }
 
   try {
-    const [adminStatus, playersStatus] = await Promise.all([
+    adminStatusRequest ??= Promise.all([
       palcmApi.admin.getStatus(),
       palcmApi.players.getStatus()
-    ]);
+    ]).finally(() => {
+      adminStatusRequest = null;
+    });
+    const [adminStatus, playersStatus] = await adminStatusRequest;
 
-    if (navigationState.is('admin') && (options.force || !isEditingAdminForm())) {
+    const belongsToCurrentView = renderId === undefined || isCurrentViewRender(renderId, 'admin');
+    if (belongsToCurrentView && navigationState.is('admin') && (options.force || !isEditingAdminForm())) {
       setContent(renderAdminStatus(adminStatus, playersStatus, adminViewState.getTab()));
       bindAdminControls();
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    if (navigationState.is('admin')) {
+    if ((renderId === undefined || isCurrentViewRender(renderId, 'admin')) && navigationState.is('admin')) {
       renderSimpleView('Administracion', `No se pudo cargar el panel administrativo. ${message}`);
     }
-  } finally {
-    adminViewState.endRefresh();
   }
 }
 
@@ -2102,6 +2358,43 @@ async function restartServer(): Promise<void> {
     return;
   }
   await refreshState();
+}
+
+function showIdlePolicyConfirmation(form: HTMLFormElement): void {
+  if (!appFooter) {
+    return;
+  }
+
+  const data = new FormData(form);
+  const enabled = data.get('enabled') === 'on';
+  const secondsInput = form.elements.namedItem('emptySeconds');
+  const emptySeconds = secondsInput instanceof HTMLInputElement ? Number(secondsInput.value) : 300;
+  rootElement.classList.add('app--footer-visible');
+  appFooter.classList.remove('hidden');
+  appFooter.classList.add('app-footer--confirm');
+  appFooter.innerHTML = renderInlineConfirm({
+    message: enabled
+      ? `El servidor se detendra despues de ${String(emptySeconds)} segundos consecutivos sin jugadores confirmados por REST.`
+      : 'Se deshabilitara la detencion automatica por falta de jugadores.',
+    actions: [
+      { id: 'confirm-idle-policy', label: 'Guardar automatizacion', tone: 'warning' },
+      { id: 'cancel-idle-policy', label: 'Cancelar', tone: 'secondary' }
+    ]
+  });
+  document.querySelector<HTMLButtonElement>('#confirm-idle-policy')?.addEventListener('click', () => {
+    runUiAction('No se pudo guardar el apagado automatico', async () => {
+      if (!palcmApi) {
+        return;
+      }
+      await palcmApi.serverIdle.updatePolicy({ confirmed: true, enabled, emptySeconds });
+      updateFooterChrome();
+      if (navigationState.is('settings')) {
+        await renderAppSettings();
+      }
+      showToast('Automatizacion guardada');
+    });
+  });
+  document.querySelector<HTMLButtonElement>('#cancel-idle-policy')?.addEventListener('click', updateFooterChrome);
 }
 
 function showAdminConfirmation(form: HTMLFormElement, submitter: HTMLButtonElement | null): void {
@@ -2387,6 +2680,11 @@ function hideBackupConfirmation(): void {
   if (navigationState.is('backups')) {
     renderBackupsFooter();
     updateSelectedBackupsState();
+    return;
+  }
+  if (navigationState.is('settings')) {
+    updateFooterChrome();
+    void renderAppSettings();
   }
 }
 
@@ -2468,8 +2766,104 @@ async function restoreBackup(backupId: string): Promise<void> {
   await refreshState();
 }
 
+async function toggleLogHistory(): Promise<void> {
+  if (!palcmApi || !logHistoryPanel) {
+    return;
+  }
+
+  if (!logHistoryPanel.classList.contains('hidden')) {
+    logHistoryPanel.classList.add('hidden');
+    return;
+  }
+
+  logHistoryPanel.classList.remove('hidden');
+  logHistoryPanel.innerHTML = '<p class="empty-state empty-state--compact">Buscando archivos de log...</p>';
+  try {
+    const result = await palcmApi.logs.listFiles();
+    const files = result.files.filter((file) => {
+      return consoleSelectedModule === 'all' || file.module === consoleSelectedModule;
+    });
+    logHistoryPanel.innerHTML = files.length > 0
+      ? `
+        <div class="log-history-panel__header">
+          <strong>Logs disponibles</strong>
+          <small>Ruta relativa al portable</small>
+        </div>
+        <div class="log-history-list">
+          ${files.map(renderLogHistoryItem).join('')}
+        </div>
+      `
+      : '<p class="empty-state empty-state--compact">No hay archivos para el filtro seleccionado.</p>';
+    logHistoryPanel.querySelectorAll<HTMLButtonElement>('[data-log-file-id]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const id = button.dataset['logFileId'];
+        if (id) {
+          void openHistoricalLog(id);
+        }
+      });
+    });
+  } catch (error) {
+    logHistoryPanel.innerHTML = `<p class="empty-state empty-state--compact">No se pudo listar el historial: ${escapeHtml(error instanceof Error ? error.message : String(error))}</p>`;
+  }
+}
+
+function renderLogHistoryItem(file: LogFileSummaryDto): string {
+  return `
+    <button class="log-history-item" type="button" data-log-file-id="${escapeHtml(file.id)}">
+      <span>
+        <strong>${escapeHtml(file.module)}</strong>
+        <small>${escapeHtml(file.relativePath)}</small>
+      </span>
+      <span>
+        <small>${escapeHtml(formatBytes(file.sizeBytes))}</small>
+        <small>${escapeHtml(formatLastVerification(new Date(file.updatedAt)))}</small>
+      </span>
+    </button>
+  `;
+}
+
+async function openHistoricalLog(id: string): Promise<void> {
+  if (!palcmApi || !historicalLogBanner || !logHistoryPanel) {
+    return;
+  }
+
+  try {
+    const result = await palcmApi.logs.readFile({ id, maxLines: 2000 });
+    selectedHistoricalLog = result.file;
+    historicalLogLines = result.lines;
+    logHistoryPanel.classList.add('hidden');
+    historicalLogBanner.classList.remove('hidden');
+    historicalLogBanner.innerHTML = `
+      <span>
+        <strong>${escapeHtml(result.file.relativePath)}</strong>
+        <small>${result.truncated ? 'Mostrando las ultimas 2000 lineas' : `${String(result.lines.length)} lineas`}</small>
+      </span>
+      <button id="return-current-log" class="secondary-button button-with-icon" type="button">
+        ${renderIcon('refresh')}
+        <span>Volver al log actual</span>
+      </button>
+    `;
+    document.querySelector<HTMLButtonElement>('#return-current-log')?.addEventListener('click', returnToCurrentLog);
+    renderConsoleOutput();
+  } catch (error) {
+    showToast(`No se pudo abrir el log: ${error instanceof Error ? error.message : String(error)}`, 'error');
+  }
+}
+
+function returnToCurrentLog(): void {
+  historicalLogLines = null;
+  selectedHistoricalLog = null;
+  historicalLogBanner?.classList.add('hidden');
+  if (historicalLogBanner) {
+    historicalLogBanner.innerHTML = '';
+  }
+  latestPersistentLogsSignature = '';
+  renderConsoleOutput();
+  void loadPersistentLogs();
+}
+
 async function loadPersistentLogs(): Promise<void> {
-  if (!palcmApi) {
+  if (!palcmApi || selectedHistoricalLog) {
     return;
   }
 
@@ -2805,13 +3199,17 @@ async function getFirewallStatus(forceRefresh = false): Promise<FirewallStatusDt
   return firewallStatusRequest;
 }
 
-async function renderFirewallView(forceRefresh = false): Promise<void> {
+async function renderFirewallView(forceRefresh = false, renderId = ++activeViewRenderId): Promise<void> {
   if (!palcmApi) {
     return;
   }
 
   if (!forceRefresh && latestFirewallStatus) {
+    renderViewLoading('Red y Firewall', 'Actualizando el estado local de Steam Query.');
     const queryPortStatus = await palcmApi.server.getQueryPortStatus();
+    if (!isCurrentViewRender(renderId, 'network')) {
+      return;
+    }
     renderFirewallStatusView(latestFirewallStatus, queryPortStatus);
     return;
   }
@@ -2871,13 +3269,13 @@ async function renderFirewallView(forceRefresh = false): Promise<void> {
     }
     const [firewall, queryPortStatus] = await Promise.all([firewallPromise, queryPortPromise]);
 
-    if (!navigationState.is('network')) {
+    if (!isCurrentViewRender(renderId, 'network')) {
       return;
     }
 
     renderFirewallStatusView(firewall, queryPortStatus);
   } catch (error) {
-    if (!navigationState.is('network')) {
+    if (!isCurrentViewRender(renderId, 'network')) {
       return;
     }
 
@@ -4043,11 +4441,14 @@ function setContent(html: string): void {
 }
 
 function exportConsole(): void {
-  const blob = new Blob([consoleLines.join('\n')], { type: 'text/plain;charset=utf-8' });
+  const lines = historicalLogLines ?? consoleLines;
+  const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = `palcm-console-${new Date().toISOString().replace(/[:.]/g, '-')}.txt`;
+  link.download = selectedHistoricalLog
+    ? selectedHistoricalLog.relativePath.replace('logs/', '')
+    : `palcm-console-${new Date().toISOString().replace(/[:.]/g, '-')}.txt`;
   link.click();
   URL.revokeObjectURL(url);
 }
@@ -4071,7 +4472,12 @@ function announceAndFocusView(): void {
     admin: `Administracion, ${adminViewState.getTab() === 'general' ? 'Servidor' : adminViewState.getTab() === 'players' ? 'Jugadores' : 'Mapa'}`,
     network: 'Red y Firewall',
     backups: 'Backups',
-    logs: 'Logs'
+    logs: 'Logs',
+    settings: `Configuracion, ${settingsViewState.getTab() === 'summary'
+      ? 'Resumen'
+      : settingsViewState.getTab() === 'application'
+        ? 'Aplicacion'
+        : 'Automatizaciones'}`
   };
   const label = labels[navigationState.current] ?? 'Contenido';
   setText(viewAnnouncer, `Vista ${label}`);

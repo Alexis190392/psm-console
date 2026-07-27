@@ -6,19 +6,20 @@ export function renderBackupsView(summary: BackupSummaryDto): string {
   const totalBackups = summary.configurationBackups.length + summary.worldBackups.length;
   const backups = [...summary.configurationBackups, ...summary.worldBackups]
     .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
+  const integrity = summary.corruptedBackups > 0
+    ? `${String(summary.corruptedBackups)} con error`
+    : `${String(summary.verifiedBackups)} verificados`;
 
   return `
     <div class="view-stack view-stack--scroll">
       <div class="view-header view-header--contained">
-        <div>
-          <h3>Backups</h3>
-        </div>
+        <h3>Backups</h3>
         <div class="view-meta-stack">
           <span class="view-meta-pill">${String(totalBackups)} backups</span>
           <span class="view-meta-path">${escapeHtml(formatBytes(summary.totalSizeBytes))} en total</span>
+          <span class="view-meta-path">${escapeHtml(integrity)}</span>
         </div>
       </div>
-      ${renderBackupPolicy(summary)}
       <details class="source-disclosure">
         <summary>Rutas protegidas</summary>
         <div class="backup-actions">
@@ -49,45 +50,6 @@ export function renderBackupsView(summary: BackupSummaryDto): string {
         </div>
       </section>
     </div>
-  `;
-}
-
-function renderBackupPolicy(summary: BackupSummaryDto): string {
-  const policy = summary.policy;
-  const integrityLabel = summary.corruptedBackups > 0
-    ? `${String(summary.corruptedBackups)} con error`
-    : `${String(summary.verifiedBackups)} verificados`;
-
-  return `
-    <form id="backup-policy-form" class="backup-policy">
-      <div class="backup-policy__status">
-        <span>Integridad</span>
-        <strong class="${summary.corruptedBackups > 0 ? 'backup-integrity--corrupted' : ''}">${escapeHtml(integrityLabel)}</strong>
-      </div>
-      <label class="backup-policy__toggle">
-        <input name="automaticEnabled" type="checkbox" ${policy.automaticEnabled ? 'checked' : ''} />
-        <span class="switch-control" aria-hidden="true"><span></span></span>
-        <span>Automáticos</span>
-      </label>
-      <label class="backup-policy__field">
-        <span>Cada</span>
-        <input name="automaticIntervalHours" type="number" min="1" max="168" value="${String(policy.automaticIntervalHours)}" />
-        <small>horas</small>
-      </label>
-      <label class="backup-policy__field">
-        <span>Conservar</span>
-        <input name="automaticRetentionPerType" type="number" min="1" max="100" value="${String(policy.automaticRetentionPerType)}" />
-        <small>por tipo</small>
-      </label>
-      <label class="backup-policy__toggle">
-        <input name="compressWorldBackups" type="checkbox" ${policy.compressWorldBackups ? 'checked' : ''} />
-        <span class="switch-control" aria-hidden="true"><span></span></span>
-        <span>Comprimir mundo</span>
-      </label>
-      <button class="secondary-button icon-button" type="submit" aria-label="Guardar politica de backups" title="Guardar politica">
-        <span class="ui-icon ui-icon--check" aria-hidden="true"></span>
-      </button>
-    </form>
   `;
 }
 

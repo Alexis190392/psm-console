@@ -1,6 +1,6 @@
 {
   "name": "palcm",
-  "version": "0.10.9",
+  "version": "0.14.0",
   "private": true,
   "description": "PSM Console by >GR477< - Palworld Server Manager",
   "author": "Alexis Joel Dávila (>GR477<)",
@@ -24,7 +24,8 @@
     "dist": "npm run build && electron-builder --win nsis",
     "dist:portable": "npm run build && electron-builder --win portable",
     "validate:portable": "npm run build:main && node dist/tools/portable-artifact-validator.js",
-    "capture:responsive": "npm run build && electron scripts/capture-responsive-screenshots.js"
+    "capture:responsive": "npm run build && electron scripts/capture-responsive-screenshots.js",
+    "capture:manual": "set PALCM_CAPTURE_MODE=manual&& npm run build && electron scripts/capture-responsive-screenshots.js"
   },
   "dependencies": {
     "@nestjs/common": "11.1.28",

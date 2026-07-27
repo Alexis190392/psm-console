@@ -1,10 +1,20 @@
 import { Injectable } from '@nestjs/common';
-import { appendFile, mkdir, readFile, rename, stat, unlink } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, readdir, rename, stat, unlink } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { PortablePathService } from '../portable-path/portable-path.service';
 import { formatLocalLogTimestamp } from '../../shared/utils/local-time';
-import type { LogEntryDto, LogLevel, LogModule, LogsRecentDto, LogsRecentRequestDto } from '../../shared/dto/log-status.dto';
+import type {
+  LogEntryDto,
+  LogFileContentDto,
+  LogFileReadRequestDto,
+  LogFileSummaryDto,
+  LogFilesDto,
+  LogLevel,
+  LogModule,
+  LogsRecentDto,
+  LogsRecentRequestDto
+} from '../../shared/dto/log-status.dto';
 
 const LOG_MODULES: LogModule[] = ['manager', 'steamcmd', 'palserver', 'firewall', 'backup', 'api', 'error'];
 const MAX_LOG_BYTES = 5 * 1024 * 1024;
@@ -37,6 +47,58 @@ export class LoggingService {
     return {
       entries,
       updatedAt: new Date().toISOString()
+    };
+  }
+
+  async listFiles(): Promise<LogFilesDto> {
+    const logsRoot = this.portablePathService.getLogsRoot();
+    if (!existsSync(logsRoot)) {
+      return { files: [], updatedAt: new Date().toISOString() };
+    }
+
+    const names = await readdir(logsRoot);
+    const files = (
+      await Promise.all(
+        names
+          .filter(isKnownLogFilename)
+          .map(async (name): Promise<LogFileSummaryDto> => {
+            const metadata = await stat(join(logsRoot, name));
+            const module = parseLogModule(name);
+            return {
+              id: createLogFileId(module, name),
+              module,
+              relativePath: `logs/${name}`,
+              sizeBytes: metadata.size,
+              updatedAt: metadata.mtime.toISOString(),
+              isActiveFile: name === `${module}.log`
+            };
+          })
+      )
+    ).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+
+    return { files, updatedAt: new Date().toISOString() };
+  }
+
+  async readFile(request: LogFileReadRequestDto): Promise<LogFileContentDto> {
+    const file = (await this.listFiles()).files.find((candidate) => candidate.id === request.id);
+    if (!file) {
+      throw new Error('LOG_FILE_NOT_FOUND');
+    }
+
+    const filename = basename(file.relativePath);
+    if (!isKnownLogFilename(filename)) {
+      throw new Error('LOG_FILE_INVALID');
+    }
+
+    const maxLines = normalizeHistoricalMaxLines(request.maxLines);
+    const allLines = (await readFile(join(this.portablePathService.getLogsRoot(), filename), 'utf8'))
+      .split(/\r?\n/)
+      .filter((line) => line.length > 0);
+
+    return {
+      file,
+      lines: allLines.slice(-maxLines),
+      truncated: allLines.length > maxLines
     };
   }
 
@@ -115,6 +177,29 @@ function normalizeMaxLines(maxLines: number | undefined): number {
   }
 
   return Math.max(20, Math.min(1000, Math.trunc(maxLines ?? 200)));
+}
+
+function normalizeHistoricalMaxLines(maxLines: number | undefined): number {
+  if (!Number.isFinite(maxLines)) {
+    return 1000;
+  }
+  return Math.max(100, Math.min(5000, Math.trunc(maxLines ?? 1000)));
+}
+
+function isKnownLogFilename(name: string): boolean {
+  return /^(manager|steamcmd|palserver|firewall|backup|api|error)\.log(?:\.[1-9])?$/.test(name);
+}
+
+function parseLogModule(name: string): LogModule {
+  const module = name.split('.')[0] as LogModule;
+  if (!LOG_MODULES.includes(module)) {
+    throw new Error('LOG_FILE_MODULE_INVALID');
+  }
+  return module;
+}
+
+function createLogFileId(module: LogModule, name: string): string {
+  return `${module}:${name}`;
 }
 
 function sanitizeLogMessage(message: string): string {

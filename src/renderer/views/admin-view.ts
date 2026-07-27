@@ -250,9 +250,9 @@ function renderAdminPlayerRow(player: PalworldPlayersStatusDto['players'][number
 
   return `
     <article class="player-row ${player.online ? 'player-row--online' : 'player-row--previous'}">
-      <div><strong>${escapeHtml(player.name)}</strong><span>${escapeHtml(identity)}</span></div>
-      <small>${escapeHtml(secondary.join(' - ') || 'Sin identificadores adicionales')}</small>
-      <em>${player.online && typeof player.ping === 'number' ? `${formatPing(player.ping)} ms` : escapeHtml(statusText)}</em>
+      <div class="player-row__identity"><strong>${escapeHtml(player.name)}</strong><span>${escapeHtml(identity)}</span></div>
+      <small class="player-row__details">${escapeHtml(secondary.join(' - ') || 'Sin identificadores adicionales')}</small>
+      <em class="player-row__status">${player.online && typeof player.ping === 'number' ? `${formatPing(player.ping)} ms` : escapeHtml(statusText)}</em>
       <form class="player-row__actions" data-admin-form="player">
         <input name="userId" type="hidden" value="${escapeHtml(actionId)}" />
         <input name="message" type="hidden" value="Accion aplicada desde PSM Console." />

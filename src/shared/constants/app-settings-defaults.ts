@@ -1,0 +1,14 @@
+import type { BackupPolicyDto } from '../dto/backup-status.dto';
+import type { ServerIdlePolicyDto } from '../dto/server-idle-policy.dto';
+
+export const DEFAULT_BACKUP_POLICY: BackupPolicyDto = {
+  automaticEnabled: false,
+  automaticIntervalHours: 24,
+  automaticRetentionPerType: 10,
+  compressWorldBackups: false
+};
+
+export const DEFAULT_SERVER_IDLE_POLICY: ServerIdlePolicyDto = {
+  enabled: false,
+  emptySeconds: 300
+};

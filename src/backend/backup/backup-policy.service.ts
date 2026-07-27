@@ -1,34 +1,16 @@
 import { Injectable } from '@nestjs/common';
-import { existsSync } from 'node:fs';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
-import { randomUUID } from 'node:crypto';
-import { PortablePathService } from '../portable-path/portable-path.service';
+import { AppSettingsService } from '../app-settings/app-settings.service';
+import { DEFAULT_BACKUP_POLICY } from '../../shared/constants/app-settings-defaults';
 import type { BackupPolicyDto, BackupUpdatePolicyRequestDto } from '../../shared/dto/backup-status.dto';
 
-export const DEFAULT_BACKUP_POLICY: BackupPolicyDto = {
-  automaticEnabled: false,
-  automaticIntervalHours: 24,
-  automaticRetentionPerType: 10,
-  compressWorldBackups: false
-};
+export { DEFAULT_BACKUP_POLICY };
 
 @Injectable()
 export class BackupPolicyService {
-  constructor(private readonly portablePathService: PortablePathService) {}
+  constructor(private readonly appSettingsService: AppSettingsService) {}
 
   async read(): Promise<BackupPolicyDto> {
-    const path = this.getPolicyPath();
-    if (!existsSync(path)) {
-      return { ...DEFAULT_BACKUP_POLICY };
-    }
-
-    try {
-      const stored = JSON.parse(await readFile(path, 'utf8')) as Partial<BackupPolicyDto>;
-      return validatePolicy({ ...DEFAULT_BACKUP_POLICY, ...stored });
-    } catch {
-      return { ...DEFAULT_BACKUP_POLICY };
-    }
+    return (await this.appSettingsService.read()).automation.backups;
   }
 
   async update(request: BackupUpdatePolicyRequestDto): Promise<BackupPolicyDto> {
@@ -36,17 +18,7 @@ export class BackupPolicyService {
       throw new Error('BACKUP_POLICY_UPDATE_REQUIRES_CONFIRMATION');
     }
 
-    const policy = validatePolicy(request);
-    const path = this.getPolicyPath();
-    const temporaryPath = `${path}.${randomUUID()}.tmp`;
-    await mkdir(dirname(path), { recursive: true });
-    await writeFile(temporaryPath, JSON.stringify(policy, null, 2), 'utf8');
-    await rename(temporaryPath, path);
-    return policy;
-  }
-
-  private getPolicyPath(): string {
-    return join(this.portablePathService.getConfigRoot(), 'backup-policy.json');
+    return this.appSettingsService.updateBackupPolicy(validatePolicy(request));
   }
 }
 
