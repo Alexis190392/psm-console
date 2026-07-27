@@ -21,7 +21,9 @@ backups/
 .agents/
 .codex/
 local-references/
-docs/
+docs/*
+!docs/manual-usuario/
+!docs/manual-usuario/**
 
 # Environment files and logs
 .env

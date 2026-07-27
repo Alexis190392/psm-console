@@ -16,6 +16,12 @@ Las versiones publicadas y sus archivos portables se distribuyen desde la págin
 
 Las versiones provenientes de la rama `test` aparecen como prerelease. Las versiones estables se publicarán desde `master`.
 
+## Documentación
+
+- [Manual de usuario](docs/manual-usuario/README.md)
+
+El manual explica la preparación inicial, configuración, administración, backups, red y resolución de problemas mediante capturas de la aplicación.
+
 ## Funcionalidades
 
 - Detecta, descarga y valida SteamCMD con confirmación explícita.
@@ -66,6 +72,6 @@ npm.cmd run start:dev
 
 ## Estado del proyecto
 
-Versión actual: `0.10.9 Dev`.
+Versión actual: `0.14.0 Dev`.
 
 Palworld, Steam y SteamCMD son marcas de sus respectivos propietarios. Este proyecto es una herramienta independiente y no está afiliado con Pocketpair ni Valve.
