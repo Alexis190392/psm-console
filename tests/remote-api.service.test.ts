@@ -47,6 +47,13 @@ describe('RemoteApiService', () => {
     const baseUrl = `http://127.0.0.1:${String(port)}/api/v1`;
 
     expect(status.state).toBe('RUNNING');
+    const webResponse = await fetch(baseUrl);
+    expect(webResponse.status).toBe(200);
+    expect(webResponse.headers.get('content-type')).toContain('text/html');
+    expect(await webResponse.text()).toContain('id="login-form"');
+    expect((await fetch(`${baseUrl}/ui.css`)).headers.get('content-type')).toContain('text/css');
+    expect((await fetch(`${baseUrl}/ui.js`)).headers.get('content-type')).toContain('text/javascript');
+    expect((await fetch(`${baseUrl}/logo.png`)).headers.get('content-type')).toContain('image/png');
     expect((await fetch(`${baseUrl}/health`)).status).toBe(200);
     expect((await fetch(`${baseUrl}/status`)).status).toBe(401);
 
@@ -115,11 +122,26 @@ function createRemoteApiFixture(
       stop: vi.fn(),
       restart: vi.fn()
     } as unknown as PalworldProcessService,
-    { getStatus: vi.fn() } as unknown as PalworldPlayersService,
+    {
+      getStatus: vi.fn(() => ({
+        status: 'READY',
+        players: [],
+        currentPlayers: 0,
+        maxPlayers: 32,
+        updatedAt: new Date().toISOString(),
+        message: 'No hay jugadores conectados.'
+      }))
+    } as unknown as PalworldPlayersService,
     { getStatus: vi.fn(), execute: vi.fn() } as unknown as PalworldAdminService,
     { readActive: vi.fn(), saveActive: vi.fn(), restoreDefault: vi.fn() } as unknown as PalworldConfigurationService,
     { getSummary: vi.fn(), createConfigurationBackup: vi.fn(), createWorldBackup: vi.fn() } as unknown as BackupService,
-    { write: vi.fn(), readRecent: vi.fn() } as unknown as LoggingService,
+    {
+      write: vi.fn(),
+      readRecent: vi.fn(() => ({
+        entries: [],
+        updatedAt: new Date().toISOString()
+      }))
+    } as unknown as LoggingService,
     { getLocalAddresses: () => ['192.0.2.10'], getPublicAddress: vi.fn() } as unknown as NetworkService,
     { get: vi.fn() } as unknown as OperationManagerService
   );

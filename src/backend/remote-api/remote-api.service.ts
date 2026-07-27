@@ -1,6 +1,9 @@
 import { Injectable, type OnApplicationBootstrap, type OnApplicationShutdown } from '@nestjs/common';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { randomBytes } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { APP_INFO } from '../../shared/constants/app-info';
 import type {
   RemoteApiLoginResultDto,
@@ -25,6 +28,20 @@ const MAX_BODY_BYTES = 64 * 1024;
 const LOGIN_WINDOW_MS = 5 * 60 * 1000;
 const LOGIN_LOCK_MS = 30 * 1000;
 const MAX_LOGIN_FAILURES = 5;
+const WEB_ASSETS = {
+  [`${API_PREFIX}/`]: {
+    filename: 'index.html',
+    contentType: 'text/html; charset=utf-8'
+  },
+  [`${API_PREFIX}/ui.css`]: {
+    filename: 'ui.css',
+    contentType: 'text/css; charset=utf-8'
+  },
+  [`${API_PREFIX}/ui.js`]: {
+    filename: 'ui.js',
+    contentType: 'text/javascript; charset=utf-8'
+  }
+} as const;
 
 interface ApiSession {
   expiresAt: number;
@@ -146,11 +163,25 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
   }
 
   private async handleRequest(request: IncomingMessage, response: ServerResponse): Promise<void> {
-    applySecurityHeaders(response);
     const method = request.method ?? 'GET';
     const requestUrl = new URL(request.url ?? '/', 'http://localhost');
 
     try {
+      if (method === 'GET' && requestUrl.pathname === API_PREFIX) {
+        sendRedirect(response, `${API_PREFIX}/`);
+        return;
+      }
+
+      if (method === 'GET' && requestUrl.pathname in WEB_ASSETS) {
+        await this.sendWebAsset(response, requestUrl.pathname as keyof typeof WEB_ASSETS);
+        return;
+      }
+
+      if (method === 'GET' && requestUrl.pathname === `${API_PREFIX}/logo.png`) {
+        await this.sendLogo(response);
+        return;
+      }
+
       if (method === 'GET' && requestUrl.pathname === `${API_PREFIX}/health`) {
         sendJson(response, 200, {
           status: 'ok',
@@ -185,6 +216,20 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
         void this.loggingService.write('api', 'ERROR', `Solicitud API: ${toErrorMessage(error)}`);
       }
     }
+  }
+
+  private async sendWebAsset(
+    response: ServerResponse,
+    path: keyof typeof WEB_ASSETS
+  ): Promise<void> {
+    const asset = WEB_ASSETS[path];
+    const body = await readFile(resolveWebAssetPath(asset.filename));
+    sendAsset(response, 200, asset.contentType, body, asset.filename === 'index.html');
+  }
+
+  private async sendLogo(response: ServerResponse): Promise<void> {
+    const body = await readFile(resolveLogoPath());
+    sendAsset(response, 200, 'image/png', body, false);
   }
 
   private async routeAuthenticated(
@@ -379,21 +424,79 @@ function createEndpoint(settings: StoredRemoteApiSettings, localAddresses: strin
   return `http://${host}:${String(settings.port)}/api/v1`;
 }
 
-function applySecurityHeaders(response: ServerResponse): void {
-  response.setHeader('content-type', 'application/json; charset=utf-8');
+function applyCommonSecurityHeaders(response: ServerResponse): void {
   response.setHeader('cache-control', 'no-store');
   response.setHeader('x-content-type-options', 'nosniff');
   response.setHeader('x-frame-options', 'DENY');
   response.setHeader('referrer-policy', 'no-referrer');
-  response.setHeader('content-security-policy', "default-src 'none'; frame-ancestors 'none'");
 }
 
 function sendJson(response: ServerResponse, status: number, value: unknown): void {
   if (response.headersSent) {
     return;
   }
+  applyCommonSecurityHeaders(response);
+  response.setHeader('content-type', 'application/json; charset=utf-8');
+  response.setHeader('content-security-policy', "default-src 'none'; frame-ancestors 'none'");
   response.statusCode = status;
   response.end(JSON.stringify(value));
+}
+
+function sendRedirect(response: ServerResponse, location: string): void {
+  applyCommonSecurityHeaders(response);
+  response.statusCode = 302;
+  response.setHeader('location', location);
+  response.end();
+}
+
+function sendAsset(
+  response: ServerResponse,
+  status: number,
+  contentType: string,
+  body: Buffer,
+  isHtml: boolean
+): void {
+  applyCommonSecurityHeaders(response);
+  response.statusCode = status;
+  response.setHeader('content-type', contentType);
+  response.setHeader(
+    'content-security-policy',
+    isHtml
+      ? [
+          "default-src 'self'",
+          "script-src 'self'",
+          "style-src 'self'",
+          "img-src 'self'",
+          "connect-src 'self'",
+          "object-src 'none'",
+          "base-uri 'none'",
+          "form-action 'self'",
+          "frame-ancestors 'none'"
+        ].join('; ')
+      : "default-src 'none'; frame-ancestors 'none'"
+  );
+  response.end(body);
+}
+
+function resolveWebAssetPath(filename: string): string {
+  const packagedRoot = typeof process.resourcesPath === 'string'
+    ? join(process.resourcesPath, 'remote-api-web')
+    : '';
+  const packagedPath = packagedRoot ? join(packagedRoot, filename) : '';
+  if (packagedPath && existsSync(packagedPath)) {
+    return packagedPath;
+  }
+  return join(process.cwd(), 'resources', 'remote-api-web', filename);
+}
+
+function resolveLogoPath(): string {
+  const packagedPath = typeof process.resourcesPath === 'string'
+    ? join(process.resourcesPath, 'palcm-logo.png')
+    : '';
+  if (packagedPath && existsSync(packagedPath)) {
+    return packagedPath;
+  }
+  return join(process.cwd(), 'src', 'renderer', 'assets', 'palcm-logo.png');
 }
 
 async function readJsonBody(request: IncomingMessage): Promise<Record<string, unknown>> {

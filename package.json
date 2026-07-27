@@ -1,6 +1,6 @@
 {
   "name": "palcm",
-  "version": "0.15.0",
+  "version": "0.15.1",
   "private": true,
   "description": "PSM Console by >GR477< - Palworld Server Manager",
   "author": "Alexis Joel Dávila (>GR477<)",
@@ -63,6 +63,14 @@
       {
         "from": "build/palcm-logo.ico",
         "to": "palcm-logo.ico"
+      },
+      {
+        "from": "src/renderer/assets/palcm-logo.png",
+        "to": "palcm-logo.png"
+      },
+      {
+        "from": "resources/remote-api-web",
+        "to": "remote-api-web"
       }
     ],
     "directories": {

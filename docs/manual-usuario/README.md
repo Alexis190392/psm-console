@@ -348,7 +348,7 @@ Los cambios no se aplican hasta confirmar **Guardar**.
 
 ### API web
 
-Esta opción habilita una API administrativa para integrar una futura interfaz web u otro cliente autorizado.
+Esta opción habilita el panel web administrativo y su API protegida.
 
 ![Configuración de la API web](../../resources/screenshots/configuracion-api-web.png)
 
@@ -366,7 +366,16 @@ Cuando queda habilitada, PSM Console inicia la API automáticamente al abrir la 
 http://192.0.2.100:8213/api/v1
 ```
 
-El endpoint `/api/v1/health` permite comprobar que el servicio responde. Las demás rutas requieren iniciar sesión y utilizar el token temporal devuelto.
+Abre la URL base en el navegador. PSM Console muestra una pantalla de acceso con el mismo usuario y contraseña definidos en la aplicación. Una vez autenticado puedes:
+
+- Consultar el estado de la aplicación y del servidor.
+- Iniciar, detener o reiniciar el servidor.
+- Revisar los jugadores conectados.
+- Consultar los logs de la instancia actual.
+
+La sesión permanece solamente en la pestaña actual del navegador. Al cerrar sesión o cerrar la pestaña, el token temporal deja de estar disponible localmente.
+
+El endpoint `/api/v1/health` permite comprobar que el servicio responde sin autenticación. El resto de los endpoints administrativos requiere una sesión válida.
 
 > La API utiliza HTTP en esta primera etapa. Usa **Red local** solamente en una red confiable y no reenvíes su puerto directamente desde el router hacia Internet.
 

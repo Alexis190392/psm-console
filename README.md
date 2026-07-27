@@ -31,7 +31,7 @@ El manual explica la preparación inicial, configuración, administración, back
 - Revisa Firewall de Windows, acceso local y datos de conexión pública.
 - Inicia, detiene y supervisa el servidor con logs en tiempo real.
 - Habilita controles de administración, jugadores y mundo mientras el servidor está activo.
-- Expone una API administrativa opcional con usuario, contraseña y alcance local configurable.
+- Expone un panel web y una API administrativa opcionales con usuario, contraseña y alcance local configurable.
 
 ## Interfaz
 
@@ -73,6 +73,6 @@ npm.cmd run start:dev
 
 ## Estado del proyecto
 
-Versión actual: `0.15.0 Dev`.
+Versión actual: `0.15.1 Dev`.
 
 Palworld, Steam y SteamCMD son marcas de sus respectivos propietarios. Este proyecto es una herramienta independiente y no está afiliado con Pocketpair ni Valve.
