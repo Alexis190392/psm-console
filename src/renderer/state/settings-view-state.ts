@@ -1,7 +1,7 @@
-export type SettingsTab = 'application' | 'automation';
+export type SettingsTab = 'summary' | 'application' | 'automation';
 
 export class SettingsViewState {
-  private activeTab: SettingsTab = 'application';
+  private activeTab: SettingsTab = 'summary';
   private menuOpen = false;
 
   getTab(): SettingsTab {

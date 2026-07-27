@@ -2156,6 +2156,88 @@ input[type="range"] {
   gap: 14px;
 }
 
+.settings-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.settings-summary-card {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  min-width: 0;
+  min-height: 104px;
+  padding: 16px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 140ms ease, background-color 140ms ease;
+}
+
+.settings-summary-card:hover,
+.settings-summary-card:focus-visible {
+  border-color: var(--color-primary);
+  background: var(--color-surface);
+}
+
+.settings-summary-card:focus-visible {
+  outline: 2px solid rgba(0, 216, 238, 0.28);
+  outline-offset: 2px;
+}
+
+.settings-summary-card__icon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(0, 216, 238, 0.12);
+  color: var(--color-primary);
+}
+
+.settings-summary-card__icon--ready {
+  background: rgba(0, 216, 163, 0.12);
+  color: var(--color-success);
+}
+
+.settings-summary-card__icon--warning {
+  background: rgba(255, 195, 51, 0.14);
+  color: var(--color-warning);
+}
+
+.settings-summary-card__icon--neutral {
+  background: rgba(186, 201, 204, 0.1);
+  color: var(--color-text-muted);
+}
+
+.settings-summary-card__content {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.settings-summary-card__content strong,
+.settings-summary-card__content small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-summary-card__content small {
+  color: var(--color-text-muted);
+}
+
+.settings-summary-card__action {
+  margin-left: 14px;
+  color: var(--color-primary);
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 11px;
+}
+
 .settings-overview-card {
   display: grid;
   align-content: start;
@@ -2240,6 +2322,7 @@ input[type="range"] {
 }
 
 @media (max-width: 900px) {
+  .settings-summary,
   .settings-overview-grid,
   .settings-automation-grid,
   .settings-backup-policy__fields {
@@ -2249,6 +2332,16 @@ input[type="range"] {
   .settings-update-row {
     align-items: stretch;
     flex-direction: column;
+  }
+}
+
+@media (max-width: 620px) {
+  .settings-summary-card {
+    grid-template-columns: 38px minmax(0, 1fr);
+  }
+
+  .settings-summary-card__action {
+    display: none;
   }
 }
 

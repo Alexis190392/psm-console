@@ -33,6 +33,29 @@ const backups = {
 };
 
 describe('app settings view', () => {
+  it('summarizes application and automation details without duplicating forms', () => {
+    const html = renderAppSettingsView(
+      appStatus,
+      null,
+      backups,
+      {
+        policy: appStatus.settings.automation.idleShutdown,
+        state: 'WAITING_FOR_PLAYERS',
+        updatedAt: new Date().toISOString(),
+        message: 'Esperando jugadores.'
+      },
+      'summary'
+    );
+
+    expect(html).toContain('Resumen');
+    expect(html).toContain('APAGADO AUTOMATICO');
+    expect(html).toContain('BACKUPS AUTOMATICOS');
+    expect(html).toContain('data-settings-target="application"');
+    expect(html).toContain('data-settings-target="automation"');
+    expect(html).not.toContain('data-idle-policy-form');
+    expect(html).not.toContain('id="backup-policy-form"');
+  });
+
   it('separates application paths from server settings', () => {
     const html = renderAppSettingsView(
       appStatus,

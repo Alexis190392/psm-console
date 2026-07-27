@@ -14,16 +14,86 @@ export function renderAppSettingsView(
   idleStatus: ServerIdleStatusDto,
   activeTab: SettingsTab
 ): string {
+  const title = activeTab === 'summary'
+    ? 'Resumen'
+    : activeTab === 'application'
+      ? 'Aplicacion'
+      : 'Automatizaciones';
+
   return `
     <div class="view-stack view-stack--scroll app-settings-view">
       <div class="view-header view-header--contained">
-        <h3>${activeTab === 'application' ? 'Aplicacion' : 'Automatizaciones'}</h3>
+        <h3>${title}</h3>
         <span class="view-meta-pill">${escapeHtml(APP_VERSION_LABEL)}</span>
       </div>
-      ${activeTab === 'application'
-        ? renderApplicationSettings(status, update)
-        : renderAutomationSettings(backupSummary, idleStatus)}
+      ${activeTab === 'summary'
+        ? renderSettingsSummary(status, update, backupSummary, idleStatus)
+        : activeTab === 'application'
+          ? renderApplicationSettings(status, update)
+          : renderAutomationSettings(backupSummary, idleStatus)}
     </div>
+  `;
+}
+
+function renderSettingsSummary(
+  status: AppSettingsStatusDto,
+  update: AppUpdateStatusDto | null,
+  backupSummary: BackupSummaryDto,
+  idleStatus: ServerIdleStatusDto
+): string {
+  const idleEnabled = idleStatus.policy.enabled;
+  const backupEnabled = backupSummary.policy.automaticEnabled;
+  const updateAvailable = update?.state === 'AVAILABLE';
+  const updateChecked = update !== null;
+  const backupCount = backupSummary.configurationBackups.length + backupSummary.worldBackups.length;
+
+  return `
+    <section class="settings-summary" aria-label="Resumen de configuracion">
+      <button class="settings-summary-card" data-settings-target="application" type="button">
+        <span class="settings-summary-card__icon">${renderIcon('settings')}</span>
+        <span class="settings-summary-card__content">
+          <span class="view-kicker">APLICACION</span>
+          <strong>${escapeHtml(APP_VERSION_LABEL)}</strong>
+          <small>Preferencias en ${escapeHtml(status.settingsRelativePath)}</small>
+        </span>
+        <span class="settings-summary-card__action">Ver detalles</span>
+      </button>
+      <button class="settings-summary-card" data-settings-target="application" type="button">
+        <span class="settings-summary-card__icon settings-summary-card__icon--${updateAvailable ? 'warning' : updateChecked ? 'ready' : 'neutral'}">
+          ${renderIcon(updateAvailable ? 'download' : updateChecked ? 'check' : 'refresh')}
+        </span>
+        <span class="settings-summary-card__content">
+          <span class="view-kicker">ACTUALIZACIONES</span>
+          <strong>${updateAvailable ? 'Nueva version disponible' : updateChecked ? 'Aplicacion actualizada' : 'Sin verificacion reciente'}</strong>
+          <small>${escapeHtml(update?.message ?? 'Sin comprobacion reciente.')}</small>
+        </span>
+        <span class="settings-summary-card__action">Ver detalles</span>
+      </button>
+      <button class="settings-summary-card" data-settings-target="automation" type="button">
+        <span class="settings-summary-card__icon settings-summary-card__icon--${idleEnabled ? 'ready' : 'neutral'}">
+          ${renderIcon('clock')}
+        </span>
+        <span class="settings-summary-card__content">
+          <span class="view-kicker">APAGADO AUTOMATICO</span>
+          <strong>${idleEnabled ? 'Activo' : 'Inactivo'}</strong>
+          <small>${idleEnabled
+            ? `Detiene el servidor tras ${String(idleStatus.policy.emptySeconds)} s sin jugadores.`
+            : 'El servidor no se detendra por inactividad.'}</small>
+        </span>
+        <span class="settings-summary-card__action">Configurar</span>
+      </button>
+      <button class="settings-summary-card" data-settings-target="automation" type="button">
+        <span class="settings-summary-card__icon settings-summary-card__icon--${backupEnabled ? 'ready' : 'neutral'}">
+          ${renderIcon('backup')}
+        </span>
+        <span class="settings-summary-card__content">
+          <span class="view-kicker">BACKUPS AUTOMATICOS</span>
+          <strong>${backupEnabled ? `Cada ${String(backupSummary.policy.automaticIntervalHours)} h` : 'Inactivos'}</strong>
+          <small>${String(backupCount)} backups disponibles. Retencion: ${String(backupSummary.policy.automaticRetentionPerType)} por tipo.</small>
+        </span>
+        <span class="settings-summary-card__action">Configurar</span>
+      </button>
+    </section>
   `;
 }
 

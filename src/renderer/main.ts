@@ -55,7 +55,7 @@ import {
 import { renderPreflightSummaryView, renderSimpleView as renderSimpleViewHtml } from './views/status-views';
 import { NavigationState } from './state/navigation-state';
 import { AdminViewState } from './state/admin-view-state';
-import { SettingsViewState } from './state/settings-view-state';
+import { SettingsViewState, type SettingsTab } from './state/settings-view-state';
 import { resolveServerActionState } from './state/server-action-state';
 
 const palcmLogoUrl = new URL('./assets/palcm-logo.png', import.meta.url).href;
@@ -135,6 +135,9 @@ rootElement.innerHTML = `
           <span class="sidebar__chevron" aria-hidden="true"></span>
         </a>
         <div class="sidebar__subnav" aria-label="Configuracion de la aplicacion">
+          <a class="sidebar__sublink" data-nav="settings" data-settings-sidebar-tab="summary" href="#">
+            <span>Resumen</span>
+          </a>
           <a class="sidebar__sublink" data-nav="settings" data-settings-sidebar-tab="application" href="#">
             <span>Aplicacion</span>
           </a>
@@ -1029,8 +1032,8 @@ function isSidebarNavActive(link: HTMLAnchorElement): boolean {
   return isAdminTab(requestedAdminTab) && adminViewState.isTab(requestedAdminTab);
 }
 
-function isSettingsTab(value: string | undefined): value is 'application' | 'automation' {
-  return value === 'application' || value === 'automation';
+function isSettingsTab(value: string | undefined): value is SettingsTab {
+  return value === 'summary' || value === 'application' || value === 'automation';
 }
 
 function isAdminTab(value: string | undefined): value is 'general' | 'players' | 'map' {
@@ -2117,6 +2120,19 @@ async function renderAppSettings(renderId = ++activeViewRenderId): Promise<void>
 }
 
 function bindAppSettingsControls(): void {
+  document.querySelectorAll<HTMLButtonElement>('[data-settings-target]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const target = button.dataset['settingsTarget'];
+      if (!isSettingsTab(target)) {
+        return;
+      }
+      settingsViewState.setTab(target);
+      renderActiveView();
+      updateNavigation(latestStatus);
+      announceAndFocusView();
+    });
+  });
+
   document.querySelector<HTMLButtonElement>('#settings-open-release')?.addEventListener('click', () => {
     void palcmApi?.update.openRelease();
   });
@@ -4457,7 +4473,11 @@ function announceAndFocusView(): void {
     network: 'Red y Firewall',
     backups: 'Backups',
     logs: 'Logs',
-    settings: `Configuracion, ${settingsViewState.getTab() === 'application' ? 'Aplicacion' : 'Automatizaciones'}`
+    settings: `Configuracion, ${settingsViewState.getTab() === 'summary'
+      ? 'Resumen'
+      : settingsViewState.getTab() === 'application'
+        ? 'Aplicacion'
+        : 'Automatizaciones'}`
   };
   const label = labels[navigationState.current] ?? 'Contenido';
   setText(viewAnnouncer, `Vista ${label}`);

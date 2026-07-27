@@ -17,7 +17,8 @@ const views = [
   { name: 'servidor', nav: 'server' },
   { name: 'red-firewall', nav: 'network' },
   { name: 'backups', nav: 'backups' },
-  { name: 'logs', nav: 'logs' }
+  { name: 'logs', nav: 'logs' },
+  { name: 'configuracion-resumen', nav: 'settings' }
 ];
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -50,7 +51,16 @@ async function clickNav(window, nav) {
   if (!clicked) {
     throw new Error(`Navigation link could not be clicked: ${nav}`);
   }
-  await waitForSelector(window, `${selector}.sidebar__link--active`);
+  if (nav === 'settings') {
+    const summarySelector = '.sidebar__sublink[data-settings-sidebar-tab="summary"]';
+    await waitForSelector(window, summarySelector);
+    await window.webContents.executeJavaScript(`
+      document.querySelector(${JSON.stringify(summarySelector)})?.click()
+    `);
+    await waitForSelector(window, `${summarySelector}.sidebar__link--active`);
+  } else {
+    await waitForSelector(window, `${selector}.sidebar__link--active`);
+  }
   await wait(nav === 'network' ? 4500 : 800);
 }
 
