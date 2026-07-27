@@ -175,7 +175,8 @@ describe('app settings view', () => {
     expect(html).toContain('http://127.0.0.1:8213/api/v1');
     expect(html).toContain('<dt>Sesion</dt><dd>8 h</dd>');
     expect(html.match(/name="port" type="number"/g)).toHaveLength(1);
-    expect(html).toContain('misma conexion de la API administrativa');
+    expect(html).toContain('settings-api-connection');
+    expect(html).toContain('settings-api-profiles');
     expect(html).not.toContain('passwordHash');
   });
 });

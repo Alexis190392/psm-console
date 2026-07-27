@@ -212,17 +212,47 @@ function renderAutomationSettings(summary: BackupSummaryDto, idleStatus: ServerI
 function renderRemoteApiSettings(status: RemoteApiStatusDto): string {
   const settings = status.settings;
   const enabled = settings.enabled;
+  const sharedRunning = status.state === 'RUNNING' || status.client.state === 'RUNNING';
+  const sharedStarting = status.state === 'STARTING' || status.client.state === 'STARTING';
+  const sharedError = status.state === 'ERROR' || status.client.state === 'ERROR';
+  const sharedState = sharedRunning
+    ? 'RUNNING'
+    : sharedStarting
+      ? 'STARTING'
+      : sharedError
+        ? 'ERROR'
+        : 'DISABLED';
+  const endpoint = status.endpoint ?? status.client.endpoint;
   const passwordHint = settings.passwordConfigured
     ? 'Deja este campo vacio para conservar la contraseña actual.'
     : 'Configura una contraseña de al menos 5 caracteres para habilitar la API.';
 
   return `
-    <section class="settings-api-grid">
-      <form class="admin-card settings-api-form" data-remote-api-form="ADMIN">
+    <section class="settings-api-layout">
+      <article class="settings-api-connection">
+        <div class="settings-api-connection__state">
+          <span class="settings-api-status__indicator settings-api-status__indicator--${sharedState.toLowerCase()}"></span>
+          <div>
+            <span class="view-kicker">CONEXION WEB</span>
+            <strong>${sharedRunning ? 'API disponible' : remoteApiStateLabel(sharedState)}</strong>
+          </div>
+        </div>
+        <dl class="settings-api-connection__details">
+          <div><dt>Acceso</dt><dd>${settings.bindMode === 'LOCAL_NETWORK' ? 'Red local' : 'Este equipo'}</dd></div>
+          <div><dt>Puerto</dt><dd><code>${String(settings.port)}</code></dd></div>
+          <div class="settings-api-connection__endpoint">
+            <dt>Direccion</dt>
+            <dd><code>${escapeHtml(endpoint ?? 'Se habilita al activar un perfil')}</code></dd>
+          </div>
+          <div><dt>Sesion</dt><dd>8 h</dd></div>
+        </dl>
+      </article>
+      <div class="settings-api-profiles">
+        <form class="admin-card settings-api-form" data-remote-api-form="ADMIN">
         <div class="admin-card__title-row">
           <div>
-            <span class="view-kicker">ACCESO HTTP</span>
-            <h4>Conexion compartida y API administrativa</h4>
+            <span class="view-kicker">ADMINISTRADOR</span>
+            <h4>API administrativa</h4>
           </div>
           <label class="toggle-control">
             <input name="enabled" type="checkbox" ${enabled ? 'checked' : ''} />
@@ -252,28 +282,20 @@ function renderRemoteApiSettings(status: RemoteApiStatusDto): string {
             <small>${passwordHint}</small>
           </label>
         </div>
+        <div class="settings-api-profile-status">
+          <span class="settings-api-status__indicator settings-api-status__indicator--${status.state.toLowerCase()}"></span>
+          <span>${escapeHtml(remoteApiStateLabel(status.state))}</span>
+          <small>${escapeHtml(status.message)}</small>
+        </div>
+        <p class="settings-api-status__warning ${settings.bindMode === 'LOCAL_NETWORK' ? '' : 'hidden'}">
+          HTTP disponible en la red local. Usalo solo en una LAN confiable.
+        </p>
         <div class="admin-card__actions">
           <button class="primary-button button-with-icon" type="submit">${renderIcon('save')}<span>Guardar API</span></button>
         </div>
-      </form>
-      <article class="content-card settings-api-status">
-        <span class="view-kicker">ESTADO</span>
-        <div class="settings-api-status__heading">
-          <strong>${escapeHtml(remoteApiStateLabel(status.state))}</strong>
-          <span class="settings-api-status__indicator settings-api-status__indicator--${status.state.toLowerCase()}"></span>
-        </div>
-        <p>${escapeHtml(status.message)}</p>
-        ${status.endpoint ? `<code>${escapeHtml(status.endpoint)}</code>` : ''}
-        <dl>
-          <div><dt>Autenticacion</dt><dd>Usuario y token temporal</dd></div>
-          <div><dt>Sesion</dt><dd>8 h</dd></div>
-          <div><dt>Estado publico</dt><dd><code>/api/v1/health</code></dd></div>
-        </dl>
-        <p class="settings-api-status__warning ${settings.bindMode === 'LOCAL_NETWORK' ? '' : 'hidden'}">
-          Usa acceso por red solo en una LAN confiable. Esta primera version sirve HTTP y no debe publicarse directamente en Internet.
-        </p>
-      </article>
-      ${renderClientApiProfile(status.client)}
+        </form>
+        ${renderClientApiProfile(status.client)}
+      </div>
     </section>
   `;
 }
@@ -307,30 +329,16 @@ function renderClientApiProfile(status: RemoteApiProfileStatusDto): string {
           <small>${settings.passwordConfigured ? 'Deja el campo vacio para conservarla.' : 'Minimo 5 caracteres.'}</small>
         </label>
       </div>
-      <p class="settings-api-shared-access">
-        Usa la misma conexion de la API administrativa: <code>${escapeHtml(status.endpoint ?? `puerto ${String(settings.port)}`)}</code>.
-      </p>
       ${renderClientPermissions(permissions)}
+      <div class="settings-api-profile-status">
+        <span class="settings-api-status__indicator settings-api-status__indicator--${status.state.toLowerCase()}"></span>
+        <span>${escapeHtml(remoteApiStateLabel(status.state))}</span>
+        <small>${escapeHtml(status.message)}</small>
+      </div>
       <div class="admin-card__actions">
         <button class="primary-button button-with-icon" type="submit">${renderIcon('save')}<span>Guardar API cliente</span></button>
       </div>
     </form>
-    <article class="content-card settings-api-status">
-      <span class="view-kicker">ESTADO CLIENTE</span>
-      <div class="settings-api-status__heading">
-        <strong>${escapeHtml(remoteApiStateLabel(status.state))}</strong>
-        <span class="settings-api-status__indicator settings-api-status__indicator--${status.state.toLowerCase()}"></span>
-      </div>
-      <p>${escapeHtml(status.message)}</p>
-      ${status.endpoint ? `<code>${escapeHtml(status.endpoint)}</code>` : ''}
-      <dl>
-        <div><dt>Autenticacion</dt><dd>Usuario cliente y token</dd></div>
-        <div><dt>Sesion</dt><dd>8 h</dd></div>
-      </dl>
-      <p class="settings-api-status__warning ${settings.bindMode === 'LOCAL_NETWORK' ? '' : 'hidden'}">
-        La API cliente usa HTTP. Habilitala solo en una red local confiable.
-      </p>
-    </article>
   `;
 }
 
