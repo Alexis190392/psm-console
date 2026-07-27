@@ -2138,17 +2138,6 @@ input[type="range"] {
   font-size: 12px;
 }
 
-.admin-idle-seconds__input {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-}
-
-.admin-idle-seconds__input small {
-  color: var(--color-text-muted);
-}
-
 .settings-overview-grid,
 .settings-automation-grid,
 .settings-api-grid {
@@ -2395,9 +2384,8 @@ input[type="range"] {
 
 .settings-backup-policy__fields label {
   display: grid;
-  grid-template-columns: auto minmax(80px, 1fr) auto;
-  align-items: center;
-  gap: 8px;
+  align-content: start;
+  gap: 7px;
   color: var(--color-text-muted);
   font-size: 12px;
 }
@@ -2467,14 +2455,89 @@ input[type="range"] {
 }
 
 .admin-card__actions {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  display: flex;
+  min-width: 0;
 }
 
 .admin-card__actions button {
+  width: 100%;
   min-width: 0;
   padding-inline: 10px;
+}
+
+.compact-field {
+  display: grid;
+  gap: 7px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.input-with-unit {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+
+.input-with-unit input {
+  padding-right: 42px;
+}
+
+.input-with-unit small {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  color: var(--color-text-muted);
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 11px;
+  line-height: 1;
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.input-with-unit input[type="number"]::-webkit-inner-spin-button,
+.input-with-unit input[type="number"]::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
+}
+
+.app-settings-view {
+  container-type: inline-size;
+}
+
+@container (max-width: 820px) {
+  .settings-summary,
+  .settings-overview-grid,
+  .settings-automation-grid,
+  .settings-api-grid,
+  .settings-api-form__fields,
+  .settings-backup-policy__fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-update-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settings-api-form .admin-card__title-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@container (max-width: 460px) {
+  .settings-summary-card {
+    grid-template-columns: 38px minmax(0, 1fr);
+  }
+
+  .settings-summary-card__action {
+    display: none;
+  }
+
+  .settings-api-status dl div {
+    display: grid;
+    gap: 4px;
+  }
 }
 
 .admin-broadcast-bar {

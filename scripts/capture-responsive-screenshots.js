@@ -18,7 +18,12 @@ const views = [
   { name: 'red-firewall', nav: 'network' },
   { name: 'backups', nav: 'backups' },
   { name: 'logs', nav: 'logs' },
-  { name: 'configuracion-resumen', nav: 'settings' }
+  { name: 'configuracion-resumen', nav: 'settings' },
+  {
+    name: 'configuracion-api-web',
+    nav: 'settings',
+    selector: '[data-settings-sidebar-tab="remote-api"]'
+  }
 ];
 const manualViews = [
   { name: 'general', selector: '.sidebar__link[data-nav="home"]', waitMs: 1200 },
@@ -85,6 +90,14 @@ async function capture(window, viewport, view) {
   window.setSize(viewport.width, viewport.height);
   await wait(400);
   await clickNav(window, view.nav);
+  if (view.selector) {
+    await waitForSelector(window, view.selector);
+    await window.webContents.executeJavaScript(`
+      document.querySelector(${JSON.stringify(view.selector)})?.click()
+    `);
+    await waitForSelector(window, `${view.selector}.sidebar__link--active`);
+    await wait(500);
+  }
   const image = await window.webContents.capturePage();
   writeFileSync(
     join(outputDir, `${viewport.name}-${String(viewport.width)}x${String(viewport.height)}-${view.name}.png`),

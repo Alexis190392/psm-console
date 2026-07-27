@@ -111,6 +111,11 @@ describe('app settings view', () => {
     expect(html).toContain('data-idle-policy-form');
     expect(html).toContain('id="backup-policy-form"');
     expect(html).toContain('60 s restantes');
+    expect(html).toContain('class="input-with-unit"');
+    expect(html).toContain('<small>s</small>');
+    expect(html).toContain('<small>h</small>');
+    expect(html).not.toContain('<small>segundos</small>');
+    expect(html).not.toContain('<small>horas</small>');
   });
 
   it('renders API access settings without exposing a stored password', () => {
@@ -150,6 +155,7 @@ describe('app settings view', () => {
     expect(html).toContain('API administrativa');
     expect(html).toContain('Contraseña configurada');
     expect(html).toContain('http://127.0.0.1:8213/api/v1');
+    expect(html).toContain('<dt>Sesion</dt><dd>8 h</dd>');
     expect(html).not.toContain('passwordHash');
   });
 });

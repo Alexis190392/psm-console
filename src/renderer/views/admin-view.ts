@@ -86,7 +86,13 @@ function renderAdminGeneralTab(adminStatus: PalworldAdminStatusDto): string {
       <form class="admin-card" data-admin-form="shutdown">
         <span class="view-kicker">APAGADO</span>
         <h4>Apagado programado</h4>
-        <input name="seconds" type="number" min="0" max="3600" value="60" />
+        <label class="compact-field">
+          <span>Espera</span>
+          <span class="input-with-unit">
+            <input name="seconds" type="number" min="0" max="3600" value="60" />
+            <small>s</small>
+          </span>
+        </label>
         <input name="message" type="text" value="Servidor detenido desde PSM Console." />
         <button class="secondary-button button-with-icon" type="submit">
           ${renderIcon('clock')}

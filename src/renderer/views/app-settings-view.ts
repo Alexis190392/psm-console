@@ -164,9 +164,9 @@ function renderAutomationSettings(summary: BackupSummaryDto, idleStatus: ServerI
         </div>
         <label class="admin-idle-seconds">
           <span>Espera sin jugadores</span>
-          <span class="admin-idle-seconds__input">
+          <span class="input-with-unit">
             <input name="emptySeconds" type="number" min="10" max="86400" step="1" value="${String(idleStatus.policy.emptySeconds)}" ${idleEnabled ? '' : 'disabled'} />
-            <small>segundos</small>
+            <small>s</small>
           </span>
         </label>
         <p class="admin-card__hint">${escapeHtml(idleMessage)}</p>
@@ -183,8 +183,17 @@ function renderAutomationSettings(summary: BackupSummaryDto, idleStatus: ServerI
           </label>
         </div>
         <div class="settings-backup-policy__fields">
-          <label><span>Cada</span><input name="automaticIntervalHours" type="number" min="1" max="168" value="${String(backup.automaticIntervalHours)}" /><small>horas</small></label>
-          <label><span>Conservar</span><input name="automaticRetentionPerType" type="number" min="1" max="100" value="${String(backup.automaticRetentionPerType)}" /><small>por tipo</small></label>
+          <label>
+            <span>Cada</span>
+            <span class="input-with-unit">
+              <input name="automaticIntervalHours" type="number" min="1" max="168" value="${String(backup.automaticIntervalHours)}" />
+              <small>h</small>
+            </span>
+          </label>
+          <label>
+            <span>Conservar por tipo</span>
+            <input name="automaticRetentionPerType" type="number" min="1" max="100" value="${String(backup.automaticRetentionPerType)}" />
+          </label>
         </div>
         <label class="settings-check-row">
           <input name="compressWorldBackups" type="checkbox" ${backup.compressWorldBackups ? 'checked' : ''} />
@@ -253,7 +262,7 @@ function renderRemoteApiSettings(status: RemoteApiStatusDto): string {
         ${status.endpoint ? `<code>${escapeHtml(status.endpoint)}</code>` : ''}
         <dl>
           <div><dt>Autenticacion</dt><dd>Usuario y token temporal</dd></div>
-          <div><dt>Sesion</dt><dd>8 horas</dd></div>
+          <div><dt>Sesion</dt><dd>8 h</dd></div>
           <div><dt>Estado publico</dt><dd><code>/api/v1/health</code></dd></div>
         </dl>
         <p class="settings-api-status__warning ${settings.bindMode === 'LOCAL_NETWORK' ? '' : 'hidden'}">
