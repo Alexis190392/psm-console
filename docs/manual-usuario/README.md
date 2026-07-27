@@ -310,6 +310,7 @@ Muestra:
 - Estado de actualizaciones.
 - Estado del apagado automático.
 - Frecuencia y cantidad de backups.
+- Estado de la API web administrativa.
 
 Cada tarjeta abre la subsección correspondiente.
 
@@ -344,6 +345,30 @@ Permite definir:
 - Compresión de backups del mundo.
 
 Los cambios no se aplican hasta confirmar **Guardar**.
+
+### API web
+
+Esta opción habilita una API administrativa para integrar una futura interfaz web u otro cliente autorizado.
+
+![Configuración de la API web](../../resources/screenshots/configuracion-api-web.png)
+
+1. Abre **Configuración > API web**.
+2. Elige **Solo este equipo** para pruebas locales o **Red local** para acceder desde otro equipo de la misma LAN.
+3. Define un puerto entre `1024` y `65535`.
+4. Configura el usuario y una contraseña de al menos ocho caracteres.
+5. Presiona **Guardar API** y confirma.
+
+La contraseña se almacena como un hash con salt y nunca vuelve a mostrarse. Si ya existe una contraseña, deja el campo vacío para conservarla.
+
+Cuando queda habilitada, PSM Console inicia la API automáticamente al abrir la aplicación. El estado muestra la URL base, por ejemplo:
+
+```text
+http://192.0.2.100:8213/api/v1
+```
+
+El endpoint `/api/v1/health` permite comprobar que el servicio responde. Las demás rutas requieren iniciar sesión y utilizar el token temporal devuelto.
+
+> La API utiliza HTTP en esta primera etapa. Usa **Red local** solamente en una red confiable y no reenvíes su puerto directamente desde el router hacia Internet.
 
 ## 11. Actualizaciones
 

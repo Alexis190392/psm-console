@@ -69,12 +69,15 @@ import type {
 } from '../../shared/dto/steamcmd-status.dto';
 import type { NetworkDiagnosticsDto, PublicAddressRequestDto } from '../../shared/dto/network-diagnostics.dto';
 import type { AppUpdateStatusDto } from '../../shared/dto/app-update-status.dto';
+import type { RemoteApiStatusDto, RemoteApiUpdateRequestDto } from '../../shared/dto/remote-api.dto';
 
 const ipcChannels = {
   appGetStatus: 'app:get-status',
   appGetActions: 'app:get-actions',
   appGetProcessMetrics: 'app:get-process-metrics',
   appSettingsGetStatus: 'app-settings:get-status',
+  remoteApiGetStatus: 'remote-api:get-status',
+  remoteApiUpdate: 'remote-api:update',
   updateGetStatus: 'update:get-status',
   updateOpenRelease: 'update:open-release',
   operationGet: 'operation:get',
@@ -130,6 +133,10 @@ export interface PalcmApi {
   };
   appSettings: {
     getStatus: () => Promise<AppSettingsStatusDto>;
+  };
+  remoteApi: {
+    getStatus: () => Promise<RemoteApiStatusDto>;
+    update: (request: RemoteApiUpdateRequestDto) => Promise<RemoteApiStatusDto>;
   };
   update: {
     getStatus: () => Promise<AppUpdateStatusDto>;
@@ -213,6 +220,11 @@ const api: PalcmApi = {
   },
   appSettings: {
     getStatus: () => ipcRenderer.invoke(ipcChannels.appSettingsGetStatus) as Promise<AppSettingsStatusDto>
+  },
+  remoteApi: {
+    getStatus: () => ipcRenderer.invoke(ipcChannels.remoteApiGetStatus) as Promise<RemoteApiStatusDto>,
+    update: (request) =>
+      ipcRenderer.invoke(ipcChannels.remoteApiUpdate, request) as Promise<RemoteApiStatusDto>
   },
   update: {
     getStatus: () => ipcRenderer.invoke(ipcChannels.updateGetStatus) as Promise<AppUpdateStatusDto>,

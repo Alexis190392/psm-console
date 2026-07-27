@@ -3,7 +3,7 @@ import { renderAppSettingsView } from '../src/renderer/views/app-settings-view';
 
 const appStatus = {
   settings: {
-    schemaVersion: 1 as const,
+    schemaVersion: 2 as const,
     automation: {
       idleShutdown: { enabled: true, emptySeconds: 120 },
       backups: {
@@ -12,6 +12,13 @@ const appStatus = {
         automaticRetentionPerType: 10,
         compressWorldBackups: false
       }
+    },
+    remoteApi: {
+      enabled: false,
+      bindMode: 'LOCAL_ONLY' as const,
+      port: 8213,
+      username: 'admin',
+      passwordConfigured: false
     }
   },
   portableRoot: 'D:\\PSM',
@@ -32,6 +39,13 @@ const backups = {
   message: ''
 };
 
+const remoteApiStatus = {
+  settings: appStatus.settings.remoteApi,
+  state: 'DISABLED' as const,
+  message: 'API web deshabilitada.',
+  updatedAt: new Date().toISOString()
+};
+
 describe('app settings view', () => {
   it('summarizes application and automation details without duplicating forms', () => {
     const html = renderAppSettingsView(
@@ -44,6 +58,7 @@ describe('app settings view', () => {
         updatedAt: new Date().toISOString(),
         message: 'Esperando jugadores.'
       },
+      remoteApiStatus,
       'summary'
     );
 
@@ -52,6 +67,7 @@ describe('app settings view', () => {
     expect(html).toContain('BACKUPS AUTOMATICOS');
     expect(html).toContain('data-settings-target="application"');
     expect(html).toContain('data-settings-target="automation"');
+    expect(html).toContain('data-settings-target="remote-api"');
     expect(html).not.toContain('data-idle-policy-form');
     expect(html).not.toContain('id="backup-policy-form"');
   });
@@ -67,6 +83,7 @@ describe('app settings view', () => {
         updatedAt: new Date().toISOString(),
         message: 'Un jugador conectado.'
       },
+      remoteApiStatus,
       'application'
     );
 
@@ -87,11 +104,52 @@ describe('app settings view', () => {
         updatedAt: new Date().toISOString(),
         message: ''
       },
+      remoteApiStatus,
       'automation'
     );
 
     expect(html).toContain('data-idle-policy-form');
     expect(html).toContain('id="backup-policy-form"');
     expect(html).toContain('60 s restantes');
+  });
+
+  it('renders API access settings without exposing a stored password', () => {
+    const html = renderAppSettingsView(
+      {
+        ...appStatus,
+        settings: {
+          ...appStatus.settings,
+          remoteApi: {
+            ...appStatus.settings.remoteApi,
+            enabled: true,
+            passwordConfigured: true
+          }
+        }
+      },
+      null,
+      backups,
+      {
+        policy: appStatus.settings.automation.idleShutdown,
+        state: 'WAITING_FOR_PLAYERS',
+        updatedAt: new Date().toISOString(),
+        message: ''
+      },
+      {
+        ...remoteApiStatus,
+        settings: {
+          ...remoteApiStatus.settings,
+          enabled: true,
+          passwordConfigured: true
+        },
+        state: 'RUNNING',
+        endpoint: 'http://127.0.0.1:8213/api/v1'
+      },
+      'remote-api'
+    );
+
+    expect(html).toContain('API administrativa');
+    expect(html).toContain('Contraseña configurada');
+    expect(html).toContain('http://127.0.0.1:8213/api/v1');
+    expect(html).not.toContain('passwordHash');
   });
 });

@@ -1,6 +1,7 @@
 import type { AppSettingsStatusDto } from '../../shared/dto/app-settings.dto';
 import type { AppUpdateStatusDto } from '../../shared/dto/app-update-status.dto';
 import type { BackupSummaryDto } from '../../shared/dto/backup-status.dto';
+import type { RemoteApiStatusDto } from '../../shared/dto/remote-api.dto';
 import type { ServerIdleStatusDto } from '../../shared/dto/server-idle-policy.dto';
 import { APP_VERSION_LABEL } from '../../shared/constants/app-info';
 import { renderIcon } from '../components/icon';
@@ -12,13 +13,16 @@ export function renderAppSettingsView(
   update: AppUpdateStatusDto | null,
   backupSummary: BackupSummaryDto,
   idleStatus: ServerIdleStatusDto,
+  remoteApiStatus: RemoteApiStatusDto,
   activeTab: SettingsTab
 ): string {
   const title = activeTab === 'summary'
     ? 'Resumen'
     : activeTab === 'application'
       ? 'Aplicacion'
-      : 'Automatizaciones';
+      : activeTab === 'automation'
+        ? 'Automatizaciones'
+        : 'API web';
 
   return `
     <div class="view-stack view-stack--scroll app-settings-view">
@@ -27,10 +31,12 @@ export function renderAppSettingsView(
         <span class="view-meta-pill">${escapeHtml(APP_VERSION_LABEL)}</span>
       </div>
       ${activeTab === 'summary'
-        ? renderSettingsSummary(status, update, backupSummary, idleStatus)
+        ? renderSettingsSummary(status, update, backupSummary, idleStatus, remoteApiStatus)
         : activeTab === 'application'
           ? renderApplicationSettings(status, update)
-          : renderAutomationSettings(backupSummary, idleStatus)}
+          : activeTab === 'automation'
+            ? renderAutomationSettings(backupSummary, idleStatus)
+            : renderRemoteApiSettings(remoteApiStatus)}
     </div>
   `;
 }
@@ -39,7 +45,8 @@ function renderSettingsSummary(
   status: AppSettingsStatusDto,
   update: AppUpdateStatusDto | null,
   backupSummary: BackupSummaryDto,
-  idleStatus: ServerIdleStatusDto
+  idleStatus: ServerIdleStatusDto,
+  remoteApiStatus: RemoteApiStatusDto
 ): string {
   const idleEnabled = idleStatus.policy.enabled;
   const backupEnabled = backupSummary.policy.automaticEnabled;
@@ -90,6 +97,17 @@ function renderSettingsSummary(
           <span class="view-kicker">BACKUPS AUTOMATICOS</span>
           <strong>${backupEnabled ? `Cada ${String(backupSummary.policy.automaticIntervalHours)} h` : 'Inactivos'}</strong>
           <small>${String(backupCount)} backups disponibles. Retencion: ${String(backupSummary.policy.automaticRetentionPerType)} por tipo.</small>
+        </span>
+        <span class="settings-summary-card__action">Configurar</span>
+      </button>
+      <button class="settings-summary-card" data-settings-target="remote-api" type="button">
+        <span class="settings-summary-card__icon settings-summary-card__icon--${remoteApiStatus.state === 'RUNNING' ? 'ready' : remoteApiStatus.state === 'ERROR' ? 'warning' : 'neutral'}">
+          ${renderIcon('network')}
+        </span>
+        <span class="settings-summary-card__content">
+          <span class="view-kicker">API WEB</span>
+          <strong>${remoteApiStatus.state === 'RUNNING' ? 'Disponible' : remoteApiStatus.settings.enabled ? 'Con error' : 'Deshabilitada'}</strong>
+          <small>${escapeHtml(remoteApiStatus.endpoint ?? remoteApiStatus.message)}</small>
         </span>
         <span class="settings-summary-card__action">Configurar</span>
       </button>
@@ -176,4 +194,85 @@ function renderAutomationSettings(summary: BackupSummaryDto, idleStatus: ServerI
       </form>
     </section>
   `;
+}
+
+function renderRemoteApiSettings(status: RemoteApiStatusDto): string {
+  const settings = status.settings;
+  const enabled = settings.enabled;
+  const passwordHint = settings.passwordConfigured
+    ? 'Deja este campo vacio para conservar la contraseña actual.'
+    : 'Configura una contraseña de al menos 8 caracteres para habilitar la API.';
+
+  return `
+    <section class="settings-api-grid">
+      <form id="remote-api-form" class="admin-card settings-api-form">
+        <div class="admin-card__title-row">
+          <div>
+            <span class="view-kicker">ACCESO HTTP</span>
+            <h4>API administrativa</h4>
+          </div>
+          <label class="toggle-control">
+            <input name="enabled" type="checkbox" ${enabled ? 'checked' : ''} />
+            <span class="toggle-control__track" aria-hidden="true"><span></span></span>
+            <span>${enabled ? 'Activa' : 'Inactiva'}</span>
+          </label>
+        </div>
+        <div class="settings-api-form__fields">
+          <label>
+            <span>Acceso</span>
+            <select name="bindMode">
+              <option value="LOCAL_ONLY" ${settings.bindMode === 'LOCAL_ONLY' ? 'selected' : ''}>Solo este equipo</option>
+              <option value="LOCAL_NETWORK" ${settings.bindMode === 'LOCAL_NETWORK' ? 'selected' : ''}>Red local</option>
+            </select>
+          </label>
+          <label>
+            <span>Puerto</span>
+            <input name="port" type="number" min="1024" max="65535" step="1" value="${String(settings.port)}" required />
+          </label>
+          <label>
+            <span>Usuario</span>
+            <input name="username" type="text" minlength="3" maxlength="64" pattern="[A-Za-z0-9._-]+" value="${escapeHtml(settings.username)}" autocomplete="username" required />
+          </label>
+          <label>
+            <span>Nueva contraseña</span>
+            <input name="password" type="password" minlength="8" maxlength="128" autocomplete="new-password" placeholder="${settings.passwordConfigured ? 'Contraseña configurada' : 'Minimo 8 caracteres'}" />
+            <small>${passwordHint}</small>
+          </label>
+        </div>
+        <div class="admin-card__actions">
+          <button class="primary-button button-with-icon" type="submit">${renderIcon('save')}<span>Guardar API</span></button>
+        </div>
+      </form>
+      <article class="content-card settings-api-status">
+        <span class="view-kicker">ESTADO</span>
+        <div class="settings-api-status__heading">
+          <strong>${escapeHtml(remoteApiStateLabel(status.state))}</strong>
+          <span class="settings-api-status__indicator settings-api-status__indicator--${status.state.toLowerCase()}"></span>
+        </div>
+        <p>${escapeHtml(status.message)}</p>
+        ${status.endpoint ? `<code>${escapeHtml(status.endpoint)}</code>` : ''}
+        <dl>
+          <div><dt>Autenticacion</dt><dd>Usuario y token temporal</dd></div>
+          <div><dt>Sesion</dt><dd>8 horas</dd></div>
+          <div><dt>Estado publico</dt><dd><code>/api/v1/health</code></dd></div>
+        </dl>
+        <p class="settings-api-status__warning ${settings.bindMode === 'LOCAL_NETWORK' ? '' : 'hidden'}">
+          Usa acceso por red solo en una LAN confiable. Esta primera version sirve HTTP y no debe publicarse directamente en Internet.
+        </p>
+      </article>
+    </section>
+  `;
+}
+
+function remoteApiStateLabel(state: RemoteApiStatusDto['state']): string {
+  if (state === 'RUNNING') {
+    return 'En ejecucion';
+  }
+  if (state === 'STARTING') {
+    return 'Iniciando';
+  }
+  if (state === 'ERROR') {
+    return 'Error';
+  }
+  return 'Deshabilitada';
 }

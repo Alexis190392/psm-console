@@ -19,6 +19,7 @@ import type { OperationProgressDto } from '../shared/dto/operation-progress.dto'
 import type { PalworldAdminAction, PalworldAdminStatusDto } from '../shared/dto/palworld-admin.dto';
 import type { PalworldPlayersStatusDto } from '../shared/dto/palworld-players-status.dto';
 import type { PalworldQueryPortStatusDto, PalworldRuntimeStatusDto } from '../shared/dto/palworld-runtime-status.dto';
+import type { RemoteApiUpdateRequestDto } from '../shared/dto/remote-api.dto';
 import {
   createSummaryCardState,
   renderSummaryCard,
@@ -143,6 +144,9 @@ rootElement.innerHTML = `
           </a>
           <a class="sidebar__sublink" data-nav="settings" data-settings-sidebar-tab="automation" href="#">
             <span>Automatizaciones</span>
+          </a>
+          <a class="sidebar__sublink" data-nav="settings" data-settings-sidebar-tab="remote-api" href="#">
+            <span>API web</span>
           </a>
         </div>
       </div>
@@ -1033,7 +1037,7 @@ function isSidebarNavActive(link: HTMLAnchorElement): boolean {
 }
 
 function isSettingsTab(value: string | undefined): value is SettingsTab {
-  return value === 'summary' || value === 'application' || value === 'automation';
+  return value === 'summary' || value === 'application' || value === 'automation' || value === 'remote-api';
 }
 
 function isAdminTab(value: string | undefined): value is 'general' | 'players' | 'map' {
@@ -2094,10 +2098,11 @@ async function renderAppSettings(renderId = ++activeViewRenderId): Promise<void>
   renderViewLoading('Configuracion', 'Leyendo preferencias y automatizaciones de PSM Console.');
   try {
     await loadReleaseUpdateStatus();
-    const [settingsStatus, backupSummary, idleStatus] = await Promise.all([
+    const [settingsStatus, backupSummary, idleStatus, remoteApiStatus] = await Promise.all([
       palcmApi.appSettings.getStatus(),
       palcmApi.backup.getSummary(),
-      palcmApi.serverIdle.getStatus()
+      palcmApi.serverIdle.getStatus(),
+      palcmApi.remoteApi.getStatus()
     ]);
     if (!isCurrentViewRender(renderId, 'settings')) {
       return;
@@ -2109,6 +2114,7 @@ async function renderAppSettings(renderId = ++activeViewRenderId): Promise<void>
       latestUpdateStatus,
       backupSummary,
       idleStatus,
+      remoteApiStatus,
       settingsViewState.getTab()
     ));
     bindAppSettingsControls();
@@ -2153,6 +2159,94 @@ function bindAppSettingsControls(): void {
   }
 
   bindBackupPolicyControls();
+  bindRemoteApiControls();
+}
+
+function bindRemoteApiControls(): void {
+  const form = document.querySelector<HTMLFormElement>('#remote-api-form');
+  if (!form) {
+    return;
+  }
+
+  const enabled = form.elements.namedItem('enabled');
+  const bindMode = form.elements.namedItem('bindMode');
+  const password = form.elements.namedItem('password');
+  if (!(enabled instanceof HTMLInputElement)
+    || !(bindMode instanceof HTMLSelectElement)
+    || !(password instanceof HTMLInputElement)) {
+    return;
+  }
+
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    if (!form.reportValidity()) {
+      return;
+    }
+    if (enabled.checked && !password.value && password.placeholder !== 'Contraseña configurada') {
+      password.setCustomValidity('Configura una contraseña de al menos 8 caracteres.');
+      password.reportValidity();
+      password.setCustomValidity('');
+      return;
+    }
+
+    const values = new FormData(form);
+    const username = values.get('username');
+    if (typeof username !== 'string') {
+      return;
+    }
+    const request: RemoteApiUpdateRequestDto = {
+      confirmed: true,
+      enabled: enabled.checked,
+      bindMode: bindMode.value === 'LOCAL_NETWORK' ? 'LOCAL_NETWORK' : 'LOCAL_ONLY',
+      port: Number(values.get('port')),
+      username,
+      ...(password.value ? { password: password.value } : {})
+    };
+    showRemoteApiConfirmation(request);
+  });
+}
+
+function showRemoteApiConfirmation(request: RemoteApiUpdateRequestDto): void {
+  if (!appFooter) {
+    return;
+  }
+
+  rootElement.classList.add('app--footer-visible');
+  appFooter.classList.remove('hidden');
+  appFooter.classList.add('app-footer--confirm');
+  const exposure = request.bindMode === 'LOCAL_NETWORK'
+    ? 'desde otros equipos de la red local'
+    : 'solo desde este equipo';
+  appFooter.innerHTML = renderInlineConfirm({
+    message: request.enabled
+      ? `La API administrativa quedara disponible ${exposure} por el puerto ${String(request.port)}.`
+      : 'La API administrativa se detendra y las sesiones actuales dejaran de funcionar.',
+    actions: [
+      {
+        id: 'confirm-remote-api',
+        label: request.enabled ? 'Habilitar API' : 'Deshabilitar API',
+        tone: request.enabled ? 'warning' : 'secondary'
+      },
+      { id: 'cancel-remote-api', label: 'Cancelar', tone: 'secondary' }
+    ]
+  });
+  document.querySelector<HTMLButtonElement>('#confirm-remote-api')?.addEventListener('click', () => {
+    runUiAction('No se pudo guardar la API web', () => updateRemoteApi(request));
+  });
+  document.querySelector<HTMLButtonElement>('#cancel-remote-api')?.addEventListener('click', () => {
+    updateFooterChrome();
+    void renderAppSettings();
+  });
+}
+
+async function updateRemoteApi(request: RemoteApiUpdateRequestDto): Promise<void> {
+  if (!palcmApi) {
+    return;
+  }
+  await palcmApi.remoteApi.update(request);
+  showToast(request.enabled ? 'API web actualizada' : 'API web deshabilitada');
+  updateFooterChrome();
+  await renderAppSettings();
 }
 
 function bindBackupFilters(): void {
@@ -4477,7 +4571,9 @@ function announceAndFocusView(): void {
       ? 'Resumen'
       : settingsViewState.getTab() === 'application'
         ? 'Aplicacion'
-        : 'Automatizaciones'}`
+        : settingsViewState.getTab() === 'automation'
+          ? 'Automatizaciones'
+          : 'API web'}`
   };
   const label = labels[navigationState.current] ?? 'Contenido';
   setText(viewAnnouncer, `Vista ${label}`);

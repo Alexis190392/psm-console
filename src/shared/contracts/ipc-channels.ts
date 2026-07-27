@@ -3,6 +3,8 @@ export const ipcChannels = {
   appGetActions: 'app:get-actions',
   appGetProcessMetrics: 'app:get-process-metrics',
   appSettingsGetStatus: 'app-settings:get-status',
+  remoteApiGetStatus: 'remote-api:get-status',
+  remoteApiUpdate: 'remote-api:update',
   updateGetStatus: 'update:get-status',
   updateOpenRelease: 'update:open-release',
   operationGet: 'operation:get',

@@ -2150,10 +2150,105 @@ input[type="range"] {
 }
 
 .settings-overview-grid,
-.settings-automation-grid {
+.settings-automation-grid,
+.settings-api-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 14px;
+}
+
+.settings-api-form,
+.settings-api-status {
+  min-width: 0;
+}
+
+.settings-api-form__fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.settings-api-form__fields label {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  min-width: 0;
+}
+
+.settings-api-form__fields small {
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}
+
+.settings-api-form__fields input,
+.settings-api-form__fields select {
+  height: 46px;
+}
+
+.settings-api-status {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+}
+
+.settings-api-status__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-api-status__indicator {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--color-text-muted);
+}
+
+.settings-api-status__indicator--running {
+  background: var(--color-success);
+  box-shadow: 0 0 0 4px rgba(0, 216, 163, 0.12);
+}
+
+.settings-api-status__indicator--starting {
+  background: var(--color-primary);
+}
+
+.settings-api-status__indicator--error {
+  background: var(--color-danger);
+}
+
+.settings-api-status code {
+  overflow-wrap: anywhere;
+}
+
+.settings-api-status dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.settings-api-status dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-api-status dt,
+.settings-api-status dd {
+  margin: 0;
+}
+
+.settings-api-status dt {
+  color: var(--color-text-muted);
+}
+
+.settings-api-status__warning {
+  padding: 11px 12px;
+  border: 1px solid rgba(255, 195, 51, 0.35);
+  border-radius: 6px;
+  background: rgba(255, 195, 51, 0.07);
+  color: var(--color-text);
 }
 
 .settings-summary {
@@ -2325,6 +2420,8 @@ input[type="range"] {
   .settings-summary,
   .settings-overview-grid,
   .settings-automation-grid,
+  .settings-api-grid,
+  .settings-api-form__fields,
   .settings-backup-policy__fields {
     grid-template-columns: 1fr;
   }
