@@ -82,4 +82,22 @@ describe('LoggingService', () => {
     expect(logFiles).toHaveLength(10);
     expect(logFiles).not.toContain('manager.log.10');
   });
+
+  it('lists portable log files with relative paths and reads them by opaque id', async () => {
+    await service.write('palserver', 'INFO', 'Servidor listo');
+    const listed = await service.listFiles();
+    const file = listed.files.find((candidate) => candidate.module === 'palserver');
+
+    expect(file?.relativePath).toBe('logs/palserver.log');
+    expect(file?.id).toBe('palserver:palserver.log');
+
+    const content = await service.readFile({ id: file?.id ?? '', maxLines: 100 });
+
+    expect(content.lines.join('\n')).toContain('Servidor listo');
+    expect(content.file.relativePath).toBe('logs/palserver.log');
+  });
+
+  it('rejects arbitrary paths when reading historical logs', async () => {
+    await expect(service.readFile({ id: 'manager:../../secret.txt' })).rejects.toThrow('LOG_FILE_NOT_FOUND');
+  });
 });

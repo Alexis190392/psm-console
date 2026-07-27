@@ -37,6 +37,13 @@ describe('IPC channel surface', () => {
 
   it('keeps log reading behind a concrete readonly domain channel', () => {
     expect(ipcChannels.logsGetRecent).toBe('logs:get-recent');
+    expect(ipcChannels.logsListFiles).toBe('logs:list-files');
+    expect(ipcChannels.logsReadFile).toBe('logs:read-file');
+  });
+
+  it('keeps idle shutdown policy behind explicit domain channels', () => {
+    expect(ipcChannels.serverIdleGetStatus).toBe('server-idle:get-status');
+    expect(ipcChannels.serverIdleUpdatePolicy).toBe('server-idle:update-policy');
   });
 
   it('keeps app process metrics behind a concrete readonly domain channel', () => {

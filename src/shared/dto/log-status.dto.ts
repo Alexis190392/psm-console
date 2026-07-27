@@ -18,3 +18,27 @@ export interface LogsRecentRequestDto {
   maxLines?: number;
 }
 
+export interface LogFileSummaryDto {
+  id: string;
+  module: LogModule;
+  relativePath: string;
+  sizeBytes: number;
+  updatedAt: string;
+  isActiveFile: boolean;
+}
+
+export interface LogFilesDto {
+  files: LogFileSummaryDto[];
+  updatedAt: string;
+}
+
+export interface LogFileReadRequestDto {
+  id: string;
+  maxLines?: number;
+}
+
+export interface LogFileContentDto {
+  file: LogFileSummaryDto;
+  lines: string[];
+  truncated: boolean;
+}

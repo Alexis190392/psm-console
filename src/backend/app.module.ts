@@ -18,6 +18,8 @@ import { PortablePathService } from './portable-path/portable-path.service';
 import { PortableStateService } from './portable-state/portable-state.service';
 import { SteamCmdService } from './steamcmd/steamcmd.service';
 import { ReleaseUpdateService } from './release-update/release-update.service';
+import { ServerIdlePolicyService } from './server-idle-shutdown/server-idle-policy.service';
+import { ServerIdleShutdownService } from './server-idle-shutdown/server-idle-shutdown.service';
 
 @Module({
   providers: [
@@ -31,6 +33,8 @@ import { ReleaseUpdateService } from './release-update/release-update.service';
     BackupService,
     SteamCmdService,
     ReleaseUpdateService,
+    ServerIdlePolicyService,
+    ServerIdleShutdownService,
     PalworldInstallationService,
     PalworldMaintenanceSnapshotService,
     PalworldAdminService,
@@ -52,6 +56,8 @@ import { ReleaseUpdateService } from './release-update/release-update.service';
     BackupService,
     SteamCmdService,
     ReleaseUpdateService,
+    ServerIdlePolicyService,
+    ServerIdleShutdownService,
     PalworldInstallationService,
     PalworldMaintenanceSnapshotService,
     PalworldAdminService,

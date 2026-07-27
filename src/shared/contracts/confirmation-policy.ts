@@ -8,6 +8,7 @@ export const confirmationRequiredActions = [
   'server:stop',
   'server:restart',
   'server:stop-query-port-owner',
+  'server-idle:update-policy',
   'admin:execute-action',
   'config:save',
   'config:create-default',

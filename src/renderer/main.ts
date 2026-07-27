@@ -14,11 +14,12 @@ import type {
   FirewallStatusDto
 } from '../shared/dto/firewall-status.dto';
 import type { NetworkDiagnosticsDto } from '../shared/dto/network-diagnostics.dto';
-import type { LogModule } from '../shared/dto/log-status.dto';
+import type { LogFileSummaryDto, LogModule } from '../shared/dto/log-status.dto';
 import type { OperationProgressDto } from '../shared/dto/operation-progress.dto';
 import type { PalworldAdminAction, PalworldAdminStatusDto } from '../shared/dto/palworld-admin.dto';
 import type { PalworldPlayersStatusDto } from '../shared/dto/palworld-players-status.dto';
 import type { PalworldQueryPortStatusDto, PalworldRuntimeStatusDto } from '../shared/dto/palworld-runtime-status.dto';
+import type { ServerIdleStatusDto } from '../shared/dto/server-idle-policy.dto';
 import {
   createSummaryCardState,
   renderSummaryCard,
@@ -186,7 +187,12 @@ rootElement.innerHTML = `
           <button id="clear-console" class="console-tool-button icon-button" type="button" aria-label="Limpiar vista" title="Limpiar vista">
             ${renderIcon('clear')}
           </button>
+          <button id="open-log-history" class="console-tool-button icon-button" type="button" aria-label="Abrir logs anteriores" title="Abrir logs anteriores">
+            ${renderIcon('clock')}
+          </button>
         </div>
+        <div id="log-history-panel" class="log-history-panel hidden"></div>
+        <div id="historical-log-banner" class="historical-log-banner hidden"></div>
         <pre id="console-output" class="log">Consultando IPC seguro...</pre>
       </div>
       <div id="confirmation-panel" class="confirmation-panel hidden">
@@ -235,6 +241,9 @@ const consoleSearchInput = document.querySelector<HTMLInputElement>('#console-se
 const consoleModuleFilter = document.querySelector<HTMLSelectElement>('#console-module-filter');
 const pauseConsoleButton = document.querySelector<HTMLButtonElement>('#pause-console');
 const clearConsoleButton = document.querySelector<HTMLButtonElement>('#clear-console');
+const openLogHistoryButton = document.querySelector<HTMLButtonElement>('#open-log-history');
+const logHistoryPanel = document.querySelector<HTMLDivElement>('#log-history-panel');
+const historicalLogBanner = document.querySelector<HTMLDivElement>('#historical-log-banner');
 const processMetricsPanel = document.querySelector<HTMLElement>('#process-metrics-panel');
 const processMetricsList = document.querySelector<HTMLElement>('#process-metrics-list');
 const refreshProcessMetricsButton = document.querySelector<HTMLButtonElement>('#refresh-process-metrics');
@@ -277,12 +286,14 @@ let latestUpdateStatus: AppUpdateStatusDto | null = null;
 let updateStatusRequest: Promise<AppUpdateStatusDto> | null = null;
 let announcedUpdateVersion: string | null = null;
 let adminRefreshTimer: number | null = null;
-let adminStatusRequest: Promise<[PalworldAdminStatusDto, PalworldPlayersStatusDto]> | null = null;
+let adminStatusRequest: Promise<[PalworldAdminStatusDto, PalworldPlayersStatusDto, ServerIdleStatusDto]> | null = null;
 const adminViewState = new AdminViewState();
 let consoleSearchTerm = '';
 let consoleSelectedModule: LogModule | 'all' = 'all';
 let consolePaused = false;
 let latestPersistentLogsSignature = '';
+let historicalLogLines: string[] | null = null;
+let selectedHistoricalLog: LogFileSummaryDto | null = null;
 let settingInfoDismissBound = false;
 let latestServerSettings: ParsedPalworldSettings | null = null;
 let latestServerSettingsPath: string | null = null;
@@ -350,10 +361,16 @@ if (!palcmApi) {
     renderConsoleOutput();
   });
   clearConsoleButton?.addEventListener('click', () => {
+    if (selectedHistoricalLog) {
+      return;
+    }
     consoleLines.splice(0, consoleLines.length);
     operationLogOffsets.clear();
     latestPersistentLogsSignature = '';
     renderConsoleOutput();
+  });
+  openLogHistoryButton?.addEventListener('click', () => {
+    void toggleLogHistory();
   });
   refreshProcessMetricsButton?.addEventListener('click', () => {
     void loadAppProcessMetrics();
@@ -894,9 +911,10 @@ function renderConsoleOutput(): void {
     return;
   }
 
+  const sourceLines = historicalLogLines ?? consoleLines;
   const visibleLines = consoleSearchTerm
-    ? consoleLines.filter((line) => line.toLowerCase().includes(consoleSearchTerm))
-    : consoleLines;
+    ? sourceLines.filter((line) => line.toLowerCase().includes(consoleSearchTerm))
+    : sourceLines;
 
   consoleOutput.textContent = visibleLines.join('\n');
 
@@ -2134,15 +2152,16 @@ async function refreshAdminView(options: { force?: boolean } = {}, renderId?: nu
   try {
     adminStatusRequest ??= Promise.all([
       palcmApi.admin.getStatus(),
-      palcmApi.players.getStatus()
+      palcmApi.players.getStatus(),
+      palcmApi.serverIdle.getStatus()
     ]).finally(() => {
       adminStatusRequest = null;
     });
-    const [adminStatus, playersStatus] = await adminStatusRequest;
+    const [adminStatus, playersStatus, idleStatus] = await adminStatusRequest;
 
     const belongsToCurrentView = renderId === undefined || isCurrentViewRender(renderId, 'admin');
     if (belongsToCurrentView && navigationState.is('admin') && (options.force || !isEditingAdminForm())) {
-      setContent(renderAdminStatus(adminStatus, playersStatus, adminViewState.getTab()));
+      setContent(renderAdminStatus(adminStatus, playersStatus, adminViewState.getTab(), idleStatus));
       bindAdminControls();
     }
   } catch (error) {
@@ -2156,7 +2175,8 @@ async function refreshAdminView(options: { force?: boolean } = {}, renderId?: nu
 function isEditingAdminForm(): boolean {
   const activeElement = document.activeElement;
 
-  return activeElement instanceof HTMLElement && Boolean(activeElement.closest('[data-admin-form]'));
+  return activeElement instanceof HTMLElement &&
+    Boolean(activeElement.closest('[data-admin-form], [data-idle-policy-form]'));
 }
 
 function startAdminAutoRefresh(): void {
@@ -2171,6 +2191,20 @@ function startAdminAutoRefresh(): void {
 
 function bindAdminControls(): void {
   document.querySelector<HTMLButtonElement>('#restart-server')?.addEventListener('click', showServerRestartConfirmation);
+  const idleForm = document.querySelector<HTMLFormElement>('[data-idle-policy-form]');
+  const idleEnabled = idleForm?.elements.namedItem('enabled');
+  const idleSeconds = idleForm?.elements.namedItem('emptySeconds');
+  if (idleEnabled instanceof HTMLInputElement && idleSeconds instanceof HTMLInputElement) {
+    idleEnabled.addEventListener('change', () => {
+      idleSeconds.disabled = !idleEnabled.checked;
+    });
+    idleForm?.addEventListener('submit', (event) => {
+      event.preventDefault();
+      if (idleForm.reportValidity()) {
+        showIdlePolicyConfirmation(idleForm);
+      }
+    });
+  }
   document.querySelectorAll<HTMLFormElement>('[data-admin-form]').forEach((form) => {
     form.addEventListener('submit', (event) => {
       event.preventDefault();
@@ -2218,6 +2252,41 @@ async function restartServer(): Promise<void> {
     return;
   }
   await refreshState();
+}
+
+function showIdlePolicyConfirmation(form: HTMLFormElement): void {
+  if (!appFooter) {
+    return;
+  }
+
+  const data = new FormData(form);
+  const enabled = data.get('enabled') === 'on';
+  const secondsInput = form.elements.namedItem('emptySeconds');
+  const emptySeconds = secondsInput instanceof HTMLInputElement ? Number(secondsInput.value) : 300;
+  rootElement.classList.add('app--footer-visible');
+  appFooter.classList.remove('hidden');
+  appFooter.classList.add('app-footer--confirm');
+  appFooter.innerHTML = renderInlineConfirm({
+    message: enabled
+      ? `El servidor se detendra despues de ${String(emptySeconds)} segundos consecutivos sin jugadores confirmados por REST.`
+      : 'Se deshabilitara la detencion automatica por falta de jugadores.',
+    actions: [
+      { id: 'confirm-idle-policy', label: 'Guardar automatizacion', tone: 'warning' },
+      { id: 'cancel-idle-policy', label: 'Cancelar', tone: 'secondary' }
+    ]
+  });
+  document.querySelector<HTMLButtonElement>('#confirm-idle-policy')?.addEventListener('click', () => {
+    runUiAction('No se pudo guardar el apagado automatico', async () => {
+      if (!palcmApi) {
+        return;
+      }
+      await palcmApi.serverIdle.updatePolicy({ confirmed: true, enabled, emptySeconds });
+      updateFooterChrome();
+      await refreshAdminView({ force: true });
+      showToast('Automatizacion guardada');
+    });
+  });
+  document.querySelector<HTMLButtonElement>('#cancel-idle-policy')?.addEventListener('click', updateFooterChrome);
 }
 
 function showAdminConfirmation(form: HTMLFormElement, submitter: HTMLButtonElement | null): void {
@@ -2584,8 +2653,104 @@ async function restoreBackup(backupId: string): Promise<void> {
   await refreshState();
 }
 
+async function toggleLogHistory(): Promise<void> {
+  if (!palcmApi || !logHistoryPanel) {
+    return;
+  }
+
+  if (!logHistoryPanel.classList.contains('hidden')) {
+    logHistoryPanel.classList.add('hidden');
+    return;
+  }
+
+  logHistoryPanel.classList.remove('hidden');
+  logHistoryPanel.innerHTML = '<p class="empty-state empty-state--compact">Buscando archivos de log...</p>';
+  try {
+    const result = await palcmApi.logs.listFiles();
+    const files = result.files.filter((file) => {
+      return consoleSelectedModule === 'all' || file.module === consoleSelectedModule;
+    });
+    logHistoryPanel.innerHTML = files.length > 0
+      ? `
+        <div class="log-history-panel__header">
+          <strong>Logs disponibles</strong>
+          <small>Ruta relativa al portable</small>
+        </div>
+        <div class="log-history-list">
+          ${files.map(renderLogHistoryItem).join('')}
+        </div>
+      `
+      : '<p class="empty-state empty-state--compact">No hay archivos para el filtro seleccionado.</p>';
+    logHistoryPanel.querySelectorAll<HTMLButtonElement>('[data-log-file-id]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const id = button.dataset['logFileId'];
+        if (id) {
+          void openHistoricalLog(id);
+        }
+      });
+    });
+  } catch (error) {
+    logHistoryPanel.innerHTML = `<p class="empty-state empty-state--compact">No se pudo listar el historial: ${escapeHtml(error instanceof Error ? error.message : String(error))}</p>`;
+  }
+}
+
+function renderLogHistoryItem(file: LogFileSummaryDto): string {
+  return `
+    <button class="log-history-item" type="button" data-log-file-id="${escapeHtml(file.id)}">
+      <span>
+        <strong>${escapeHtml(file.module)}</strong>
+        <small>${escapeHtml(file.relativePath)}</small>
+      </span>
+      <span>
+        <small>${escapeHtml(formatBytes(file.sizeBytes))}</small>
+        <small>${escapeHtml(formatLastVerification(new Date(file.updatedAt)))}</small>
+      </span>
+    </button>
+  `;
+}
+
+async function openHistoricalLog(id: string): Promise<void> {
+  if (!palcmApi || !historicalLogBanner || !logHistoryPanel) {
+    return;
+  }
+
+  try {
+    const result = await palcmApi.logs.readFile({ id, maxLines: 2000 });
+    selectedHistoricalLog = result.file;
+    historicalLogLines = result.lines;
+    logHistoryPanel.classList.add('hidden');
+    historicalLogBanner.classList.remove('hidden');
+    historicalLogBanner.innerHTML = `
+      <span>
+        <strong>${escapeHtml(result.file.relativePath)}</strong>
+        <small>${result.truncated ? 'Mostrando las ultimas 2000 lineas' : `${String(result.lines.length)} lineas`}</small>
+      </span>
+      <button id="return-current-log" class="secondary-button button-with-icon" type="button">
+        ${renderIcon('refresh')}
+        <span>Volver al log actual</span>
+      </button>
+    `;
+    document.querySelector<HTMLButtonElement>('#return-current-log')?.addEventListener('click', returnToCurrentLog);
+    renderConsoleOutput();
+  } catch (error) {
+    showToast(`No se pudo abrir el log: ${error instanceof Error ? error.message : String(error)}`, 'error');
+  }
+}
+
+function returnToCurrentLog(): void {
+  historicalLogLines = null;
+  selectedHistoricalLog = null;
+  historicalLogBanner?.classList.add('hidden');
+  if (historicalLogBanner) {
+    historicalLogBanner.innerHTML = '';
+  }
+  latestPersistentLogsSignature = '';
+  renderConsoleOutput();
+  void loadPersistentLogs();
+}
+
 async function loadPersistentLogs(): Promise<void> {
-  if (!palcmApi) {
+  if (!palcmApi || selectedHistoricalLog) {
     return;
   }
 
@@ -4163,11 +4328,14 @@ function setContent(html: string): void {
 }
 
 function exportConsole(): void {
-  const blob = new Blob([consoleLines.join('\n')], { type: 'text/plain;charset=utf-8' });
+  const lines = historicalLogLines ?? consoleLines;
+  const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = `palcm-console-${new Date().toISOString().replace(/[:.]/g, '-')}.txt`;
+  link.download = selectedHistoricalLog
+    ? selectedHistoricalLog.relativePath.replace('logs/', '')
+    : `palcm-console-${new Date().toISOString().replace(/[:.]/g, '-')}.txt`;
   link.click();
   URL.revokeObjectURL(url);
 }

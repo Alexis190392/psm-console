@@ -21,7 +21,17 @@ import type {
   FirewallDiagnosticRequestDto,
   FirewallStatusDto
 } from '../../shared/dto/firewall-status.dto';
-import type { LogsRecentDto, LogsRecentRequestDto } from '../../shared/dto/log-status.dto';
+import type {
+  LogFileContentDto,
+  LogFileReadRequestDto,
+  LogFilesDto,
+  LogsRecentDto,
+  LogsRecentRequestDto
+} from '../../shared/dto/log-status.dto';
+import type {
+  ServerIdlePolicyUpdateRequestDto,
+  ServerIdleStatusDto
+} from '../../shared/dto/server-idle-policy.dto';
 import type {
   PalworldConfigurationFileDto,
   PalworldRestoreDefaultConfigurationRequestDto,
@@ -81,6 +91,8 @@ const ipcChannels = {
   serverGetQueryPortStatus: 'server:get-query-port-status',
   serverStopQueryPortOwner: 'server:stop-query-port-owner',
   playersGetStatus: 'players:get-status',
+  serverIdleGetStatus: 'server-idle:get-status',
+  serverIdleUpdatePolicy: 'server-idle:update-policy',
   adminGetStatus: 'admin:get-status',
   adminExecuteAction: 'admin:execute-action',
   configRead: 'config:read',
@@ -101,6 +113,8 @@ const ipcChannels = {
   backupRestore: 'backup:restore',
   backupDelete: 'backup:delete',
   logsGetRecent: 'logs:get-recent',
+  logsListFiles: 'logs:list-files',
+  logsReadFile: 'logs:read-file',
   windowMinimize: 'window:minimize',
   windowToggleMaximize: 'window:toggle-maximize',
   windowClose: 'window:close'
@@ -140,6 +154,10 @@ export interface PalcmApi {
   players: {
     getStatus: () => Promise<PalworldPlayersStatusDto>;
   };
+  serverIdle: {
+    getStatus: () => Promise<ServerIdleStatusDto>;
+    updatePolicy: (request: ServerIdlePolicyUpdateRequestDto) => Promise<ServerIdleStatusDto>;
+  };
   admin: {
     getStatus: () => Promise<PalworldAdminStatusDto>;
     executeAction: (request: PalworldAdminActionRequestDto) => Promise<PalworldAdminActionResultDto>;
@@ -171,6 +189,8 @@ export interface PalcmApi {
   };
   logs: {
     getRecent: (request?: LogsRecentRequestDto) => Promise<LogsRecentDto>;
+    listFiles: () => Promise<LogFilesDto>;
+    readFile: (request: LogFileReadRequestDto) => Promise<LogFileContentDto>;
   };
   window: {
     minimize: () => Promise<void>;
@@ -228,6 +248,11 @@ const api: PalcmApi = {
   players: {
     getStatus: () => ipcRenderer.invoke(ipcChannels.playersGetStatus) as Promise<PalworldPlayersStatusDto>
   },
+  serverIdle: {
+    getStatus: () => ipcRenderer.invoke(ipcChannels.serverIdleGetStatus) as Promise<ServerIdleStatusDto>,
+    updatePolicy: (request) =>
+      ipcRenderer.invoke(ipcChannels.serverIdleUpdatePolicy, request) as Promise<ServerIdleStatusDto>
+  },
   admin: {
     getStatus: () => ipcRenderer.invoke(ipcChannels.adminGetStatus) as Promise<PalworldAdminStatusDto>,
     executeAction: (request) =>
@@ -278,7 +303,10 @@ const api: PalcmApi = {
       ipcRenderer.invoke(ipcChannels.backupDelete, request) as Promise<OperationAcceptedDto>
   },
   logs: {
-    getRecent: (request) => ipcRenderer.invoke(ipcChannels.logsGetRecent, request) as Promise<LogsRecentDto>
+    getRecent: (request) => ipcRenderer.invoke(ipcChannels.logsGetRecent, request) as Promise<LogsRecentDto>,
+    listFiles: () => ipcRenderer.invoke(ipcChannels.logsListFiles) as Promise<LogFilesDto>,
+    readFile: (request) =>
+      ipcRenderer.invoke(ipcChannels.logsReadFile, request) as Promise<LogFileContentDto>
   },
   window: {
     minimize: () => ipcRenderer.invoke(ipcChannels.windowMinimize) as Promise<void>,

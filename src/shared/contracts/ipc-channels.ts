@@ -20,6 +20,8 @@ export const ipcChannels = {
   serverGetQueryPortStatus: 'server:get-query-port-status',
   serverStopQueryPortOwner: 'server:stop-query-port-owner',
   playersGetStatus: 'players:get-status',
+  serverIdleGetStatus: 'server-idle:get-status',
+  serverIdleUpdatePolicy: 'server-idle:update-policy',
   adminGetStatus: 'admin:get-status',
   adminExecuteAction: 'admin:execute-action',
   configRead: 'config:read',
@@ -40,6 +42,8 @@ export const ipcChannels = {
   backupRestore: 'backup:restore',
   backupDelete: 'backup:delete',
   logsGetRecent: 'logs:get-recent',
+  logsListFiles: 'logs:list-files',
+  logsReadFile: 'logs:read-file',
   windowMinimize: 'window:minimize',
   windowToggleMaximize: 'window:toggle-maximize',
   windowClose: 'window:close'
