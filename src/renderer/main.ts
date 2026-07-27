@@ -19,7 +19,6 @@ import type { OperationProgressDto } from '../shared/dto/operation-progress.dto'
 import type { PalworldAdminAction, PalworldAdminStatusDto } from '../shared/dto/palworld-admin.dto';
 import type { PalworldPlayersStatusDto } from '../shared/dto/palworld-players-status.dto';
 import type { PalworldQueryPortStatusDto, PalworldRuntimeStatusDto } from '../shared/dto/palworld-runtime-status.dto';
-import type { ServerIdleStatusDto } from '../shared/dto/server-idle-policy.dto';
 import {
   createSummaryCardState,
   renderSummaryCard,
@@ -43,6 +42,7 @@ import { getOperationFailureMessage, isOperationSuccessful } from './utils/opera
 import { cssEscape, escapeHtml, normalizeSearchText } from './utils/text';
 import { renderBackupsView as renderBackupsViewHtml } from './views/backups-view';
 import { renderAdminStatus } from './views/admin-view';
+import { renderAppSettingsView } from './views/app-settings-view';
 import {
   renderConfigurationPresets,
   renderSettingsFilterBar,
@@ -55,6 +55,7 @@ import {
 import { renderPreflightSummaryView, renderSimpleView as renderSimpleViewHtml } from './views/status-views';
 import { NavigationState } from './state/navigation-state';
 import { AdminViewState } from './state/admin-view-state';
+import { SettingsViewState } from './state/settings-view-state';
 import { resolveServerActionState } from './state/server-action-state';
 
 const palcmLogoUrl = new URL('./assets/palcm-logo.png', import.meta.url).href;
@@ -127,6 +128,21 @@ rootElement.innerHTML = `
         ${renderIcon('logs', 'sidebar__link-icon')}
         <span>Logs</span>
       </a>
+      <div class="sidebar__group sidebar__group--collapsed" data-nav-group="settings">
+        <a class="sidebar__link sidebar__link--group" data-nav="settings" data-settings-group-toggle="true" href="#">
+          ${renderIcon('settings', 'sidebar__link-icon')}
+          <span>Configuracion</span>
+          <span class="sidebar__chevron" aria-hidden="true"></span>
+        </a>
+        <div class="sidebar__subnav" aria-label="Configuracion de la aplicacion">
+          <a class="sidebar__sublink" data-nav="settings" data-settings-sidebar-tab="application" href="#">
+            <span>Aplicacion</span>
+          </a>
+          <a class="sidebar__sublink" data-nav="settings" data-settings-sidebar-tab="automation" href="#">
+            <span>Automatizaciones</span>
+          </a>
+        </div>
+      </div>
     </nav>
     <section id="sidebar-runtime-status" class="sidebar-status sidebar-status--blocked" aria-live="polite">
       <span class="sidebar-status__dot" aria-hidden="true"></span>
@@ -266,6 +282,7 @@ const sidebarRuntimeStatus = document.querySelector<HTMLElement>('#sidebar-runti
 const startServerAction = document.querySelector<HTMLButtonElement>('#start-server-action');
 const navLinks = Array.from(document.querySelectorAll<HTMLAnchorElement>('[data-nav]'));
 const adminNavGroup = document.querySelector<HTMLElement>('[data-nav-group="admin"]');
+const settingsNavGroup = document.querySelector<HTMLElement>('[data-nav-group="settings"]');
 const consoleLines: string[] = [];
 const operationLogOffsets = new Map<string, number>();
 let latestFirewallStatus: FirewallStatusDto | null = null;
@@ -286,8 +303,9 @@ let latestUpdateStatus: AppUpdateStatusDto | null = null;
 let updateStatusRequest: Promise<AppUpdateStatusDto> | null = null;
 let announcedUpdateVersion: string | null = null;
 let adminRefreshTimer: number | null = null;
-let adminStatusRequest: Promise<[PalworldAdminStatusDto, PalworldPlayersStatusDto, ServerIdleStatusDto]> | null = null;
+let adminStatusRequest: Promise<[PalworldAdminStatusDto, PalworldPlayersStatusDto]> | null = null;
 const adminViewState = new AdminViewState();
+const settingsViewState = new SettingsViewState();
 let consoleSearchTerm = '';
 let consoleSelectedModule: LogModule | 'all' = 'all';
 let consolePaused = false;
@@ -403,6 +421,13 @@ if (!palcmApi) {
         const requestedAdminTab = link.dataset['adminSidebarTab'];
         if (isAdminTab(requestedAdminTab)) {
           adminViewState.setTab(requestedAdminTab);
+        }
+      }
+      if (nextView === 'settings') {
+        settingsViewState.setMenuOpen(true);
+        const requestedSettingsTab = link.dataset['settingsSidebarTab'];
+        if (isSettingsTab(requestedSettingsTab)) {
+          settingsViewState.setTab(requestedSettingsTab);
         }
       }
 
@@ -940,6 +965,7 @@ function updateNavigation(status: ApplicationStatus): void {
     const nav = link.dataset['nav'];
     const enabled =
       nav === 'home' ||
+      nav === 'settings' ||
       (nav === 'server' && serverAvailable) ||
       (nav === 'admin' && serverRunning) ||
       (nav === 'logs' && logsAvailable) ||
@@ -964,6 +990,14 @@ function updateNavigation(status: ApplicationStatus): void {
     adminNavGroup.querySelector<HTMLElement>('[data-admin-group-toggle]')
       ?.setAttribute('aria-expanded', serverRunning && (adminViewState.isMenuOpen() || navigationState.is('admin')) ? 'true' : 'false');
   }
+
+  if (settingsNavGroup) {
+    const open = settingsViewState.isMenuOpen() || navigationState.is('settings');
+    settingsNavGroup.classList.toggle('sidebar__group--open', open);
+    settingsNavGroup.classList.toggle('sidebar__group--collapsed', !open);
+    settingsNavGroup.querySelector<HTMLElement>('[data-settings-group-toggle]')
+      ?.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
 }
 
 function isSidebarNavActive(link: HTMLAnchorElement): boolean {
@@ -973,7 +1007,14 @@ function isSidebarNavActive(link: HTMLAnchorElement): boolean {
   }
 
   if (nav !== 'admin') {
-    return true;
+    if (nav !== 'settings') {
+      return true;
+    }
+    if (link.dataset['settingsGroupToggle'] === 'true') {
+      return false;
+    }
+    const requestedSettingsTab = link.dataset['settingsSidebarTab'];
+    return isSettingsTab(requestedSettingsTab) && settingsViewState.isTab(requestedSettingsTab);
   }
 
   if (link.dataset['adminGroupToggle'] === 'true') {
@@ -986,6 +1027,10 @@ function isSidebarNavActive(link: HTMLAnchorElement): boolean {
   }
 
   return isAdminTab(requestedAdminTab) && adminViewState.isTab(requestedAdminTab);
+}
+
+function isSettingsTab(value: string | undefined): value is 'application' | 'automation' {
+  return value === 'application' || value === 'automation';
 }
 
 function isAdminTab(value: string | undefined): value is 'general' | 'players' | 'map' {
@@ -1083,6 +1128,11 @@ function renderActiveView(): void {
 
   if (navigationState.is('backups')) {
     void renderBackupsView(renderId);
+    return;
+  }
+
+  if (navigationState.is('settings')) {
+    void renderAppSettings(renderId);
     return;
   }
 
@@ -2017,7 +2067,6 @@ async function renderBackupsView(renderId = ++activeViewRenderId): Promise<void>
     }
 
     setContent(renderBackupsViewHtml(summary));
-    bindBackupPolicyControls();
     bindBackupFilters();
     renderBackupsFooter();
     document.querySelectorAll<HTMLInputElement>('[data-backup-select]').forEach((checkbox) => {
@@ -2032,6 +2081,62 @@ async function renderBackupsView(renderId = ++activeViewRenderId): Promise<void>
     const message = error instanceof Error ? error.message : String(error);
     renderSimpleView('Backups', `No se pudo leer el estado de backups. ${message}`);
   }
+}
+
+async function renderAppSettings(renderId = ++activeViewRenderId): Promise<void> {
+  if (!palcmApi) {
+    return;
+  }
+
+  renderViewLoading('Configuracion', 'Leyendo preferencias y automatizaciones de PSM Console.');
+  try {
+    await loadReleaseUpdateStatus();
+    const [settingsStatus, backupSummary, idleStatus] = await Promise.all([
+      palcmApi.appSettings.getStatus(),
+      palcmApi.backup.getSummary(),
+      palcmApi.serverIdle.getStatus()
+    ]);
+    if (!isCurrentViewRender(renderId, 'settings')) {
+      return;
+    }
+
+    latestBackupSummary = backupSummary;
+    setContent(renderAppSettingsView(
+      settingsStatus,
+      latestUpdateStatus,
+      backupSummary,
+      idleStatus,
+      settingsViewState.getTab()
+    ));
+    bindAppSettingsControls();
+  } catch (error) {
+    if (isCurrentViewRender(renderId, 'settings')) {
+      renderSimpleView('Configuracion', `No se pudieron cargar las preferencias. ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+}
+
+function bindAppSettingsControls(): void {
+  document.querySelector<HTMLButtonElement>('#settings-open-release')?.addEventListener('click', () => {
+    void palcmApi?.update.openRelease();
+  });
+
+  const idleForm = document.querySelector<HTMLFormElement>('[data-idle-policy-form]');
+  const idleEnabled = idleForm?.elements.namedItem('enabled');
+  const idleSeconds = idleForm?.elements.namedItem('emptySeconds');
+  if (idleEnabled instanceof HTMLInputElement && idleSeconds instanceof HTMLInputElement) {
+    idleEnabled.addEventListener('change', () => {
+      idleSeconds.disabled = !idleEnabled.checked;
+    });
+    idleForm?.addEventListener('submit', (event) => {
+      event.preventDefault();
+      if (idleForm.reportValidity()) {
+        showIdlePolicyConfirmation(idleForm);
+      }
+    });
+  }
+
+  bindBackupPolicyControls();
 }
 
 function bindBackupFilters(): void {
@@ -2077,6 +2182,7 @@ function showBackupPolicyConfirmation(request: BackupUpdatePolicyRequestDto): vo
     return;
   }
 
+  rootElement.classList.add('app--footer-visible');
   appFooter.classList.remove('hidden');
   appFooter.classList.add('app-footer--confirm');
   appFooter.innerHTML = renderInlineConfirm({
@@ -2106,7 +2212,7 @@ async function updateBackupPolicy(request: BackupUpdatePolicyRequestDto): Promis
     return;
   }
   latestBackupSummary = null;
-  navigationState.set('backups');
+  navigationState.set('settings');
   await refreshState();
 }
 
@@ -2152,16 +2258,15 @@ async function refreshAdminView(options: { force?: boolean } = {}, renderId?: nu
   try {
     adminStatusRequest ??= Promise.all([
       palcmApi.admin.getStatus(),
-      palcmApi.players.getStatus(),
-      palcmApi.serverIdle.getStatus()
+      palcmApi.players.getStatus()
     ]).finally(() => {
       adminStatusRequest = null;
     });
-    const [adminStatus, playersStatus, idleStatus] = await adminStatusRequest;
+    const [adminStatus, playersStatus] = await adminStatusRequest;
 
     const belongsToCurrentView = renderId === undefined || isCurrentViewRender(renderId, 'admin');
     if (belongsToCurrentView && navigationState.is('admin') && (options.force || !isEditingAdminForm())) {
-      setContent(renderAdminStatus(adminStatus, playersStatus, adminViewState.getTab(), idleStatus));
+      setContent(renderAdminStatus(adminStatus, playersStatus, adminViewState.getTab()));
       bindAdminControls();
     }
   } catch (error) {
@@ -2175,8 +2280,7 @@ async function refreshAdminView(options: { force?: boolean } = {}, renderId?: nu
 function isEditingAdminForm(): boolean {
   const activeElement = document.activeElement;
 
-  return activeElement instanceof HTMLElement &&
-    Boolean(activeElement.closest('[data-admin-form], [data-idle-policy-form]'));
+  return activeElement instanceof HTMLElement && Boolean(activeElement.closest('[data-admin-form]'));
 }
 
 function startAdminAutoRefresh(): void {
@@ -2191,20 +2295,6 @@ function startAdminAutoRefresh(): void {
 
 function bindAdminControls(): void {
   document.querySelector<HTMLButtonElement>('#restart-server')?.addEventListener('click', showServerRestartConfirmation);
-  const idleForm = document.querySelector<HTMLFormElement>('[data-idle-policy-form]');
-  const idleEnabled = idleForm?.elements.namedItem('enabled');
-  const idleSeconds = idleForm?.elements.namedItem('emptySeconds');
-  if (idleEnabled instanceof HTMLInputElement && idleSeconds instanceof HTMLInputElement) {
-    idleEnabled.addEventListener('change', () => {
-      idleSeconds.disabled = !idleEnabled.checked;
-    });
-    idleForm?.addEventListener('submit', (event) => {
-      event.preventDefault();
-      if (idleForm.reportValidity()) {
-        showIdlePolicyConfirmation(idleForm);
-      }
-    });
-  }
   document.querySelectorAll<HTMLFormElement>('[data-admin-form]').forEach((form) => {
     form.addEventListener('submit', (event) => {
       event.preventDefault();
@@ -2282,7 +2372,9 @@ function showIdlePolicyConfirmation(form: HTMLFormElement): void {
       }
       await palcmApi.serverIdle.updatePolicy({ confirmed: true, enabled, emptySeconds });
       updateFooterChrome();
-      await refreshAdminView({ force: true });
+      if (navigationState.is('settings')) {
+        await renderAppSettings();
+      }
       showToast('Automatizacion guardada');
     });
   });
@@ -2572,6 +2664,11 @@ function hideBackupConfirmation(): void {
   if (navigationState.is('backups')) {
     renderBackupsFooter();
     updateSelectedBackupsState();
+    return;
+  }
+  if (navigationState.is('settings')) {
+    updateFooterChrome();
+    void renderAppSettings();
   }
 }
 
@@ -4359,7 +4456,8 @@ function announceAndFocusView(): void {
     admin: `Administracion, ${adminViewState.getTab() === 'general' ? 'Servidor' : adminViewState.getTab() === 'players' ? 'Jugadores' : 'Mapa'}`,
     network: 'Red y Firewall',
     backups: 'Backups',
-    logs: 'Logs'
+    logs: 'Logs',
+    settings: `Configuracion, ${settingsViewState.getTab() === 'application' ? 'Aplicacion' : 'Automatizaciones'}`
   };
   const label = labels[navigationState.current] ?? 'Contenido';
   setText(viewAnnouncer, `Vista ${label}`);

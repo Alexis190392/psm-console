@@ -40,9 +40,7 @@ describe('backups view', () => {
     expect(html).toContain('D:\\Pal\\PalWorldSettings.ini');
     expect(html).toContain('config-1.ini');
     expect(html).toContain('2.0 KB');
-    expect(html).toContain('id="backup-policy-form"');
-    expect(html).toContain('name="automaticIntervalHours"');
-    expect(html).toContain('name="automaticRetentionPerType"');
+    expect(html).not.toContain('id="backup-policy-form"');
     expect(html).toContain('Verificado');
     expect(html).toContain('data-backup-select="configuration:config-1.ini"');
     expect(html).toContain('class="backup-select__box"');

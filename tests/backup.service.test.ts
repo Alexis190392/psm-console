@@ -6,6 +6,7 @@ import { BackupService } from '../src/backend/backup/backup.service';
 import { BackupArchiveService } from '../src/backend/backup/backup-archive.service';
 import { BackupIntegrityService, getManifestPath } from '../src/backend/backup/backup-integrity.service';
 import { BackupPolicyService } from '../src/backend/backup/backup-policy.service';
+import { AppSettingsService } from '../src/backend/app-settings/app-settings.service';
 import { OperationManagerService } from '../src/backend/operations/operation-manager.service';
 import { PalworldConfigurationService } from '../src/backend/palworld-configuration/palworld-configuration.service';
 import type { PalworldProcessService } from '../src/backend/palworld-process/palworld-process.service';
@@ -25,7 +26,8 @@ describe('BackupService', () => {
     operationManager,
     portableStateService
   );
-  const policyService = new BackupPolicyService(portablePathService);
+  const appSettingsService = new AppSettingsService(portablePathService);
+  const policyService = new BackupPolicyService(appSettingsService);
   const integrityService = new BackupIntegrityService();
   const archiveService = new BackupArchiveService();
   const service = new BackupService(

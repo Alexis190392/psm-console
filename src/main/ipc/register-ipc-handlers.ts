@@ -1,6 +1,7 @@
 import type { INestApplicationContext } from '@nestjs/common';
 import { app, BrowserWindow, shell, type IpcMain, type IpcMainInvokeEvent, type ProcessMetric } from 'electron';
 import { ApplicationStateService } from '../../backend/application-state/application-state.service';
+import { AppSettingsService } from '../../backend/app-settings/app-settings.service';
 import { BackupService } from '../../backend/backup/backup.service';
 import { FirewallService } from '../../backend/firewall/firewall.service';
 import { NetworkService } from '../../backend/network/network.service';
@@ -55,6 +56,7 @@ export function registerIpcHandlers(
   nestContext: INestApplicationContext
 ): void {
   const applicationStateService = nestContext.get(ApplicationStateService);
+  const appSettingsService = nestContext.get(AppSettingsService);
   const steamCmdService = nestContext.get(SteamCmdService);
   const palworldInstallationService = nestContext.get(PalworldInstallationService);
   const palworldProcessService = nestContext.get(PalworldProcessService);
@@ -78,6 +80,8 @@ export function registerIpcHandlers(
   );
 
   ipcMain.handle(ipcChannels.appGetProcessMetrics, () => getAppProcessMetrics());
+
+  ipcMain.handle(ipcChannels.appSettingsGetStatus, () => appSettingsService.getStatus());
 
   ipcMain.handle(ipcChannels.updateGetStatus, () => releaseUpdateService.getStatus());
 

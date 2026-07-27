@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ApplicationStateService } from './application-state/application-state.service';
+import { AppSettingsService } from './app-settings/app-settings.service';
 import { BackupService } from './backup/backup.service';
 import { BackupArchiveService } from './backup/backup-archive.service';
 import { BackupIntegrityService } from './backup/backup-integrity.service';
@@ -26,6 +27,7 @@ import { ServerIdleShutdownService } from './server-idle-shutdown/server-idle-sh
     PortablePathService,
     PortableStateService,
     ApplicationStateService,
+    AppSettingsService,
     OperationManagerService,
     BackupArchiveService,
     BackupIntegrityService,
@@ -49,6 +51,7 @@ import { ServerIdleShutdownService } from './server-idle-shutdown/server-idle-sh
     PortablePathService,
     PortableStateService,
     ApplicationStateService,
+    AppSettingsService,
     OperationManagerService,
     BackupArchiveService,
     BackupIntegrityService,

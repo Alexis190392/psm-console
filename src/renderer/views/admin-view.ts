@@ -1,6 +1,5 @@
 import type { PalworldAdminStatusDto } from '../../shared/dto/palworld-admin.dto';
 import type { PalworldPlayersStatusDto } from '../../shared/dto/palworld-players-status.dto';
-import type { ServerIdleStatusDto } from '../../shared/dto/server-idle-policy.dto';
 import { renderIcon } from '../components/icon';
 import { formatDateTime } from '../utils/format';
 import { escapeHtml } from '../utils/text';
@@ -10,13 +9,7 @@ export type AdminTab = 'general' | 'players' | 'map';
 export function renderAdminStatus(
   adminStatus: PalworldAdminStatusDto,
   playersStatus: PalworldPlayersStatusDto,
-  activeTab: AdminTab,
-  idleStatus: ServerIdleStatusDto = {
-    policy: { enabled: false, emptySeconds: 300 },
-    state: 'DISABLED',
-    updatedAt: new Date(0).toISOString(),
-    message: 'Apagado automatico deshabilitado.'
-  }
+  activeTab: AdminTab
 ): string {
   const isReady = adminStatus.status === 'READY';
 
@@ -25,7 +18,7 @@ export function renderAdminStatus(
       <section class="content-card admin-panel">
         ${
           isReady
-            ? renderAdminTabs(adminStatus, playersStatus, idleStatus, activeTab)
+            ? renderAdminTabs(adminStatus, playersStatus, activeTab)
             : `<div class="admin-toolbar"><span class="view-kicker">ADMINISTRACION</span><span class="view-meta-pill">${escapeHtml(adminStatus.message)}</span></div><p class="empty-state">${escapeHtml(adminStatus.message)}</p>`
         }
       </section>
@@ -36,7 +29,6 @@ export function renderAdminStatus(
 function renderAdminTabs(
   adminStatus: PalworldAdminStatusDto,
   playersStatus: PalworldPlayersStatusDto,
-  idleStatus: ServerIdleStatusDto,
   activeTab: AdminTab
 ): string {
   const tabLabel: Record<AdminTab, string> = {
@@ -50,14 +42,13 @@ function renderAdminTabs(
       <span class="view-kicker">ADMINISTRACION / ${tabLabel[activeTab]}</span>
       <span class="view-meta-pill">${escapeHtml(adminStatus.message)}</span>
     </div>
-    ${renderAdminActiveTab(adminStatus, playersStatus, idleStatus, activeTab)}
+    ${renderAdminActiveTab(adminStatus, playersStatus, activeTab)}
   `;
 }
 
 function renderAdminActiveTab(
   adminStatus: PalworldAdminStatusDto,
   playersStatus: PalworldPlayersStatusDto,
-  idleStatus: ServerIdleStatusDto,
   activeTab: AdminTab
 ): string {
   if (activeTab === 'players') {
@@ -66,10 +57,10 @@ function renderAdminActiveTab(
   if (activeTab === 'map') {
     return renderAdminMapTab(playersStatus);
   }
-  return renderAdminGeneralTab(adminStatus, idleStatus);
+  return renderAdminGeneralTab(adminStatus);
 }
 
-function renderAdminGeneralTab(adminStatus: PalworldAdminStatusDto, idleStatus: ServerIdleStatusDto): string {
+function renderAdminGeneralTab(adminStatus: PalworldAdminStatusDto): string {
   return `
     <div class="admin-runtime-actions">
       <button id="restart-server" class="secondary-button button-with-icon" type="button">
@@ -83,7 +74,6 @@ function renderAdminGeneralTab(adminStatus: PalworldAdminStatusDto, idleStatus: 
       ${renderAdminSnapshotCard('Settings', 'Configuracion activa leida del servidor', adminStatus.settings)}
     </div>
     <div class="admin-grid">
-      ${renderIdleShutdownCard(idleStatus)}
       <form class="admin-card" data-admin-form="save">
         <span class="view-kicker">MUNDO</span>
         <h4>Guardar mundo</h4>
@@ -113,39 +103,6 @@ function renderAdminGeneralTab(adminStatus: PalworldAdminStatusDto, idleStatus: 
         </button>
       </form>
     </div>
-  `;
-}
-
-function renderIdleShutdownCard(status: ServerIdleStatusDto): string {
-  const enabled = status.policy.enabled;
-  const stateLabel = status.state === 'COUNTDOWN' && typeof status.remainingSeconds === 'number'
-    ? `${String(status.remainingSeconds)} s restantes`
-    : status.message;
-
-  return `
-    <form class="admin-card admin-card--idle" data-idle-policy-form>
-      <span class="view-kicker">INACTIVIDAD</span>
-      <div class="admin-card__title-row">
-        <h4>Apagado automatico</h4>
-        <label class="toggle-control" title="Detener cuando no queden jugadores">
-          <input name="enabled" type="checkbox" ${enabled ? 'checked' : ''} />
-          <span class="toggle-control__track" aria-hidden="true"><span></span></span>
-          <span>${enabled ? 'Activo' : 'Inactivo'}</span>
-        </label>
-      </div>
-      <label class="admin-idle-seconds">
-        <span>Espera sin jugadores</span>
-        <span class="admin-idle-seconds__input">
-          <input name="emptySeconds" type="number" min="10" max="86400" step="1" value="${String(status.policy.emptySeconds)}" ${enabled ? '' : 'disabled'} />
-          <small>segundos</small>
-        </span>
-      </label>
-      <p class="admin-card__hint">${escapeHtml(stateLabel)}</p>
-      <button class="secondary-button button-with-icon" type="submit">
-        ${renderIcon('save')}
-        <span>Guardar automatizacion</span>
-      </button>
-    </form>
   `;
 }
 

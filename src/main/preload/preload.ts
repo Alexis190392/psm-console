@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { AllowedActionsDto } from '../../shared/dto/allowed-actions.dto';
 import type { ApplicationStatusDto } from '../../shared/dto/application-status.dto';
 import type { AppProcessMetricsDto } from '../../shared/dto/app-process-metrics.dto';
+import type { AppSettingsStatusDto } from '../../shared/dto/app-settings.dto';
 import type {
   BackupCreateRequestDto,
   BackupDeleteRequestDto,
@@ -73,6 +74,7 @@ const ipcChannels = {
   appGetStatus: 'app:get-status',
   appGetActions: 'app:get-actions',
   appGetProcessMetrics: 'app:get-process-metrics',
+  appSettingsGetStatus: 'app-settings:get-status',
   updateGetStatus: 'update:get-status',
   updateOpenRelease: 'update:open-release',
   operationGet: 'operation:get',
@@ -125,6 +127,9 @@ export interface PalcmApi {
     getStatus: () => Promise<ApplicationStatusDto>;
     getActions: () => Promise<AllowedActionsDto>;
     getProcessMetrics: () => Promise<AppProcessMetricsDto>;
+  };
+  appSettings: {
+    getStatus: () => Promise<AppSettingsStatusDto>;
   };
   update: {
     getStatus: () => Promise<AppUpdateStatusDto>;
@@ -205,6 +210,9 @@ const api: PalcmApi = {
     getActions: () => ipcRenderer.invoke(ipcChannels.appGetActions) as Promise<AllowedActionsDto>,
     getProcessMetrics: () =>
       ipcRenderer.invoke(ipcChannels.appGetProcessMetrics) as Promise<AppProcessMetricsDto>
+  },
+  appSettings: {
+    getStatus: () => ipcRenderer.invoke(ipcChannels.appSettingsGetStatus) as Promise<AppSettingsStatusDto>
   },
   update: {
     getStatus: () => ipcRenderer.invoke(ipcChannels.updateGetStatus) as Promise<AppUpdateStatusDto>,
