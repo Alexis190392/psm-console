@@ -69,7 +69,13 @@ import type {
 } from '../../shared/dto/steamcmd-status.dto';
 import type { NetworkDiagnosticsDto, PublicAddressRequestDto } from '../../shared/dto/network-diagnostics.dto';
 import type { AppUpdateStatusDto } from '../../shared/dto/app-update-status.dto';
-import type { RemoteApiStatusDto, RemoteApiUpdateRequestDto } from '../../shared/dto/remote-api.dto';
+import type {
+  RemoteApiFirewallCheckRequestDto,
+  RemoteApiFirewallRuleRequestDto,
+  RemoteApiFirewallStatusDto,
+  RemoteApiStatusDto,
+  RemoteApiUpdateRequestDto
+} from '../../shared/dto/remote-api.dto';
 
 const ipcChannels = {
   appGetStatus: 'app:get-status',
@@ -78,6 +84,8 @@ const ipcChannels = {
   appSettingsGetStatus: 'app-settings:get-status',
   remoteApiGetStatus: 'remote-api:get-status',
   remoteApiUpdate: 'remote-api:update',
+  remoteApiFirewallGetStatus: 'remote-api-firewall:get-status',
+  remoteApiFirewallCreateRule: 'remote-api-firewall:create-rule',
   updateGetStatus: 'update:get-status',
   updateOpenRelease: 'update:open-release',
   operationGet: 'operation:get',
@@ -137,6 +145,8 @@ export interface PalcmApi {
   remoteApi: {
     getStatus: () => Promise<RemoteApiStatusDto>;
     update: (request: RemoteApiUpdateRequestDto) => Promise<RemoteApiStatusDto>;
+    getFirewallStatus: (request: RemoteApiFirewallCheckRequestDto) => Promise<RemoteApiFirewallStatusDto>;
+    createFirewallRule: (request: RemoteApiFirewallRuleRequestDto) => Promise<OperationAcceptedDto>;
   };
   update: {
     getStatus: () => Promise<AppUpdateStatusDto>;
@@ -224,7 +234,11 @@ const api: PalcmApi = {
   remoteApi: {
     getStatus: () => ipcRenderer.invoke(ipcChannels.remoteApiGetStatus) as Promise<RemoteApiStatusDto>,
     update: (request) =>
-      ipcRenderer.invoke(ipcChannels.remoteApiUpdate, request) as Promise<RemoteApiStatusDto>
+      ipcRenderer.invoke(ipcChannels.remoteApiUpdate, request) as Promise<RemoteApiStatusDto>,
+    getFirewallStatus: (request) =>
+      ipcRenderer.invoke(ipcChannels.remoteApiFirewallGetStatus, request) as Promise<RemoteApiFirewallStatusDto>,
+    createFirewallRule: (request) =>
+      ipcRenderer.invoke(ipcChannels.remoteApiFirewallCreateRule, request) as Promise<OperationAcceptedDto>
   },
   update: {
     getStatus: () => ipcRenderer.invoke(ipcChannels.updateGetStatus) as Promise<AppUpdateStatusDto>,

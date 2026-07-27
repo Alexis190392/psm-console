@@ -16,7 +16,7 @@
           <img src="/api/v1/logo.png" alt="" width="36" height="36">
           <div>
             <strong>PSM Console</strong>
-            <span>Administracion web</span>
+            <span id="access-profile-label">Administracion web</span>
           </div>
         </div>
         <div id="connection-state" class="connection-state" hidden>
@@ -55,9 +55,9 @@
         <section id="dashboard-view" class="dashboard" hidden>
           <aside class="sidebar" aria-label="Navegacion principal">
             <nav>
-              <button class="nav-button active" type="button" data-view="general">General</button>
-              <button class="nav-button" type="button" data-view="players">Jugadores</button>
-              <button class="nav-button" type="button" data-view="logs">Logs</button>
+              <button class="nav-button active" type="button" data-view="general" data-permission-any="GENERAL,SERVER_CONTROL">General</button>
+              <button class="nav-button" type="button" data-view="players" data-permission="PLAYERS">Jugadores</button>
+              <button class="nav-button" type="button" data-view="logs" data-permission="LOGS">Logs</button>
             </nav>
             <button id="logout-button" class="secondary-button" type="button">Cerrar sesion</button>
           </aside>
@@ -72,7 +72,7 @@
                 <button class="icon-button refresh-button" type="button" data-refresh aria-label="Actualizar estado" title="Actualizar estado">↻</button>
               </div>
 
-              <div class="status-grid">
+              <div class="status-grid" data-permission="GENERAL">
                 <article class="status-card">
                   <span>Aplicacion</span>
                   <strong id="application-status">Consultando</strong>
@@ -83,14 +83,14 @@
                   <strong id="server-status">Consultando</strong>
                   <small id="server-message">Verificando proceso...</small>
                 </article>
-                <article class="status-card">
+                <article class="status-card" data-permission="PLAYERS">
                   <span>Jugadores</span>
                   <strong id="player-count">--</strong>
                   <small>Conectados en esta instancia</small>
                 </article>
               </div>
 
-              <section class="action-panel">
+              <section class="action-panel" data-permission="SERVER_CONTROL">
                 <div>
                   <p class="eyebrow">CONTROL</p>
                   <h2>Acciones del servidor</h2>

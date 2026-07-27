@@ -83,6 +83,47 @@ describe('RemoteApiService', () => {
     expect((await remoteApi.getStatus()).state).toBe('RUNNING');
     expect((await fetch(`${baseUrl}/health`)).status).toBe(200);
   });
+
+  it('serves the client profile on its own port and enforces configured permissions', async () => {
+    const port = await getFreePort();
+    const appSettings = new AppSettingsService(paths);
+    const fixture = createRemoteApiFixture(appSettings, portableRoot);
+    remoteApi = fixture.service;
+
+    const status = await remoteApi.update({
+      confirmed: true,
+      profile: 'CLIENT',
+      enabled: true,
+      bindMode: 'LOCAL_ONLY',
+      port,
+      username: 'friend',
+      password: 'abcde',
+      permissions: ['PLAYERS']
+    });
+    const baseUrl = `http://127.0.0.1:${String(port)}/api/v1`;
+    expect(status.client.state).toBe('RUNNING');
+
+    const loginResponse = await fetch(`${baseUrl}/auth/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username: 'friend', password: 'abcde' })
+    });
+    const login = await loginResponse.json() as {
+      token: string;
+      profile: string;
+      permissions: string[];
+    };
+    const headers = { authorization: `Bearer ${login.token}` };
+
+    expect(login.profile).toBe('CLIENT');
+    expect(login.permissions).toEqual(['PLAYERS']);
+    expect((await fetch(`${baseUrl}/session`, { headers })).status).toBe(200);
+    expect((await fetch(`${baseUrl}/players`, { headers })).status).toBe(200);
+    expect((await fetch(`${baseUrl}/status`, { headers })).status).toBe(403);
+    expect((await fetch(`${baseUrl}/logs`, { headers })).status).toBe(403);
+    expect((await fetch(`${baseUrl}/server/start`, { method: 'POST', headers })).status).toBe(403);
+    expect(fixture.start).not.toHaveBeenCalled();
+  });
 });
 
 function createRemoteApiFixture(

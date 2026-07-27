@@ -1,7 +1,11 @@
 import type { AppSettingsStatusDto } from '../../shared/dto/app-settings.dto';
 import type { AppUpdateStatusDto } from '../../shared/dto/app-update-status.dto';
 import type { BackupSummaryDto } from '../../shared/dto/backup-status.dto';
-import type { RemoteApiStatusDto } from '../../shared/dto/remote-api.dto';
+import type {
+  RemoteApiPermission,
+  RemoteApiProfileStatusDto,
+  RemoteApiStatusDto
+} from '../../shared/dto/remote-api.dto';
 import type { ServerIdleStatusDto } from '../../shared/dto/server-idle-policy.dto';
 import { APP_VERSION_LABEL } from '../../shared/constants/app-info';
 import { renderIcon } from '../components/icon';
@@ -210,11 +214,11 @@ function renderRemoteApiSettings(status: RemoteApiStatusDto): string {
   const enabled = settings.enabled;
   const passwordHint = settings.passwordConfigured
     ? 'Deja este campo vacio para conservar la contraseña actual.'
-    : 'Configura una contraseña de al menos 8 caracteres para habilitar la API.';
+    : 'Configura una contraseña de al menos 5 caracteres para habilitar la API.';
 
   return `
     <section class="settings-api-grid">
-      <form id="remote-api-form" class="admin-card settings-api-form">
+      <form class="admin-card settings-api-form" data-remote-api-form="ADMIN">
         <div class="admin-card__title-row">
           <div>
             <span class="view-kicker">ACCESO HTTP</span>
@@ -244,7 +248,7 @@ function renderRemoteApiSettings(status: RemoteApiStatusDto): string {
           </label>
           <label>
             <span>Nueva contraseña</span>
-            <input name="password" type="password" minlength="8" maxlength="128" autocomplete="new-password" placeholder="${settings.passwordConfigured ? 'Contraseña configurada' : 'Minimo 8 caracteres'}" />
+            <input name="password" type="password" minlength="5" maxlength="128" autocomplete="new-password" placeholder="${settings.passwordConfigured ? 'Contrasena configurada' : 'Minimo 5 caracteres'}" />
             <small>${passwordHint}</small>
           </label>
         </div>
@@ -269,7 +273,92 @@ function renderRemoteApiSettings(status: RemoteApiStatusDto): string {
           Usa acceso por red solo en una LAN confiable. Esta primera version sirve HTTP y no debe publicarse directamente en Internet.
         </p>
       </article>
+      ${renderClientApiProfile(status.client)}
     </section>
+  `;
+}
+
+function renderClientApiProfile(status: RemoteApiProfileStatusDto): string {
+  const settings = status.settings;
+  const permissions = 'permissions' in settings ? settings.permissions : [];
+  return `
+    <form class="admin-card settings-api-form" data-remote-api-form="CLIENT">
+      <div class="admin-card__title-row">
+        <div>
+          <span class="view-kicker">ACCESO LIMITADO</span>
+          <h4>API cliente</h4>
+        </div>
+        <label class="toggle-control">
+          <input name="enabled" type="checkbox" ${settings.enabled ? 'checked' : ''} />
+          <span class="toggle-control__track" aria-hidden="true"><span></span></span>
+          <span>${settings.enabled ? 'Activa' : 'Inactiva'}</span>
+        </label>
+      </div>
+      <div class="settings-api-form__fields">
+        <label>
+          <span>Acceso</span>
+          <select name="bindMode">
+            <option value="LOCAL_ONLY" ${settings.bindMode === 'LOCAL_ONLY' ? 'selected' : ''}>Solo este equipo</option>
+            <option value="LOCAL_NETWORK" ${settings.bindMode === 'LOCAL_NETWORK' ? 'selected' : ''}>Red local</option>
+          </select>
+        </label>
+        <label>
+          <span>Puerto</span>
+          <input name="port" type="number" min="1024" max="65535" step="1" value="${String(settings.port)}" required />
+        </label>
+        <label>
+          <span>Usuario cliente</span>
+          <input name="username" type="text" minlength="3" maxlength="64" pattern="[A-Za-z0-9._-]+" value="${escapeHtml(settings.username)}" autocomplete="username" required />
+        </label>
+        <label>
+          <span>Nueva contrasena</span>
+          <input name="password" type="password" minlength="5" maxlength="128" autocomplete="new-password" placeholder="${settings.passwordConfigured ? 'Contrasena configurada' : 'Minimo 5 caracteres'}" />
+          <small>${settings.passwordConfigured ? 'Deja el campo vacio para conservarla.' : 'Minimo 5 caracteres.'}</small>
+        </label>
+      </div>
+      ${renderClientPermissions(permissions)}
+      <div class="admin-card__actions">
+        <button class="primary-button button-with-icon" type="submit">${renderIcon('save')}<span>Guardar API cliente</span></button>
+      </div>
+    </form>
+    <article class="content-card settings-api-status">
+      <span class="view-kicker">ESTADO CLIENTE</span>
+      <div class="settings-api-status__heading">
+        <strong>${escapeHtml(remoteApiStateLabel(status.state))}</strong>
+        <span class="settings-api-status__indicator settings-api-status__indicator--${status.state.toLowerCase()}"></span>
+      </div>
+      <p>${escapeHtml(status.message)}</p>
+      ${status.endpoint ? `<code>${escapeHtml(status.endpoint)}</code>` : ''}
+      <dl>
+        <div><dt>Autenticacion</dt><dd>Usuario cliente y token</dd></div>
+        <div><dt>Sesion</dt><dd>8 h</dd></div>
+      </dl>
+      <p class="settings-api-status__warning ${settings.bindMode === 'LOCAL_NETWORK' ? '' : 'hidden'}">
+        La API cliente usa HTTP. Habilitala solo en una red local confiable.
+      </p>
+    </article>
+  `;
+}
+
+function renderClientPermissions(permissions: RemoteApiPermission[]): string {
+  const options: Array<{ value: RemoteApiPermission; label: string; detail: string }> = [
+    { value: 'GENERAL', label: 'Estado general', detail: 'Estado de la aplicacion y del servidor.' },
+    { value: 'SERVER_CONTROL', label: 'Control del servidor', detail: 'Iniciar, reiniciar y detener.' },
+    { value: 'PLAYERS', label: 'Jugadores', detail: 'Listado de jugadores conectados.' },
+    { value: 'LOGS', label: 'Logs', detail: 'Actividad de la instancia.' }
+  ];
+  return `
+    <fieldset class="settings-api-permissions">
+      <legend>Contenido visible para el cliente</legend>
+      <div class="settings-api-permissions__grid">
+        ${options.map((option) => `
+          <label class="settings-permission-option">
+            <input name="permissions" type="checkbox" value="${option.value}" ${permissions.includes(option.value) ? 'checked' : ''} />
+            <span><strong>${option.label}</strong><small>${option.detail}</small></span>
+          </label>
+        `).join('')}
+      </div>
+    </fieldset>
   `;
 }
 

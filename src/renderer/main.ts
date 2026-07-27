@@ -19,7 +19,10 @@ import type { OperationProgressDto } from '../shared/dto/operation-progress.dto'
 import type { PalworldAdminAction, PalworldAdminStatusDto } from '../shared/dto/palworld-admin.dto';
 import type { PalworldPlayersStatusDto } from '../shared/dto/palworld-players-status.dto';
 import type { PalworldQueryPortStatusDto, PalworldRuntimeStatusDto } from '../shared/dto/palworld-runtime-status.dto';
-import type { RemoteApiUpdateRequestDto } from '../shared/dto/remote-api.dto';
+import type {
+  RemoteApiPermission,
+  RemoteApiUpdateRequestDto
+} from '../shared/dto/remote-api.dto';
 import {
   createSummaryCardState,
   renderSummaryCard,
@@ -2163,50 +2166,74 @@ function bindAppSettingsControls(): void {
 }
 
 function bindRemoteApiControls(): void {
-  const form = document.querySelector<HTMLFormElement>('#remote-api-form');
-  if (!form) {
-    return;
-  }
-
-  const enabled = form.elements.namedItem('enabled');
-  const bindMode = form.elements.namedItem('bindMode');
-  const password = form.elements.namedItem('password');
-  if (!(enabled instanceof HTMLInputElement)
-    || !(bindMode instanceof HTMLSelectElement)
-    || !(password instanceof HTMLInputElement)) {
-    return;
-  }
-
-  form.addEventListener('submit', (event) => {
-    event.preventDefault();
-    if (!form.reportValidity()) {
-      return;
-    }
-    if (enabled.checked && !password.value && password.placeholder !== 'Contraseña configurada') {
-      password.setCustomValidity('Configura una contraseña de al menos 8 caracteres.');
-      password.reportValidity();
-      password.setCustomValidity('');
+  document.querySelectorAll<HTMLFormElement>('[data-remote-api-form]').forEach((form) => {
+    const profile = form.dataset['remoteApiForm'] === 'CLIENT' ? 'CLIENT' : 'ADMIN';
+    const enabled = form.elements.namedItem('enabled');
+    const bindMode = form.elements.namedItem('bindMode');
+    const password = form.elements.namedItem('password');
+    if (!(enabled instanceof HTMLInputElement)
+      || !(bindMode instanceof HTMLSelectElement)
+      || !(password instanceof HTMLInputElement)) {
       return;
     }
 
-    const values = new FormData(form);
-    const username = values.get('username');
-    if (typeof username !== 'string') {
-      return;
-    }
-    const request: RemoteApiUpdateRequestDto = {
-      confirmed: true,
-      enabled: enabled.checked,
-      bindMode: bindMode.value === 'LOCAL_NETWORK' ? 'LOCAL_NETWORK' : 'LOCAL_ONLY',
-      port: Number(values.get('port')),
-      username,
-      ...(password.value ? { password: password.value } : {})
-    };
-    showRemoteApiConfirmation(request);
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      if (!form.reportValidity()) {
+        return;
+      }
+      if (enabled.checked && !password.value && password.placeholder !== 'Contrasena configurada') {
+        password.setCustomValidity('Configura una contrasena de al menos 5 caracteres.');
+        password.reportValidity();
+        password.setCustomValidity('');
+        return;
+      }
+
+      const values = new FormData(form);
+      const username = values.get('username');
+      if (typeof username !== 'string') {
+        return;
+      }
+      const request: RemoteApiUpdateRequestDto = {
+        confirmed: true,
+        profile,
+        enabled: enabled.checked,
+        bindMode: bindMode.value === 'LOCAL_NETWORK' ? 'LOCAL_NETWORK' : 'LOCAL_ONLY',
+        port: Number(values.get('port')),
+        username,
+        ...(profile === 'CLIENT'
+          ? { permissions: values.getAll('permissions').filter(isRemoteApiPermission) }
+          : {}),
+        ...(password.value ? { password: password.value } : {})
+      };
+      runUiAction(
+        'No se pudo verificar el acceso de red de la API',
+        () => prepareRemoteApiConfirmation(request)
+      );
+    });
   });
 }
 
-function showRemoteApiConfirmation(request: RemoteApiUpdateRequestDto): void {
+async function prepareRemoteApiConfirmation(request: RemoteApiUpdateRequestDto): Promise<void> {
+  let firewallConfigured = true;
+  if (palcmApi && request.enabled && request.bindMode === 'LOCAL_NETWORK') {
+    try {
+      const status = await palcmApi.remoteApi.getFirewallStatus({
+        profile: request.profile ?? 'ADMIN',
+        port: request.port
+      });
+      firewallConfigured = status.configured;
+    } catch {
+      firewallConfigured = false;
+    }
+  }
+  showRemoteApiConfirmation(request, firewallConfigured);
+}
+
+function showRemoteApiConfirmation(
+  request: RemoteApiUpdateRequestDto,
+  firewallConfigured: boolean
+): void {
   if (!appFooter) {
     return;
   }
@@ -2217,20 +2244,33 @@ function showRemoteApiConfirmation(request: RemoteApiUpdateRequestDto): void {
   const exposure = request.bindMode === 'LOCAL_NETWORK'
     ? 'desde otros equipos de la red local'
     : 'solo desde este equipo';
+  const profileLabel = request.profile === 'CLIENT' ? 'cliente' : 'administrativa';
+  const needsFirewall = request.enabled
+    && request.bindMode === 'LOCAL_NETWORK'
+    && !firewallConfigured;
   appFooter.innerHTML = renderInlineConfirm({
     message: request.enabled
-      ? `La API administrativa quedara disponible ${exposure} por el puerto ${String(request.port)}.`
-      : 'La API administrativa se detendra y las sesiones actuales dejaran de funcionar.',
+      ? `La API ${profileLabel} quedara disponible ${exposure} por el puerto ${String(request.port)}.${needsFirewall ? ' Windows aun no permite ese puerto.' : ''}`
+      : `La API ${profileLabel} se detendra y sus sesiones dejaran de funcionar.`,
     actions: [
       {
         id: 'confirm-remote-api',
-        label: request.enabled ? 'Habilitar API' : 'Deshabilitar API',
+        label: needsFirewall ? 'Habilitar y configurar Windows' : request.enabled ? 'Habilitar API' : 'Deshabilitar API',
         tone: request.enabled ? 'warning' : 'secondary'
       },
+      ...(needsFirewall
+        ? [{ id: 'confirm-remote-api-without-firewall', label: 'Continuar sin regla', tone: 'secondary' as const }]
+        : []),
       { id: 'cancel-remote-api', label: 'Cancelar', tone: 'secondary' }
     ]
   });
   document.querySelector<HTMLButtonElement>('#confirm-remote-api')?.addEventListener('click', () => {
+    runUiAction('No se pudo guardar la API web', () => updateRemoteApi({
+      ...request,
+      configureFirewall: needsFirewall
+    }));
+  });
+  document.querySelector<HTMLButtonElement>('#confirm-remote-api-without-firewall')?.addEventListener('click', () => {
     runUiAction('No se pudo guardar la API web', () => updateRemoteApi(request));
   });
   document.querySelector<HTMLButtonElement>('#cancel-remote-api')?.addEventListener('click', () => {
@@ -2244,9 +2284,28 @@ async function updateRemoteApi(request: RemoteApiUpdateRequestDto): Promise<void
     return;
   }
   await palcmApi.remoteApi.update(request);
+  if (request.configureFirewall && request.enabled && request.bindMode === 'LOCAL_NETWORK') {
+    const accepted = await palcmApi.remoteApi.createFirewallRule({
+      confirmed: true,
+      profile: request.profile ?? 'ADMIN',
+      port: request.port
+    });
+    const firewallReady = await pollOperation(accepted.operationId);
+    if (!firewallReady) {
+      showToast('API habilitada, pero Windows no pudo configurarse', 'error');
+      updateFooterChrome();
+      await renderAppSettings();
+      return;
+    }
+  }
   showToast(request.enabled ? 'API web actualizada' : 'API web deshabilitada');
   updateFooterChrome();
   await renderAppSettings();
+}
+
+function isRemoteApiPermission(value: FormDataEntryValue): value is RemoteApiPermission {
+  return typeof value === 'string'
+    && ['GENERAL', 'SERVER_CONTROL', 'PLAYERS', 'LOGS'].includes(value);
 }
 
 function bindBackupFilters(): void {

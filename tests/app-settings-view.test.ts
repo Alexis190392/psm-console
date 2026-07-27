@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { renderAppSettingsView } from '../src/renderer/views/app-settings-view';
+import type { RemoteApiPermission } from '../src/shared/dto/remote-api.dto';
 
 const appStatus = {
   settings: {
-    schemaVersion: 2 as const,
+    schemaVersion: 3 as const,
     automation: {
       idleShutdown: { enabled: true, emptySeconds: 120 },
       backups: {
@@ -18,7 +19,15 @@ const appStatus = {
       bindMode: 'LOCAL_ONLY' as const,
       port: 8213,
       username: 'admin',
-      passwordConfigured: false
+      passwordConfigured: false,
+      client: {
+        enabled: false,
+        bindMode: 'LOCAL_ONLY' as const,
+        port: 8214,
+        username: 'cliente',
+        passwordConfigured: false,
+        permissions: ['GENERAL', 'SERVER_CONTROL', 'PLAYERS', 'LOGS'] as RemoteApiPermission[]
+      }
     }
   },
   portableRoot: 'D:\\PSM',
@@ -43,7 +52,13 @@ const remoteApiStatus = {
   settings: appStatus.settings.remoteApi,
   state: 'DISABLED' as const,
   message: 'API web deshabilitada.',
-  updatedAt: new Date().toISOString()
+  updatedAt: new Date().toISOString(),
+  client: {
+    settings: appStatus.settings.remoteApi.client,
+    state: 'DISABLED' as const,
+    message: 'API cliente deshabilitada.',
+    updatedAt: new Date().toISOString()
+  }
 };
 
 describe('app settings view', () => {
@@ -153,7 +168,10 @@ describe('app settings view', () => {
     );
 
     expect(html).toContain('API administrativa');
-    expect(html).toContain('Contraseña configurada');
+    expect(html).toContain('API cliente');
+    expect(html).toContain('Contenido visible para el cliente');
+    expect(html).toContain('Contrasena configurada');
+    expect(html).toContain('minlength="5"');
     expect(html).toContain('http://127.0.0.1:8213/api/v1');
     expect(html).toContain('<dt>Sesion</dt><dd>8 h</dd>');
     expect(html).not.toContain('passwordHash');

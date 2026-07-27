@@ -5,6 +5,8 @@ export const ipcChannels = {
   appSettingsGetStatus: 'app-settings:get-status',
   remoteApiGetStatus: 'remote-api:get-status',
   remoteApiUpdate: 'remote-api:update',
+  remoteApiFirewallGetStatus: 'remote-api-firewall:get-status',
+  remoteApiFirewallCreateRule: 'remote-api-firewall:create-rule',
   updateGetStatus: 'update:get-status',
   updateOpenRelease: 'update:open-release',
   operationGet: 'operation:get',

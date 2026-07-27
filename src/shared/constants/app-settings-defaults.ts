@@ -19,5 +19,13 @@ export const DEFAULT_REMOTE_API_SETTINGS: RemoteApiSettingsDto = {
   bindMode: 'LOCAL_ONLY',
   port: 8213,
   username: 'admin',
-  passwordConfigured: false
+  passwordConfigured: false,
+  client: {
+    enabled: false,
+    bindMode: 'LOCAL_ONLY',
+    port: 8214,
+    username: 'cliente',
+    passwordConfigured: false,
+    permissions: ['GENERAL', 'SERVER_CONTROL', 'PLAYERS', 'LOGS']
+  }
 };

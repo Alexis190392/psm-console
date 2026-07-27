@@ -13,18 +13,23 @@ import {
 import type { AppSettingsDto, AppSettingsStatusDto } from '../../shared/dto/app-settings.dto';
 import type { BackupPolicyDto } from '../../shared/dto/backup-status.dto';
 import type {
+  RemoteApiClientSettingsDto,
+  RemoteApiProfile,
   RemoteApiSettingsDto,
   RemoteApiUpdateRequestDto
 } from '../../shared/dto/remote-api.dto';
 import type { ServerIdlePolicyDto } from '../../shared/dto/server-idle-policy.dto';
-import type { StoredRemoteApiSettings } from '../remote-api/remote-api-settings.types';
+import type {
+  StoredRemoteApiClientSettings,
+  StoredRemoteApiSettings
+} from '../remote-api/remote-api-settings.types';
 
-const APP_SETTINGS_SCHEMA_VERSION = 2;
+const APP_SETTINGS_SCHEMA_VERSION = 3;
 const PASSWORD_KEY_LENGTH = 64;
 const scryptAsync = promisify(scrypt);
 
 interface StoredAppSettings {
-  schemaVersion: 2;
+  schemaVersion: 3;
   automation: {
     idleShutdown: ServerIdlePolicyDto;
     backups: BackupPolicyDto;
@@ -60,11 +65,23 @@ export class AppSettingsService {
   }
 
   async getRemoteApiSettings(): Promise<StoredRemoteApiSettings> {
-    return { ...(await this.readStored()).remoteApi };
+    const settings = (await this.readStored()).remoteApi;
+    return {
+      ...settings,
+      client: {
+        ...settings.client,
+        permissions: [...settings.client.permissions]
+      }
+    };
   }
 
-  async verifyRemoteApiCredentials(username: string, password: string): Promise<boolean> {
-    const settings = await this.getRemoteApiSettings();
+  async verifyRemoteApiCredentials(
+    profile: RemoteApiProfile,
+    username: string,
+    password: string
+  ): Promise<boolean> {
+    const remoteApi = await this.getRemoteApiSettings();
+    const settings = profile === 'CLIENT' ? remoteApi.client : remoteApi;
     if (
       username !== settings.username
       || !settings.passwordSalt
@@ -86,7 +103,8 @@ export class AppSettingsService {
     }
 
     const settings = await this.readStored();
-    const current = settings.remoteApi;
+    const profile = request.profile ?? 'ADMIN';
+    const current = profile === 'CLIENT' ? settings.remoteApi.client : settings.remoteApi;
     const username = validateRemoteApiUsername(request.username);
     const password = request.password?.trim() ?? '';
     let passwordSalt = current.passwordSalt;
@@ -102,14 +120,38 @@ export class AppSettingsService {
       throw new Error('REMOTE_API_PASSWORD_REQUIRED');
     }
 
-    settings.remoteApi = validateStoredRemoteApi({
-      enabled: request.enabled,
-      bindMode: request.bindMode,
-      port: request.port,
-      username,
-      passwordSalt,
-      passwordHash
-    });
+    if (profile === 'CLIENT') {
+      settings.remoteApi.client = validateStoredRemoteApiClient({
+        enabled: request.enabled,
+        bindMode: request.bindMode,
+        port: request.port,
+        username,
+        passwordSalt,
+        passwordHash,
+        permissions: request.permissions ?? settings.remoteApi.client.permissions
+      });
+      if (settings.remoteApi.client.enabled && settings.remoteApi.client.permissions.length === 0) {
+        throw new Error('REMOTE_API_CLIENT_PERMISSION_REQUIRED');
+      }
+    } else {
+      settings.remoteApi = validateStoredRemoteApi({
+        ...settings.remoteApi,
+        enabled: request.enabled,
+        bindMode: request.bindMode,
+        port: request.port,
+        username,
+        passwordSalt,
+        passwordHash
+      });
+    }
+
+    if (
+      settings.remoteApi.enabled
+      && settings.remoteApi.client.enabled
+      && settings.remoteApi.port === settings.remoteApi.client.port
+    ) {
+      throw new Error('REMOTE_API_PORT_CONFLICT');
+    }
     await this.write(settings);
     return toPublicRemoteApiSettings(settings.remoteApi);
   }
@@ -190,7 +232,16 @@ function createDefaultSettings(): StoredAppSettings {
       port: DEFAULT_REMOTE_API_SETTINGS.port,
       username: DEFAULT_REMOTE_API_SETTINGS.username,
       passwordSalt: '',
-      passwordHash: ''
+      passwordHash: '',
+      client: {
+        enabled: DEFAULT_REMOTE_API_SETTINGS.client.enabled,
+        bindMode: DEFAULT_REMOTE_API_SETTINGS.client.bindMode,
+        port: DEFAULT_REMOTE_API_SETTINGS.client.port,
+        username: DEFAULT_REMOTE_API_SETTINGS.client.username,
+        passwordSalt: '',
+        passwordHash: '',
+        permissions: [...DEFAULT_REMOTE_API_SETTINGS.client.permissions]
+      }
     }
   };
 }
@@ -236,7 +287,43 @@ function validateStoredRemoteApi(settings: Partial<StoredRemoteApiSettings>): St
     port: settings.port,
     username: validateRemoteApiUsername(settings.username ?? ''),
     passwordSalt: typeof settings.passwordSalt === 'string' ? settings.passwordSalt : '',
-    passwordHash: typeof settings.passwordHash === 'string' ? settings.passwordHash : ''
+    passwordHash: typeof settings.passwordHash === 'string' ? settings.passwordHash : '',
+    client: validateStoredRemoteApiClient(settings.client)
+  };
+}
+
+function validateStoredRemoteApiClient(
+  settings: Partial<StoredRemoteApiClientSettings> | undefined
+): StoredRemoteApiClientSettings {
+  const defaults = createDefaultSettings().remoteApi.client;
+  const candidate = {
+    ...defaults,
+    ...settings
+  };
+  const bindMode: unknown = candidate.bindMode;
+  if (typeof candidate.enabled !== 'boolean') {
+    throw new Error('REMOTE_API_CLIENT_ENABLED_INVALID');
+  }
+  if (bindMode !== 'LOCAL_ONLY' && bindMode !== 'LOCAL_NETWORK') {
+    throw new Error('REMOTE_API_CLIENT_BIND_MODE_INVALID');
+  }
+  if (
+    typeof candidate.port !== 'number'
+    || !Number.isInteger(candidate.port)
+    || candidate.port < 1024
+    || candidate.port > 65_535
+  ) {
+    throw new Error('REMOTE_API_CLIENT_PORT_OUT_OF_RANGE');
+  }
+
+  return {
+    enabled: candidate.enabled,
+    bindMode,
+    port: candidate.port,
+    username: validateRemoteApiUsername(candidate.username),
+    passwordSalt: typeof candidate.passwordSalt === 'string' ? candidate.passwordSalt : '',
+    passwordHash: typeof candidate.passwordHash === 'string' ? candidate.passwordHash : '',
+    permissions: validateRemoteApiPermissions(candidate.permissions)
   };
 }
 
@@ -249,9 +336,19 @@ function validateRemoteApiUsername(username: string): string {
 }
 
 function validateRemoteApiPassword(password: string): void {
-  if (password.length < 8 || password.length > 128) {
+  if (password.length < 5 || password.length > 128) {
     throw new Error('REMOTE_API_PASSWORD_INVALID');
   }
+}
+
+function validateRemoteApiPermissions(
+  permissions: StoredRemoteApiClientSettings['permissions']
+): StoredRemoteApiClientSettings['permissions'] {
+  const allowed = new Set(['GENERAL', 'SERVER_CONTROL', 'PLAYERS', 'LOGS']);
+  if (!Array.isArray(permissions) || permissions.some((permission) => !allowed.has(permission))) {
+    throw new Error('REMOTE_API_CLIENT_PERMISSIONS_INVALID');
+  }
+  return [...new Set(permissions)];
 }
 
 function toPublicSettings(settings: StoredAppSettings): AppSettingsDto {
@@ -271,7 +368,21 @@ function toPublicRemoteApiSettings(settings: StoredRemoteApiSettings): RemoteApi
     bindMode: settings.bindMode,
     port: settings.port,
     username: settings.username,
-    passwordConfigured: Boolean(settings.passwordSalt && settings.passwordHash)
+    passwordConfigured: Boolean(settings.passwordSalt && settings.passwordHash),
+    client: toPublicRemoteApiClientSettings(settings.client)
+  };
+}
+
+function toPublicRemoteApiClientSettings(
+  settings: StoredRemoteApiClientSettings
+): RemoteApiClientSettingsDto {
+  return {
+    enabled: settings.enabled,
+    bindMode: settings.bindMode,
+    port: settings.port,
+    username: settings.username,
+    passwordConfigured: Boolean(settings.passwordSalt && settings.passwordHash),
+    permissions: [...settings.permissions]
   };
 }
 

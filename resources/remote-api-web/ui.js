@@ -5,6 +5,10 @@
   var TOKEN_KEY = 'psm-console-api-token';
   var refreshTimer = null;
   var toastTimer = null;
+  var access = {
+    profile: 'ADMIN',
+    permissions: ['GENERAL', 'SERVER_CONTROL', 'PLAYERS', 'LOGS']
+  };
 
   var loginView = document.getElementById('login-view');
   var dashboardView = document.getElementById('dashboard-view');
@@ -85,6 +89,33 @@
     startRefreshTimer();
   }
 
+  function hasPermission(permission) {
+    return access.profile === 'ADMIN' || access.permissions.includes(permission);
+  }
+
+  function applyAccess(session) {
+    access = {
+      profile: session.profile || 'CLIENT',
+      permissions: Array.isArray(session.permissions) ? session.permissions : []
+    };
+    document.getElementById('access-profile-label').textContent = access.profile === 'CLIENT'
+      ? 'Acceso cliente'
+      : 'Administracion web';
+    document.querySelectorAll('[data-permission]').forEach(function (element) {
+      element.hidden = !hasPermission(element.dataset.permission);
+    });
+    document.querySelectorAll('[data-permission-any]').forEach(function (element) {
+      var permissions = (element.dataset.permissionAny || '').split(',');
+      element.hidden = !permissions.some(hasPermission);
+    });
+    var firstVisibleNavigation = Array.from(document.querySelectorAll('.nav-button')).find(function (button) {
+      return !button.hidden;
+    });
+    if (firstVisibleNavigation) {
+      selectView(firstVisibleNavigation.dataset.view);
+    }
+  }
+
   function startRefreshTimer() {
     clearInterval(refreshTimer);
     refreshTimer = setInterval(function () {
@@ -107,6 +138,7 @@
         })
       });
       sessionStorage.setItem(TOKEN_KEY, result.token);
+      applyAccess(result);
       passwordInput.value = '';
       showDashboard();
       await refreshAll();
@@ -224,7 +256,17 @@
 
   async function refreshAll() {
     try {
-      await Promise.all([refreshStatus(), refreshPlayers(), refreshLogs()]);
+      var requests = [];
+      if (hasPermission('GENERAL') || hasPermission('SERVER_CONTROL')) {
+        requests.push(refreshStatus());
+      }
+      if (hasPermission('PLAYERS')) {
+        requests.push(refreshPlayers());
+      }
+      if (hasPermission('LOGS')) {
+        requests.push(refreshLogs());
+      }
+      await Promise.all(requests);
       connectionLabel.textContent = 'Conectado';
     } catch (error) {
       if (error.message !== 'AUTHENTICATION_REQUIRED') {
@@ -243,11 +285,11 @@
     try {
       var view = getVisibleView();
       if (view === 'players') {
-        await Promise.all([refreshStatus(), refreshPlayers()]);
+        await refreshPlayers();
       } else if (view === 'logs') {
-        await Promise.all([refreshStatus(), refreshLogs()]);
+        await refreshLogs();
       } else {
-        await Promise.all([refreshStatus(), refreshPlayers()]);
+        await refreshStatus();
       }
       connectionLabel.textContent = 'Conectado';
       if (notify) {
@@ -359,8 +401,15 @@
   });
 
   if (getToken()) {
-    showDashboard();
-    void refreshAll();
+    apiRequest('/session')
+      .then(function (session) {
+        applyAccess(session);
+        showDashboard();
+        return refreshAll();
+      })
+      .catch(function () {
+        showLogin('La sesion finalizo. Ingresa nuevamente.');
+      });
   } else {
     showLogin();
   }

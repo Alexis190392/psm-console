@@ -51,7 +51,11 @@ import type { LogFileReadRequestDto, LogsRecentRequestDto } from '../../shared/d
 import type { ServerIdlePolicyUpdateRequestDto } from '../../shared/dto/server-idle-policy.dto';
 import type { PublicAddressRequestDto } from '../../shared/dto/network-diagnostics.dto';
 import type { AppProcessKind, AppProcessMetricDto, AppProcessMetricsDto } from '../../shared/dto/app-process-metrics.dto';
-import type { RemoteApiUpdateRequestDto } from '../../shared/dto/remote-api.dto';
+import type {
+  RemoteApiFirewallCheckRequestDto,
+  RemoteApiFirewallRuleRequestDto,
+  RemoteApiUpdateRequestDto
+} from '../../shared/dto/remote-api.dto';
 
 export function registerIpcHandlers(
   ipcMain: Pick<IpcMain, 'handle'>,
@@ -90,6 +94,18 @@ export function registerIpcHandlers(
 
   ipcMain.handle(ipcChannels.remoteApiUpdate, (_event, request: RemoteApiUpdateRequestDto) =>
     remoteApiService.update(request)
+  );
+
+  ipcMain.handle(
+    ipcChannels.remoteApiFirewallGetStatus,
+    (_event, request: RemoteApiFirewallCheckRequestDto) =>
+      firewallService.getRemoteApiRuleStatus(request)
+  );
+
+  ipcMain.handle(
+    ipcChannels.remoteApiFirewallCreateRule,
+    (_event, request: RemoteApiFirewallRuleRequestDto) =>
+      firewallService.applyRemoteApiRule(request)
   );
 
   ipcMain.handle(ipcChannels.updateGetStatus, () => releaseUpdateService.getStatus());

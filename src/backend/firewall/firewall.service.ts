@@ -14,6 +14,11 @@ import type {
   FirewallStatusDto
 } from '../../shared/dto/firewall-status.dto';
 import type { OperationAcceptedDto } from '../../shared/dto/operation-progress.dto';
+import type {
+  RemoteApiFirewallCheckRequestDto,
+  RemoteApiFirewallRuleRequestDto,
+  RemoteApiFirewallStatusDto
+} from '../../shared/dto/remote-api.dto';
 
 const execFileAsync = promisify(execFile);
 const FIREWALL_QUERY_TIMEOUT_MS = 8_000;
@@ -114,6 +119,103 @@ export class FirewallService {
     });
 
     return status;
+  }
+
+  async getRemoteApiRuleStatus(
+    request: RemoteApiFirewallCheckRequestDto
+  ): Promise<RemoteApiFirewallStatusDto> {
+    validateRemoteApiPort(request.port);
+    if (process.platform !== 'win32') {
+      return {
+        profile: request.profile,
+        port: request.port,
+        configured: false,
+        message: 'La regla automatica solo esta disponible en Windows.'
+      };
+    }
+
+    const displayName = getRemoteApiFirewallDisplayName(request.profile, request.port);
+    const output = await runPowerShell(`
+$policy = New-Object -ComObject HNetCfg.FwPolicy2
+$expectedPort = '${String(request.port)}'
+foreach ($rule in @($policy.Rules)) {
+  $ports = @([string]$rule.LocalPorts -split ',') | ForEach-Object { $_.Trim() }
+  if (
+    $rule.Name -eq '${escapePowerShellSingleQuoted(displayName)}' -and
+    $rule.Enabled -and
+    [int]$rule.Direction -eq 1 -and
+    [int]$rule.Action -eq 1 -and
+    [int]$rule.Protocol -eq 6 -and
+    $ports -contains $expectedPort
+  ) {
+    'READY'
+    break
+  }
+}
+`);
+    const configured = output.includes('READY');
+    return {
+      profile: request.profile,
+      port: request.port,
+      configured,
+      message: configured
+        ? `Windows permite conexiones TCP al puerto ${String(request.port)}.`
+        : `Falta permitir TCP ${String(request.port)} en el Firewall de Windows.`
+    };
+  }
+
+  applyRemoteApiRule(request: RemoteApiFirewallRuleRequestDto): OperationAcceptedDto {
+    if (!request.confirmed) {
+      throw new Error('REMOTE_API_FIREWALL_RULE_REQUIRES_CONFIRMATION');
+    }
+    validateRemoteApiPort(request.port);
+    const operation = this.operationManagerService.create(
+      'Firewall de API web',
+      `Preparando regla TCP ${String(request.port)}.`
+    );
+    void this.applyRemoteApiRuleAsync(operation.operationId, request);
+    return { operationId: operation.operationId };
+  }
+
+  private async applyRemoteApiRuleAsync(
+    operationId: string,
+    request: RemoteApiFirewallRuleRequestDto
+  ): Promise<void> {
+    try {
+      const current = await this.getRemoteApiRuleStatus(request);
+      if (current.configured) {
+        this.operationManagerService.update(operationId, {
+          status: 'COMPLETED',
+          percent: 100,
+          message: current.message
+        });
+        return;
+      }
+
+      this.operationManagerService.update(operationId, {
+        status: 'RUNNING',
+        percent: 40,
+        message: 'Solicitando permisos de Windows.'
+      });
+      const displayName = getRemoteApiFirewallDisplayName(request.profile, request.port);
+      await runPowerShellElevated(`
+$existing = Get-NetFirewallRule -DisplayName '${escapePowerShellSingleQuoted(displayName)}' -ErrorAction SilentlyContinue
+if ($existing) { Remove-NetFirewallRule -DisplayName '${escapePowerShellSingleQuoted(displayName)}' }
+New-NetFirewallRule -DisplayName '${escapePowerShellSingleQuoted(displayName)}' -Direction Inbound -Action Allow -Protocol TCP -LocalPort ${String(request.port)} | Out-Null
+`);
+      this.operationManagerService.update(operationId, {
+        status: 'COMPLETED',
+        percent: 100,
+        message: `Windows permite conexiones TCP al puerto ${String(request.port)}.`
+      });
+    } catch (error) {
+      this.operationManagerService.update(operationId, {
+        status: 'FAILED',
+        percent: 100,
+        message: 'No se pudo crear la regla de Firewall para la API.',
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
   }
 
   applyRequiredRules(request: FirewallApplyRulesRequestDto): OperationAcceptedDto {
@@ -352,6 +454,20 @@ export function resolveFirewallPortRequirements(configurationContent: string): F
       source: 'RCONEnabled + RCONPort'
     }
   ];
+}
+
+function getRemoteApiFirewallDisplayName(
+  profile: RemoteApiFirewallCheckRequestDto['profile'],
+  port: number
+): string {
+  const label = profile === 'ADMIN' ? 'Admin' : 'Cliente';
+  return `PSM Console API ${label} TCP ${String(port)}`;
+}
+
+function validateRemoteApiPort(port: number): void {
+  if (!Number.isInteger(port) || port < 1024 || port > 65_535) {
+    throw new Error('REMOTE_API_PORT_OUT_OF_RANGE');
+  }
 }
 
 function buildFirewallRuleScript(port: FirewallPortCheckDto, executablePath: string): string {
