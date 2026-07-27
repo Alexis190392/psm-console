@@ -270,6 +270,8 @@ Selecciona uno o varios backups y presiona **Papelera**. Los elementos se envía
 
 Logs muestra los eventos de la sesión actual:
 
+![Logs con datos ficticios](../../resources/screenshots/logs.png)
+
 - Preparación del entorno.
 - Descargas e instalaciones.
 - Inicio y detención del servidor.
@@ -307,6 +309,8 @@ Cada tarjeta abre la subsección correspondiente.
 
 Informa la raíz portable y las ubicaciones relativas de:
 
+![Configuración general de la aplicación](../../resources/screenshots/configuracion-aplicacion.png)
+
 - Preferencias.
 - Logs.
 - Backups.
@@ -314,6 +318,8 @@ Informa la raíz portable y las ubicaciones relativas de:
 También muestra si existe una nueva versión disponible.
 
 ### Automatizaciones
+
+![Automatizaciones de la aplicación](../../resources/screenshots/configuracion-automatizaciones.png)
 
 #### Apagado automático
 
