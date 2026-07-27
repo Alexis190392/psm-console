@@ -177,6 +177,8 @@ Ambas pertenecen a rangos reservados para documentación.
 
 El botón principal se encuentra en la parte inferior de la barra lateral.
 
+![Servidor de pruebas en ejecución](../../resources/screenshots/general-servidor-activo.png)
+
 ### Iniciar
 
 1. Comprueba que SteamCMD, el servidor y el INI estén disponibles.
@@ -202,6 +204,8 @@ El grupo **Administración** aparece cuando el servidor está ejecutándose y la
 
 Permite:
 
+![Administración general del servidor](../../resources/screenshots/administracion-servidor.png)
+
 - Consultar información, métricas y configuración reportadas por el servidor.
 - Guardar el mundo manualmente.
 - Programar un apagado con tiempo y mensaje.
@@ -214,6 +218,8 @@ Usa la detención de emergencia solamente si el apagado normal no responde.
 
 Permite:
 
+![Administración de jugadores sin usuarios conectados](../../resources/screenshots/administracion-jugadores.png)
+
 - Ver jugadores conectados y vistos anteriormente.
 - Consultar ping e identificadores disponibles.
 - Enviar un anuncio global.
@@ -225,6 +231,8 @@ Las acciones administrativas pueden requerir confirmación. El botón de expulsi
 ### Mapa
 
 Muestra una representación relativa de las coordenadas reportadas por la API REST. No reemplaza el mapa oficial del juego y solo aparecen jugadores con coordenadas disponibles.
+
+![Mapa administrativo sin jugadores conectados](../../resources/screenshots/administracion-mapa.png)
 
 ## 8. Backups
 

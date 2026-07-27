@@ -30,6 +30,12 @@ const manualViews = [
   { name: 'configuracion-aplicacion', selector: '[data-settings-sidebar-tab="application"]', waitMs: 1200 },
   { name: 'configuracion-automatizaciones', selector: '[data-settings-sidebar-tab="automation"]', waitMs: 1200 }
 ];
+const manualRuntimeViews = [
+  { name: 'administracion-servidor', selector: '[data-admin-sidebar-tab="general"]', waitMs: 5000 },
+  { name: 'administracion-jugadores', selector: '[data-admin-sidebar-tab="players"]', waitMs: 2500 },
+  { name: 'administracion-mapa', selector: '[data-admin-sidebar-tab="map"]', waitMs: 1500 },
+  { name: 'general-servidor-activo', selector: '.sidebar__link[data-nav="home"]', waitMs: 1500 }
+];
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -92,6 +98,12 @@ async function openManualView(window, view) {
     `);
     await waitForSelector(window, view.selector);
   }
+  if (view.selector.includes('data-admin-sidebar-tab')) {
+    await window.webContents.executeJavaScript(`
+      document.querySelector('[data-admin-group-toggle]')?.click()
+    `);
+    await waitForSelector(window, view.selector);
+  }
 
   const clicked = await window.webContents.executeJavaScript(`
     (() => {
@@ -124,6 +136,7 @@ async function applySafeDocumentationData(window, fixtureLogs) {
         .replace(/C:\\\\Users\\\\alexi/gi, 'C:\\\\Users\\\\Usuario')
         .replace(/\\balexi\\b/gi, 'Usuario')
         .replace(/\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b/g, (ip) => isPrivateIpv4(ip) ? '192.0.2.100' : '203.0.113.25')
+        .replace(/\\bPID\\s+\\d+\\b/g, 'PID 12345')
         .replace(/steam_\\d{10,}/gi, 'steam_00000000000000000')
         .replace(/\\b\\d{17}\\b/g, '00000000000000000')
         .replace(/\\b[A-F\\d]{24,}\\b/gi, '00000000000000000000000000000000');
@@ -139,6 +152,21 @@ async function applySafeDocumentationData(window, fixtureLogs) {
           const value = element.getAttribute(attribute);
           if (value) element.setAttribute(attribute, sanitize(value));
         }
+      });
+      document.querySelectorAll('.player-row').forEach((row, index) => {
+        const exampleNumber = String(index + 1);
+        const name = row.querySelector('.player-row__identity strong');
+        const identity = row.querySelector('.player-row__identity span');
+        const details = row.querySelector('.player-row__details');
+        if (name) name.textContent = 'Jugador de ejemplo ' + exampleNumber;
+        if (identity) identity.textContent = 'steam_0000000000000000' + exampleNumber;
+        if (details) details.textContent = 'PlayerUID 00000000000000000000000000000000 - UserID steam_0000000000000000' + exampleNumber;
+        row.querySelectorAll('input[type="hidden"]').forEach((input) => {
+          input.value = 'steam_0000000000000000' + exampleNumber;
+        });
+      });
+      document.querySelectorAll('.admin-map-marker__label, .admin-map-player strong').forEach((element, index) => {
+        element.textContent = 'Jugador de ejemplo ' + String(index + 1);
       });
 
       if (${fixtureLogs ? 'true' : 'false'}) {
@@ -157,6 +185,89 @@ async function applySafeDocumentationData(window, fixtureLogs) {
   `);
 }
 
+async function getServerRuntime(window) {
+  return window.webContents.executeJavaScript(`
+    window.palcm?.server?.getRuntimeStatus?.().catch(() => null)
+  `);
+}
+
+async function ensureServerRunning(window) {
+  const current = await getServerRuntime(window);
+  if (current?.state === 'RUNNING') {
+    return true;
+  }
+
+  const accepted = await window.webContents.executeJavaScript(`
+    window.palcm?.server?.start?.({ confirmed: true }).catch((error) => ({ error: String(error?.message ?? error) }))
+  `);
+  if (accepted?.error) {
+    throw new Error(`Server could not start: ${accepted.error}`);
+  }
+
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 60000) {
+    const runtime = await getServerRuntime(window);
+    if (runtime?.state === 'RUNNING') {
+      return true;
+    }
+    if (runtime?.state === 'ERROR') {
+      throw new Error(`Server entered an error state: ${runtime.message ?? 'unknown error'}`);
+    }
+    await wait(1000);
+  }
+  throw new Error('Server did not reach RUNNING state within 60 seconds.');
+}
+
+async function ensureServerStopped(window) {
+  const current = await getServerRuntime(window);
+  if (!current || current.state === 'STOPPED') {
+    return;
+  }
+
+  const accepted = await window.webContents.executeJavaScript(`
+    window.palcm?.server?.stop?.({ confirmed: true }).catch((error) => ({ error: String(error?.message ?? error) }))
+  `);
+  if (accepted?.error) {
+    throw new Error(`Server could not stop: ${accepted.error}`);
+  }
+
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 60000) {
+    const runtime = await getServerRuntime(window);
+    if (!runtime || runtime.state === 'STOPPED') {
+      return;
+    }
+    await wait(1000);
+  }
+  throw new Error('Server did not reach STOPPED state within 60 seconds.');
+}
+
+async function waitForEnabledNavigation(window, nav, timeoutMs = 30000) {
+  const selector = `.sidebar__link[data-nav="${nav}"]`;
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const enabled = await window.webContents.executeJavaScript(`
+      (() => {
+        const element = document.querySelector(${JSON.stringify(selector)});
+        return Boolean(element && !element.classList.contains('hidden') && element.getAttribute('aria-disabled') !== 'true');
+      })()
+    `);
+    if (enabled) {
+      return;
+    }
+    await wait(500);
+  }
+  throw new Error(`Navigation did not become available: ${nav}`);
+}
+
+async function writeManualScreenshot(window, outputDir, view) {
+  await openManualView(window, view);
+  await applySafeDocumentationData(window, Boolean(view.fixtureLogs));
+  await wait(250);
+  const image = await window.webContents.capturePage();
+  writeFileSync(join(outputDir, `${view.name}.png`), image.toPNG());
+}
+
 async function captureManualScreenshots(window) {
   const manualOutputDir = join(process.cwd(), 'resources', 'screenshots');
   mkdirSync(manualOutputDir, { recursive: true });
@@ -164,11 +275,19 @@ async function captureManualScreenshots(window) {
   await wait(400);
 
   for (const view of manualViews) {
-    await openManualView(window, view);
-    await applySafeDocumentationData(window, Boolean(view.fixtureLogs));
-    await wait(250);
-    const image = await window.webContents.capturePage();
-    writeFileSync(join(manualOutputDir, `${view.name}.png`), image.toPNG());
+    await writeManualScreenshot(window, manualOutputDir, view);
+  }
+
+  await ensureServerRunning(window);
+  try {
+    window.webContents.reload();
+    await waitForSelector(window, '.sidebar__link[data-nav="home"]');
+    await waitForEnabledNavigation(window, 'admin');
+    for (const view of manualRuntimeViews) {
+      await writeManualScreenshot(window, manualOutputDir, view);
+    }
+  } finally {
+    await ensureServerStopped(window);
   }
 }
 
