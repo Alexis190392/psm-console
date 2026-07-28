@@ -2268,7 +2268,7 @@ function scheduleRemoteApiConnectionRefresh(status: RemoteApiStatusDto): void {
   remoteApiConnectionRefreshTimer = window.setTimeout(() => {
     remoteApiConnectionRefreshTimer = null;
     void refreshRemoteApiConnectionStatus();
-  }, 1000);
+  }, 350);
 }
 
 async function refreshRemoteApiConnectionStatus(): Promise<void> {

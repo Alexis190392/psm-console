@@ -13,7 +13,10 @@ import { PalworldConfigurationService } from '../src/backend/palworld-configurat
 import { PalworldPlayersService } from '../src/backend/palworld-players/palworld-players.service';
 import { PalworldProcessService } from '../src/backend/palworld-process/palworld-process.service';
 import { PortablePathService } from '../src/backend/portable-path/portable-path.service';
-import { RemoteApiService } from '../src/backend/remote-api/remote-api.service';
+import {
+  RemoteApiService,
+  selectPreferredLanAddress
+} from '../src/backend/remote-api/remote-api.service';
 import { ApplicationStatus } from '../src/shared/enums/application-status';
 
 describe('RemoteApiService', () => {
@@ -215,13 +218,13 @@ describe('RemoteApiService', () => {
     expect(fixture.stop).not.toHaveBeenCalled();
   });
 
-  it('reports loopback, LAN and verified public API addresses', async () => {
+  it('verifies loopback, LAN and Internet sequentially', async () => {
     const port = await getFreePort();
     const appSettings = new AppSettingsService(paths);
     const fixture = createRemoteApiFixture(appSettings, portableRoot);
     remoteApi = fixture.service;
 
-    await remoteApi.update({
+    const startingStatus = await remoteApi.update({
       confirmed: true,
       enabled: true,
       bindMode: 'LOCAL_NETWORK',
@@ -229,6 +232,12 @@ describe('RemoteApiService', () => {
       username: 'operator',
       password: 'secure-password'
     });
+
+    expect(startingStatus.connections.map(({ kind, state }) => ({ kind, state }))).toEqual([
+      { kind: 'LOOPBACK', state: 'CHECKING' },
+      { kind: 'LAN', state: 'UNKNOWN' },
+      { kind: 'PUBLIC', state: 'UNKNOWN' }
+    ]);
 
     await vi.waitFor(async () => {
       const status = await remoteApi?.getStatus();
@@ -244,7 +253,7 @@ describe('RemoteApiService', () => {
       }),
       expect.objectContaining({
         kind: 'LAN',
-        endpoint: `http://192.0.2.10:${String(port)}/api/v1`,
+        endpoint: `http://127.0.0.1:${String(port)}/api/v1`,
         state: 'AVAILABLE'
       }),
       expect.objectContaining({
@@ -253,6 +262,14 @@ describe('RemoteApiService', () => {
         state: 'AVAILABLE'
       })
     ]));
+  });
+
+  it('chooses one private LAN address over VPN and duplicated adapters', () => {
+    expect(selectPreferredLanAddress([
+      '100.212.134.158',
+      '192.168.0.100',
+      '192.168.0.100'
+    ])).toBe('192.168.0.100');
   });
 });
 
@@ -348,7 +365,7 @@ function createRemoteApiFixture(
         updatedAt: new Date().toISOString()
       }))
     } as unknown as LoggingService,
-    { getLocalAddresses: () => ['192.0.2.10'], getPublicAddress } as unknown as NetworkService,
+    { getLocalAddresses: () => ['127.0.0.1'], getPublicAddress } as unknown as NetworkService,
     { get: vi.fn() } as unknown as OperationManagerService
   );
   return { service, start, restart, stop, execute, getPublicAddress };
