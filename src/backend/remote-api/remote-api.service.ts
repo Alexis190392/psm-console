@@ -125,14 +125,22 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
   }
 
   async update(request: RemoteApiUpdateRequestDto): Promise<RemoteApiStatusDto> {
+    const previous = await this.appSettingsService.getRemoteApiSettings();
     await this.appSettingsService.updateRemoteApi(request);
-    await this.applyCurrentSettings();
+    const current = await this.appSettingsService.getRemoteApiSettings();
+    if (requiresRemoteApiRestart(previous, current)) {
+      await this.applyCurrentSettings(current);
+    } else {
+      this.updateClientSessionPermissions(current.client.permissions);
+    }
     return this.getStatus();
   }
 
-  private async applyCurrentSettings(): Promise<void> {
+  private async applyCurrentSettings(
+    currentSettings?: StoredRemoteApiSettings
+  ): Promise<void> {
     await this.stopAll();
-    const settings = await this.appSettingsService.getRemoteApiSettings();
+    const settings = currentSettings ?? await this.appSettingsService.getRemoteApiSettings();
     if (!settings.enabled) {
       this.setState('ADMIN', 'DISABLED', 'API administrativa deshabilitada.');
     }
@@ -142,6 +150,14 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
     if (settings.enabled || settings.client.enabled) {
       await this.start(settings);
     }
+  }
+
+  private updateClientSessionPermissions(permissions: RemoteApiPermission[]): void {
+    this.sessions.forEach((session) => {
+      if (session.profile === 'CLIENT') {
+        session.permissions = [...permissions];
+      }
+    });
   }
 
   private async start(settings: StoredRemoteApiSettings): Promise<void> {
@@ -767,6 +783,16 @@ function getEnabledProfiles(settings: StoredRemoteApiSettings): RemoteApiProfile
     ...(settings.enabled ? ['ADMIN' as const] : []),
     ...(settings.client.enabled ? ['CLIENT' as const] : [])
   ];
+}
+
+function requiresRemoteApiRestart(
+  previous: StoredRemoteApiSettings,
+  current: StoredRemoteApiSettings
+): boolean {
+  return previous.enabled !== current.enabled
+    || previous.client.enabled !== current.client.enabled
+    || previous.bindMode !== current.bindMode
+    || previous.port !== current.port;
 }
 
 function allRemoteApiPermissions(): RemoteApiPermission[] {

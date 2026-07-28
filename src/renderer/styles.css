@@ -1547,6 +1547,28 @@ input[type="range"] {
   line-height: 1.2;
 }
 
+.view-header__meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+}
+
+.settings-save-status {
+  color: var(--color-success);
+  font-size: 12px;
+  opacity: 0;
+  transform: translateY(2px);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+  white-space: nowrap;
+}
+
+.settings-save-status--visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
 .view-header p,
 .view-note {
   margin: 0;
@@ -2427,6 +2449,16 @@ button.settings-api-address:not(:disabled):focus-visible {
 .settings-api-form__fields input,
 .settings-api-form__fields select {
   height: 42px;
+}
+
+.settings-api-form input[name="port"] {
+  appearance: textfield;
+}
+
+.settings-api-form input[name="port"]::-webkit-inner-spin-button,
+.settings-api-form input[name="port"]::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
 }
 
 .settings-api-status__indicator {
@@ -4576,7 +4608,7 @@ button.settings-api-address:not(:disabled):focus-visible {
     flex-direction: column;
   }
 
-  .view-header > .view-meta-pill {
+  .view-header__meta {
     align-self: flex-end;
   }
 

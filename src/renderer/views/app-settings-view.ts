@@ -32,7 +32,10 @@ export function renderAppSettingsView(
     <div class="view-stack view-stack--scroll app-settings-view">
       <div class="view-header view-header--contained">
         <h3>${title}</h3>
-        <span class="view-meta-pill">${escapeHtml(APP_VERSION_LABEL)}</span>
+        <div class="view-header__meta">
+          <span id="settings-save-status" class="settings-save-status" aria-live="polite"></span>
+          <span class="view-meta-pill">${escapeHtml(APP_VERSION_LABEL)}</span>
+        </div>
       </div>
       ${activeTab === 'summary'
         ? renderSettingsSummary(status, update, backupSummary, idleStatus, remoteApiStatus)
@@ -236,7 +239,7 @@ function renderRemoteApiSettings(status: RemoteApiStatusDto): string {
           </label>
           <label>
             <span>Puerto</span>
-            <input name="port" type="number" min="1024" max="65535" step="1" value="${String(settings.port)}" required />
+            <input name="port" type="number" inputmode="numeric" min="1024" max="65535" step="1" value="${String(settings.port)}" required />
           </label>
           <label>
             <span>Usuario</span>
@@ -252,9 +255,6 @@ function renderRemoteApiSettings(status: RemoteApiStatusDto): string {
         <p class="settings-api-status__warning ${settings.bindMode === 'LOCAL_NETWORK' ? '' : 'hidden'}">
           HTTP disponible en la red local. Usalo solo en una LAN confiable.
         </p>
-        <div class="admin-card__actions">
-          <button class="primary-button button-with-icon" type="submit">${renderIcon('save')}<span>Guardar API</span></button>
-        </div>
         </form>
         ${renderClientApiProfile(status.client)}
       </div>
@@ -354,9 +354,6 @@ function renderClientApiProfile(status: RemoteApiProfileStatusDto): string {
       </div>
       ${renderClientPermissions(permissions)}
       ${renderRemoteApiProfileError(status)}
-      <div class="admin-card__actions">
-        <button class="primary-button button-with-icon" type="submit">${renderIcon('save')}<span>Guardar API cliente</span></button>
-      </div>
     </form>
   `;
 }

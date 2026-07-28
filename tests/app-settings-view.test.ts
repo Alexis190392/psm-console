@@ -204,6 +204,8 @@ describe('app settings view', () => {
     expect(html.match(/name="port" type="number"/g)).toHaveLength(1);
     expect(html).toContain('settings-api-connection');
     expect(html).toContain('settings-api-profiles');
+    expect(html).toContain('id="settings-save-status"');
+    expect(html).toContain('inputmode="numeric"');
     expect(html).toContain('value="SERVER_START"');
     expect(html).toContain('value="SERVER_RESTART"');
     expect(html).toContain('value="SERVER_STOP"');
@@ -211,6 +213,8 @@ describe('app settings view', () => {
     expect(html).toContain('value="PLAYERS_BAN"');
     expect(html).not.toContain('Estado de la aplicacion y del servidor.');
     expect(html).not.toContain('Desconectar jugadores.');
+    expect(html).not.toContain('Guardar API');
+    expect(html).not.toContain('Guardar API cliente');
     expect(html).not.toContain('passwordHash');
   });
 });

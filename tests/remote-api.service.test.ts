@@ -65,7 +65,11 @@ describe('RemoteApiService', () => {
     expect(css).toContain('password-visibility-icon');
     expect(css).toContain('border: 0');
     expect(css).toContain('background: transparent');
-    expect((await fetch(`${baseUrl}/ui.js`)).headers.get('content-type')).toContain('text/javascript');
+    const scriptResponse = await fetch(`${baseUrl}/ui.js`);
+    const script = await scriptResponse.text();
+    expect(scriptResponse.headers.get('content-type')).toContain('text/javascript');
+    expect(script).toContain("throw new Error('No permitido')");
+    expect(script).toContain("apiRequest('/session')");
     expect((await fetch(`${baseUrl}/logo.png`)).headers.get('content-type')).toContain('image/png');
     expect((await fetch(`${baseUrl}/health`)).status).toBe(200);
     expect((await fetch(`${baseUrl}/status`)).status).toBe(401);
@@ -84,6 +88,16 @@ describe('RemoteApiService', () => {
     const now = vi.spyOn(Date, 'now').mockReturnValue(Number.MAX_SAFE_INTEGER);
     expect((await fetch(`${baseUrl}/status`, { headers: authorization })).status).toBe(200);
     now.mockRestore();
+
+    await remoteApi.update({
+      confirmed: true,
+      enabled: true,
+      bindMode: 'LOCAL_ONLY',
+      port,
+      username: 'renamed-operator',
+      password: 'updated-password'
+    });
+    expect((await fetch(`${baseUrl}/status`, { headers: authorization })).status).toBe(200);
 
     const startResponse = await fetch(`${baseUrl}/server/start`, {
       method: 'POST',
@@ -186,6 +200,24 @@ describe('RemoteApiService', () => {
     const adminHeaders = { authorization: `Bearer ${adminLogin.token}` };
     expect(adminLogin.profile).toBe('ADMIN');
     expect((await fetch(`${baseUrl}/status`, { headers: adminHeaders })).status).toBe(200);
+
+    const updatedStatus = await remoteApi.update({
+      confirmed: true,
+      profile: 'CLIENT',
+      enabled: true,
+      bindMode: 'LOCAL_ONLY',
+      port,
+      username: 'friend',
+      permissions: ['LOGS']
+    });
+    expect(updatedStatus.client.state).toBe('RUNNING');
+    expect((await fetch(`${baseUrl}/players`, { headers: clientHeaders })).status).toBe(403);
+    expect((await fetch(`${baseUrl}/logs`, { headers: clientHeaders })).status).toBe(200);
+    const refreshedSession = await fetch(`${baseUrl}/session`, { headers: clientHeaders });
+    expect(await refreshedSession.json()).toEqual({
+      profile: 'CLIENT',
+      permissions: ['LOGS']
+    });
   });
 
   it('enforces start, restart and stop permissions independently', async () => {
