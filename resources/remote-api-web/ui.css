@@ -308,6 +308,10 @@ input:focus {
   background: #15343c;
 }
 
+.logout-short {
+  display: none;
+}
+
 .workspace {
   width: min(100%, 1280px);
   min-width: 0;
@@ -550,18 +554,22 @@ input:focus {
   }
 
   .dashboard {
+    display: block;
     min-height: calc(100dvh - 58px);
-    grid-template-columns: 1fr;
   }
 
   .sidebar {
     position: sticky;
     top: 58px;
     z-index: 5;
-    display: grid;
+    display: flex;
     width: 100%;
-    height: auto;
-    grid-template-columns: minmax(0, 1fr) auto;
+    height: 60px;
+    min-height: 60px;
+    max-height: 60px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
     gap: 10px;
     overflow: hidden;
     padding: 8px 12px;
@@ -570,9 +578,11 @@ input:focus {
   }
 
   .sidebar nav {
-    display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(96px, 1fr);
+    display: flex;
+    min-width: 0;
+    height: 44px;
+    flex: 1 1 auto;
+    align-items: stretch;
     gap: 6px;
     overflow-x: auto;
     overscroll-behavior-inline: contain;
@@ -584,8 +594,10 @@ input:focus {
   }
 
   .nav-button {
-    min-width: 0;
+    min-width: 84px;
     min-height: 44px;
+    max-height: 44px;
+    flex: 1 1 0;
     padding: 9px 12px;
     text-align: center;
     white-space: nowrap;
@@ -594,6 +606,8 @@ input:focus {
   .sidebar .secondary-button {
     min-width: 110px;
     min-height: 44px;
+    max-height: 44px;
+    flex: 0 0 110px;
     padding: 0 12px;
   }
 
@@ -640,6 +654,34 @@ input:focus {
   .brand span,
   .connection-state span:last-child {
     display: none;
+  }
+
+  .sidebar {
+    gap: 7px;
+    padding-inline: 8px;
+  }
+
+  .sidebar nav {
+    gap: 4px;
+  }
+
+  .nav-button {
+    min-width: 70px;
+    padding-inline: 8px;
+  }
+
+  .sidebar .secondary-button {
+    min-width: 58px;
+    flex-basis: 58px;
+    padding-inline: 6px;
+  }
+
+  .logout-label {
+    display: none;
+  }
+
+  .logout-short {
+    display: inline;
   }
 
   .login-panel {
