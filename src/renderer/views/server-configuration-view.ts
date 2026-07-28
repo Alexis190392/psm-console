@@ -50,10 +50,13 @@ export function renderSettingsForm(parsed: ParsedPalworldSettings): string {
   return Array.from(groupSettings(parsed.settings).entries())
     .map(
       ([group, settings]) => `
-        <section class="settings-group">
-          <h4>${escapeHtml(group)} <span data-group-count>${String(settings.length)}</span></h4>
+        <details class="settings-group">
+          <summary>
+            <span>${escapeHtml(group)}</span>
+            <small data-group-count>${String(settings.length)}</small>
+          </summary>
           <div class="settings-grid">${settings.map(renderSettingControl).join('')}</div>
-        </section>
+        </details>
       `
     )
     .join('');

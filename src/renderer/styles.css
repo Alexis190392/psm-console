@@ -3818,11 +3818,56 @@ button.settings-api-address:not(:disabled):focus-visible {
 }
 
 .settings-group {
-  display: grid;
-  gap: 10px;
+  min-width: 0;
+  border-bottom: 1px solid var(--color-border-subtle);
 }
 
-.settings-group h4 {
+.settings-group > summary {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 42px;
+  padding: 8px 32px 8px 4px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.settings-group > summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-group > summary::after {
+  content: "";
+  position: absolute;
+  right: 9px;
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid var(--color-text-muted);
+  border-bottom: 2px solid var(--color-text-muted);
+  transform: rotate(45deg);
+  transition:
+    border-color 140ms ease,
+    transform 140ms ease;
+}
+
+.settings-group[open] > summary::after {
+  transform: rotate(225deg);
+}
+
+.settings-group > summary:hover::after,
+.settings-group > summary:focus-visible::after {
+  border-color: var(--color-primary);
+}
+
+.settings-group > summary:focus-visible {
+  border-radius: 6px;
+  outline: 2px solid rgba(0, 229, 255, 0.38);
+  outline-offset: -2px;
+}
+
+.settings-group > summary > span {
   margin: 0;
   color: var(--color-primary);
   font-family: "JetBrains Mono", Consolas, monospace;
@@ -3830,9 +3875,9 @@ button.settings-api-address:not(:disabled):focus-visible {
   letter-spacing: 0.08em;
 }
 
-.settings-group h4 span {
-  margin-left: 6px;
+.settings-group > summary > small {
   color: var(--color-text-muted);
+  font-family: "JetBrains Mono", Consolas, monospace;
   font-size: 11px;
   letter-spacing: 0;
 }
@@ -3850,6 +3895,7 @@ button.settings-api-address:not(:disabled):focus-visible {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 12px;
+  padding: 2px 0 14px;
 }
 
 .setting-field {

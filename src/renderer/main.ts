@@ -4349,6 +4349,7 @@ function bindSettingsFilters(parsed: ParsedPalworldSettings): void {
 function applySettingsFilter(parsed: ParsedPalworldSettings, searchValue: string, categoryValue: string): void {
   const query = normalizeSearchText(searchValue);
   const selectedCategory = categoryValue === 'all' ? null : categoryValue;
+  const hasActiveFilter = query.length > 0 || selectedCategory !== null;
   let visibleCount = 0;
 
   document.querySelectorAll<HTMLElement>('[data-setting-card]').forEach((card) => {
@@ -4365,10 +4366,20 @@ function applySettingsFilter(parsed: ParsedPalworldSettings, searchValue: string
     }
   });
 
-  document.querySelectorAll<HTMLElement>('.settings-group').forEach((group) => {
+  document.querySelectorAll<HTMLDetailsElement>('.settings-group').forEach((group) => {
     const visibleInGroup = group.querySelectorAll('[data-setting-card]:not(.hidden)').length;
     const count = group.querySelector<HTMLElement>('[data-group-count]');
     group.classList.toggle('hidden', visibleInGroup === 0);
+
+    if (hasActiveFilter) {
+      if (group.dataset['openBeforeFilter'] === undefined) {
+        group.dataset['openBeforeFilter'] = group.open ? 'true' : 'false';
+      }
+      group.open = visibleInGroup > 0;
+    } else if (group.dataset['openBeforeFilter'] !== undefined) {
+      group.open = group.dataset['openBeforeFilter'] === 'true';
+      delete group.dataset['openBeforeFilter'];
+    }
 
     if (count) {
       count.textContent = String(visibleInGroup);

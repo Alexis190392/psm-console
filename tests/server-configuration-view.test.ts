@@ -22,6 +22,9 @@ describe('server configuration view', () => {
   it('renders select, switch, range and escaped text controls', () => {
     const html = renderSettingsForm(parsed);
 
+    expect(html).toContain('<details class="settings-group">');
+    expect(html).not.toContain('<details class="settings-group" open>');
+    expect(html).toContain('<small data-group-count>');
     expect(html).toContain('data-setting-key="Difficulty"');
     expect(html).toContain('role="switch"');
     expect(html).toContain('data-range-key="DayTimeSpeedRate"');
