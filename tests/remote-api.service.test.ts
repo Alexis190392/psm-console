@@ -63,6 +63,8 @@ describe('RemoteApiService', () => {
     expect(css).toContain('max-height: 60px');
     expect(css).toContain('display: block');
     expect(css).toContain('password-visibility-icon');
+    expect(css).toContain('border: 0');
+    expect(css).toContain('background: transparent');
     expect((await fetch(`${baseUrl}/ui.js`)).headers.get('content-type')).toContain('text/javascript');
     expect((await fetch(`${baseUrl}/logo.png`)).headers.get('content-type')).toContain('image/png');
     expect((await fetch(`${baseUrl}/health`)).status).toBe(200);

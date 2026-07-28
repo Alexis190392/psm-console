@@ -206,15 +206,32 @@ input:focus {
 }
 
 .password-field input {
-  padding-right: 56px;
+  padding-right: 52px;
 }
 
 .password-field .icon-button {
   position: absolute;
-  top: 5px;
-  right: 5px;
-  width: 42px;
-  height: 34px;
+  top: 1px;
+  right: 2px;
+  width: 46px;
+  height: 42px;
+  min-height: 42px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  box-shadow: none;
+}
+
+.password-field .icon-button:hover,
+.password-field .icon-button:focus-visible {
+  background: transparent;
+  color: var(--cyan-soft);
+}
+
+.password-field .icon-button:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: -5px;
 }
 
 .password-visibility-icon {
@@ -820,5 +837,9 @@ input:focus {
   button,
   input {
     min-height: 44px;
+  }
+
+  .password-field .icon-button {
+    min-height: 42px;
   }
 }
