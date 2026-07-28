@@ -1894,6 +1894,15 @@ function createPublicPortProbeSummary(
   network: NetworkDiagnosticsDto,
   copyValue: string | undefined
 ): SummaryCardViewModel | null {
+  if (network.externalAccessEvidence) {
+    return {
+      value: copyValue ?? network.publicIp ?? 'Accesible',
+      detail: 'Acceso confirmado por un jugador conectado desde Internet. Click para copiar.',
+      state: createSummaryCardState('ok'),
+      copyValue
+    };
+  }
+
   const probe = network.publicPortProbe;
 
   if (!probe) {
@@ -3768,7 +3777,14 @@ function createExternalAccessSummary(firewall: FirewallStatusDto): SummaryCardVi
   const network = firewall.external.network;
   const port = getPublicPortFromFirewall(firewall);
   const copyValue = network.publicIp && port ? `${network.publicIp}:${port}` : undefined;
-  const probeNetwork = latestPublicNetwork && latestPublicNetworkPort === port ? latestPublicNetwork : network;
+  const probeNetwork = latestPublicNetwork && latestPublicNetworkPort === port
+    ? {
+        ...latestPublicNetwork,
+        ...(network.externalAccessEvidence
+          ? { externalAccessEvidence: network.externalAccessEvidence }
+          : {})
+      }
+    : network;
   const probeSummary = createPublicPortProbeSummary(probeNetwork, copyValue);
 
   if (probeSummary) {

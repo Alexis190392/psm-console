@@ -6,6 +6,7 @@ import { PalworldInstallationService } from '../palworld-installation/palworld-i
 import { resolvePalworldRuntimeExecutable } from '../palworld-process/palworld-process.service';
 import { OperationManagerService } from '../operations/operation-manager.service';
 import { NetworkService } from '../network/network.service';
+import { PalworldPlayersService } from '../palworld-players/palworld-players.service';
 import type {
   FirewallApplyRulesRequestDto,
   FirewallDiagnosticProgressDto,
@@ -19,6 +20,8 @@ import type {
   RemoteApiFirewallRuleRequestDto,
   RemoteApiFirewallStatusDto
 } from '../../shared/dto/remote-api.dto';
+import type { ExternalAccessEvidenceDto, NetworkDiagnosticsDto } from '../../shared/dto/network-diagnostics.dto';
+import type { PalworldPlayerDto } from '../../shared/dto/palworld-players-status.dto';
 
 const execFileAsync = promisify(execFile);
 const FIREWALL_QUERY_TIMEOUT_MS = 8_000;
@@ -31,7 +34,8 @@ export class FirewallService {
     private readonly palworldConfigurationService: PalworldConfigurationService,
     private readonly palworldInstallationService: PalworldInstallationService,
     private readonly operationManagerService: OperationManagerService,
-    private readonly networkService: NetworkService
+    private readonly networkService: NetworkService,
+    private readonly palworldPlayersService: PalworldPlayersService
   ) {}
 
   async getStatus(reportProgress: FirewallDiagnosticReporter = () => undefined): Promise<FirewallStatusDto> {
@@ -79,7 +83,20 @@ export class FirewallService {
       });
       return network;
     });
-    const [localPorts, network] = await Promise.all([localPortsPromise, networkPromise]);
+    const playersPromise = this.palworldPlayersService.getStatus().catch(() => null);
+    const [localPorts, network, playersStatus] = await Promise.all([
+      localPortsPromise,
+      networkPromise,
+      playersPromise
+    ]);
+    const externalAccessEvidence = findExternalPlayerConnection(
+      playersStatus?.players ?? [],
+      network.localIpv4,
+      playersStatus?.updatedAt
+    );
+    const verifiedNetwork: NetworkDiagnosticsDto = externalAccessEvidence
+      ? { ...network, externalAccessEvidence }
+      : network;
     reportProgress({
       step: 'summary',
       state: 'active',
@@ -88,7 +105,9 @@ export class FirewallService {
     });
     const missingLocalPorts = localPorts.filter((port) => port.enabled && port.state === 'MISSING');
     const hasLocalError = localPorts.some((port) => ['ERROR', 'UNSUPPORTED'].includes(port.state));
-    const externalPorts = requirements.map((requirement) => this.createExternalCheck(requirement));
+    const externalPorts = requirements.map((requirement) =>
+      this.createExternalCheck(requirement, Boolean(externalAccessEvidence))
+    );
 
     const status: FirewallStatusDto = {
       local: {
@@ -100,11 +119,12 @@ export class FirewallService {
             : 'Las reglas locales necesarias estan configuradas.'
       },
       external: {
-        state: 'UNKNOWN',
+        state: externalAccessEvidence ? 'READY' : 'UNKNOWN',
         ports: externalPorts,
-        message:
-          'La exposicion externa depende del router, NAT/CGNAT y del servidor en ejecucion. Prueba los puertos configurados desde otra red antes de cambiar mas valores.',
-        network
+        message: externalAccessEvidence
+          ? 'Acceso externo confirmado por un jugador conectado desde fuera de la red local.'
+          : 'La exposicion externa depende del router, NAT/CGNAT y del servidor en ejecucion. Prueba los puertos configurados desde otra red antes de cambiar mas valores.',
+        network: verifiedNetwork
       },
       updatedAt: new Date().toISOString()
     };
@@ -113,9 +133,11 @@ export class FirewallService {
       step: 'summary',
       state: 'done',
       title: 'Diagnostico completado',
-      detail: missingLocalPorts.length > 0
-        ? `Faltan ${String(missingLocalPorts.length)} reglas locales; el acceso publico queda como informacion.`
-        : 'Windows local esta listo; el acceso publico queda informado por separado.'
+      detail: externalAccessEvidence
+        ? 'Un jugador externo conectado confirmo el acceso publico al puerto del juego.'
+        : missingLocalPorts.length > 0
+          ? `Faltan ${String(missingLocalPorts.length)} reglas locales; el acceso publico queda como informacion.`
+          : 'Windows local esta listo; el acceso publico queda informado por separado.'
     });
 
     return status;
@@ -357,12 +379,23 @@ New-NetFirewallRule -DisplayName '${escapePowerShellSingleQuoted(displayName)}' 
     }
   }
 
-  private createExternalCheck(requirement: FirewallPortRequirementDto): FirewallPortCheckDto {
+  private createExternalCheck(
+    requirement: FirewallPortRequirementDto,
+    playerConnectionConfirmed: boolean
+  ): FirewallPortCheckDto {
     if (!requirement.enabled) {
       return {
         ...requirement,
         state: 'READY',
         message: 'No se expone porque esta desactivado en la configuracion.'
+      };
+    }
+
+    if (requirement.key === 'PublicPort' && playerConnectionConfirmed) {
+      return {
+        ...requirement,
+        state: 'READY',
+        message: 'Acceso confirmado por un jugador conectado desde fuera de la red local.'
       };
     }
 
@@ -373,6 +406,53 @@ New-NetFirewallRule -DisplayName '${escapePowerShellSingleQuoted(displayName)}' 
     };
   }
 
+}
+
+export function findExternalPlayerConnection(
+  players: PalworldPlayerDto[],
+  localIpv4: string[],
+  observedAt = new Date().toISOString()
+): ExternalAccessEvidenceDto | undefined {
+  const localAddresses = new Set(localIpv4);
+  const hasExternalPlayer = players.some((player) => {
+    const address = extractIpv4(player.ip);
+    return address !== undefined
+      && !localAddresses.has(address)
+      && !isPrivateIpv4(address);
+  });
+
+  if (!hasExternalPlayer) {
+    return undefined;
+  }
+
+  return {
+    source: 'REMOTE_PLAYER',
+    observedAt,
+    message: 'Un jugador conectado desde Internet confirmo el acceso al puerto publico.'
+  };
+}
+
+function extractIpv4(value: string | undefined): string | undefined {
+  const match = value?.match(/(?:^|::ffff:)((?:\d{1,3}\.){3}\d{1,3})(?::\d+)?$/i);
+  if (!match?.[1]) {
+    return undefined;
+  }
+
+  const octets = match[1].split('.').map(Number);
+  return octets.length === 4 && octets.every((octet) => octet >= 0 && octet <= 255)
+    ? match[1]
+    : undefined;
+}
+
+function isPrivateIpv4(address: string): boolean {
+  const [first, second] = address.split('.').map(Number);
+  return first === 10
+    || first === 127
+    || (first === 169 && second === 254)
+    || (first === 172 && second !== undefined && second >= 16 && second <= 31)
+    || (first === 192 && second === 168)
+    || (first === 100 && second !== undefined && second >= 64 && second <= 127)
+    || (first === 0);
 }
 
 export function buildFirewallCheckScript(

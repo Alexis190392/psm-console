@@ -13,6 +13,7 @@ export interface PalworldPlayerDto {
   playerId?: string;
   userId?: string;
   steamId?: string;
+  ip?: string;
   ping?: number;
   locationX?: number;
   locationY?: number;
