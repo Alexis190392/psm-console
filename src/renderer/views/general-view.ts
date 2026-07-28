@@ -34,32 +34,84 @@ export function renderGeneralView(model: GeneralViewModel): string {
   `;
 }
 
-export function createGeneralRemoteApiCard(status: RemoteApiStatusDto | null): SummaryCardDetails | null {
-  const publicConnection = status?.connections.find((connection) => connection.kind === 'PUBLIC');
-  if (publicConnection?.state !== 'AVAILABLE' || !publicConnection.endpoint) {
-    return null;
-  }
-
-  return {
+export function createGeneralRemoteApiCard(status: RemoteApiStatusDto | null): SummaryCardDetails {
+  const baseCard = {
     id: 'general-remote-api-card',
     title: 'API web',
-    value: publicConnection.endpoint.replace(/^https?:\/\//, ''),
-    detail: 'Acceso publico confirmado. Click para copiar la direccion web.',
     target: 'settings',
-    copyValue: publicConnection.endpoint,
-    ...createSummaryCardState('ok')
+    settingsTab: 'remote-api'
+  };
+  const isConfigured = Boolean(
+    status?.settings.passwordConfigured || status?.settings.client.passwordConfigured
+  );
+
+  if (!status || !isConfigured) {
+    return {
+      ...baseCard,
+      value: 'Configurar API web',
+      detail: 'Configura el acceso administrativo o cliente.',
+      ...createSummaryCardState('configuration')
+    };
+  }
+
+  const isRunning = status.state === 'RUNNING' || status.client.state === 'RUNNING';
+  if (!isRunning) {
+    const hasError = status.state === 'ERROR' || status.client.state === 'ERROR';
+    const isStarting = status.state === 'STARTING' || status.client.state === 'STARTING';
+    return {
+      ...baseCard,
+      value: hasError ? 'Revisar API web' : isStarting ? 'Iniciando' : 'Deshabilitada',
+      detail: hasError
+        ? 'La API no pudo iniciar. Revisa su configuracion.'
+        : isStarting
+          ? 'Preparando el acceso web configurado.'
+          : 'La configuracion esta guardada, pero el acceso web esta deshabilitado.',
+      ...createSummaryCardState(hasError ? 'error' : isStarting ? 'loading' : 'optional')
+    };
+  }
+
+  const connection = selectRemoteApiConnection(status);
+  if (!connection?.endpoint) {
+    return {
+      ...baseCard,
+      value: 'En ejecucion',
+      detail: 'La API esta activa. Abre su configuracion para revisar las direcciones.',
+      ...createSummaryCardState('warning')
+    };
+  }
+
+  const state = connection.state === 'AVAILABLE'
+    ? createSummaryCardState('ok')
+    : connection.state === 'CHECKING'
+      ? createSummaryCardState('loading')
+      : createSummaryCardState(connection.state === 'UNAVAILABLE' ? 'error' : 'warning');
+
+  return {
+    ...baseCard,
+    value: connection.endpoint.replace(/^https?:\/\//, ''),
+    detail: connection.state === 'AVAILABLE'
+      ? `${connection.label === 'Internet' ? 'Acceso publico' : `Acceso ${connection.label.toLocaleLowerCase()}`} confirmado. Click para copiar la direccion web.`
+      : connection.message,
+    copyValue: connection.endpoint,
+    ...state
   };
 }
 
 export function renderGeneralRemoteApiCard(status: RemoteApiStatusDto | null): string {
-  const card = createGeneralRemoteApiCard(status);
-  return card ? renderSummaryCard({ ...card, density: 'prominent' }) : '';
+  return renderSummaryCard({ ...createGeneralRemoteApiCard(status), density: 'prominent' });
 }
 
 export function shouldRefreshGeneralRemoteApi(status: RemoteApiStatusDto | null): boolean {
   const apiRunning = status?.state === 'RUNNING' || status?.client.state === 'RUNNING';
   const publicConnection = status?.connections.find((connection) => connection.kind === 'PUBLIC');
   return Boolean(apiRunning && publicConnection && publicConnection.state !== 'AVAILABLE' && publicConnection.state !== 'DISABLED');
+}
+
+function selectRemoteApiConnection(status: RemoteApiStatusDto) {
+  const priority = ['PUBLIC', 'LAN', 'LOOPBACK'] as const;
+  return priority
+    .map((kind) => status.connections.find((connection) => connection.kind === kind))
+    .find((connection) => connection?.endpoint && connection.state !== 'DISABLED');
 }
 
 export function renderGeneralUpdateAction(update?: AppUpdateStatusDto | null): string {

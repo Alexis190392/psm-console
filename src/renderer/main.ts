@@ -1287,7 +1287,7 @@ async function renderGeneralView(renderId: number): Promise<void> {
           adminTab: 'players',
           ...playersState.state
       },
-      ...(remoteApiCard ? [remoteApiCard] : [])
+      remoteApiCard
     ],
     supportCards: [
       {
@@ -1364,15 +1364,13 @@ async function refreshGeneralRemoteApiCard(renderId: number): Promise<void> {
   }
 
   const html = renderGeneralRemoteApiCard(status);
-  if (html) {
-    const currentCard = document.querySelector('#general-remote-api-card');
-    if (currentCard) {
-      replaceSummaryCard('general-remote-api-card', html);
-    } else {
-      document.querySelector('#general-primary-grid')?.insertAdjacentHTML('beforeend', html);
-    }
-    bindSummaryCards();
+  const currentCard = document.querySelector('#general-remote-api-card');
+  if (currentCard) {
+    replaceSummaryCard('general-remote-api-card', html);
+  } else {
+    document.querySelector('#general-primary-grid')?.insertAdjacentHTML('beforeend', html);
   }
+  bindSummaryCards();
   scheduleGeneralRemoteApiRefresh(status, renderId);
 }
 
@@ -4343,6 +4341,11 @@ function bindSummaryCards(): void {
         if (isAdminTab(adminTab)) {
           adminViewState.setTab(adminTab);
         }
+        const settingsTab = card.dataset['settingsTab'];
+        if (isSettingsTab(settingsTab)) {
+          settingsViewState.setTab(settingsTab);
+          settingsViewState.setMenuOpen(true);
+        }
 
         navigationState.set(card.dataset['target']);
         renderActiveView();
@@ -4357,6 +4360,11 @@ function bindSummaryCards(): void {
       const adminTab = card.dataset['adminTab'];
       if (isAdminTab(adminTab)) {
         adminViewState.setTab(adminTab);
+      }
+      const settingsTab = card.dataset['settingsTab'];
+      if (isSettingsTab(settingsTab)) {
+        settingsViewState.setTab(settingsTab);
+        settingsViewState.setMenuOpen(true);
       }
 
       navigationState.set(card.dataset['target']);

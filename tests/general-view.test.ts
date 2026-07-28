@@ -58,6 +58,10 @@ describe('general view', () => {
   it('shows a confirmed public web API as a copyable General card', () => {
     const status = {
       state: 'RUNNING',
+      settings: {
+        passwordConfigured: true,
+        client: { passwordConfigured: false }
+      },
       connections: [{
         kind: 'PUBLIC',
         label: 'Internet',
@@ -71,7 +75,9 @@ describe('general view', () => {
     expect(createGeneralRemoteApiCard(status)).toEqual(expect.objectContaining({
       title: 'API web',
       value: '203.0.113.25:8213/api/v1',
-      copyValue: 'http://203.0.113.25:8213/api/v1'
+      copyValue: 'http://203.0.113.25:8213/api/v1',
+      settingsTab: 'remote-api',
+      tone: 'ok'
     }));
     expect(shouldRefreshGeneralRemoteApi(status)).toBe(false);
   });
@@ -79,6 +85,10 @@ describe('general view', () => {
   it('keeps checking an exposed API until Internet access is confirmed', () => {
     const status = {
       state: 'RUNNING',
+      settings: {
+        passwordConfigured: true,
+        client: { passwordConfigured: false }
+      },
       connections: [{
         kind: 'PUBLIC',
         label: 'Internet',
@@ -89,7 +99,53 @@ describe('general view', () => {
       client: { state: 'DISABLED' }
     } as Parameters<typeof shouldRefreshGeneralRemoteApi>[0];
 
-    expect(createGeneralRemoteApiCard(status)).toBeNull();
+    expect(createGeneralRemoteApiCard(status)).toEqual(expect.objectContaining({
+      value: '203.0.113.25:8213/api/v1',
+      tone: 'warning',
+      copyValue: 'http://203.0.113.25:8213/api/v1'
+    }));
     expect(shouldRefreshGeneralRemoteApi(status)).toBe(true);
+  });
+
+  it('always offers API web configuration when no credentials were configured', () => {
+    expect(createGeneralRemoteApiCard(null)).toEqual(expect.objectContaining({
+      title: 'API web',
+      value: 'Configurar API web',
+      target: 'settings',
+      settingsTab: 'remote-api',
+      tone: 'configuration'
+    }));
+  });
+
+  it('shows the best available local address when Internet is not exposed', () => {
+    const status = {
+      state: 'RUNNING',
+      settings: {
+        passwordConfigured: true,
+        client: { passwordConfigured: false }
+      },
+      connections: [
+        {
+          kind: 'LOOPBACK',
+          label: 'Este equipo',
+          endpoint: 'http://127.0.0.1:8213/api/v1',
+          state: 'AVAILABLE',
+          message: 'Disponible.'
+        },
+        {
+          kind: 'PUBLIC',
+          label: 'Internet',
+          state: 'DISABLED',
+          message: 'No expuesta.'
+        }
+      ],
+      client: { state: 'DISABLED' }
+    } as Parameters<typeof createGeneralRemoteApiCard>[0];
+
+    expect(createGeneralRemoteApiCard(status)).toEqual(expect.objectContaining({
+      value: '127.0.0.1:8213/api/v1',
+      copyValue: 'http://127.0.0.1:8213/api/v1',
+      tone: 'ok'
+    }));
   });
 });
