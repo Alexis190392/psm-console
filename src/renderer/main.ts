@@ -19,6 +19,11 @@ import type { OperationProgressDto } from '../shared/dto/operation-progress.dto'
 import type { PalworldAdminAction, PalworldAdminStatusDto } from '../shared/dto/palworld-admin.dto';
 import type { PalworldPlayersStatusDto } from '../shared/dto/palworld-players-status.dto';
 import type { PalworldQueryPortStatusDto, PalworldRuntimeStatusDto } from '../shared/dto/palworld-runtime-status.dto';
+import type {
+  RemoteApiPermission,
+  RemoteApiStatusDto,
+  RemoteApiUpdateRequestDto
+} from '../shared/dto/remote-api.dto';
 import {
   createSummaryCardState,
   renderSummaryCard,
@@ -42,7 +47,10 @@ import { getOperationFailureMessage, isOperationSuccessful } from './utils/opera
 import { cssEscape, escapeHtml, normalizeSearchText } from './utils/text';
 import { renderBackupsView as renderBackupsViewHtml } from './views/backups-view';
 import { renderAdminStatus } from './views/admin-view';
-import { renderAppSettingsView } from './views/app-settings-view';
+import {
+  renderAppSettingsView,
+  renderRemoteApiConnectionStatus
+} from './views/app-settings-view';
 import {
   renderConfigurationPresets,
   renderSettingsFilterBar,
@@ -143,6 +151,9 @@ rootElement.innerHTML = `
           </a>
           <a class="sidebar__sublink" data-nav="settings" data-settings-sidebar-tab="automation" href="#">
             <span>Automatizaciones</span>
+          </a>
+          <a class="sidebar__sublink" data-nav="settings" data-settings-sidebar-tab="remote-api" href="#">
+            <span>API web</span>
           </a>
         </div>
       </div>
@@ -306,6 +317,7 @@ let latestUpdateStatus: AppUpdateStatusDto | null = null;
 let updateStatusRequest: Promise<AppUpdateStatusDto> | null = null;
 let announcedUpdateVersion: string | null = null;
 let adminRefreshTimer: number | null = null;
+let remoteApiConnectionRefreshTimer: number | null = null;
 let adminStatusRequest: Promise<[PalworldAdminStatusDto, PalworldPlayersStatusDto]> | null = null;
 const adminViewState = new AdminViewState();
 const settingsViewState = new SettingsViewState();
@@ -1033,7 +1045,7 @@ function isSidebarNavActive(link: HTMLAnchorElement): boolean {
 }
 
 function isSettingsTab(value: string | undefined): value is SettingsTab {
-  return value === 'summary' || value === 'application' || value === 'automation';
+  return value === 'summary' || value === 'application' || value === 'automation' || value === 'remote-api';
 }
 
 function isAdminTab(value: string | undefined): value is 'general' | 'players' | 'map' {
@@ -2094,10 +2106,11 @@ async function renderAppSettings(renderId = ++activeViewRenderId): Promise<void>
   renderViewLoading('Configuracion', 'Leyendo preferencias y automatizaciones de PSM Console.');
   try {
     await loadReleaseUpdateStatus();
-    const [settingsStatus, backupSummary, idleStatus] = await Promise.all([
+    const [settingsStatus, backupSummary, idleStatus, remoteApiStatus] = await Promise.all([
       palcmApi.appSettings.getStatus(),
       palcmApi.backup.getSummary(),
-      palcmApi.serverIdle.getStatus()
+      palcmApi.serverIdle.getStatus(),
+      palcmApi.remoteApi.getStatus()
     ]);
     if (!isCurrentViewRender(renderId, 'settings')) {
       return;
@@ -2109,9 +2122,11 @@ async function renderAppSettings(renderId = ++activeViewRenderId): Promise<void>
       latestUpdateStatus,
       backupSummary,
       idleStatus,
+      remoteApiStatus,
       settingsViewState.getTab()
     ));
     bindAppSettingsControls();
+    scheduleRemoteApiConnectionRefresh(remoteApiStatus);
   } catch (error) {
     if (isCurrentViewRender(renderId, 'settings')) {
       renderSimpleView('Configuracion', `No se pudieron cargar las preferencias. ${error instanceof Error ? error.message : String(error)}`);
@@ -2153,6 +2168,206 @@ function bindAppSettingsControls(): void {
   }
 
   bindBackupPolicyControls();
+  bindRemoteApiControls();
+}
+
+function bindRemoteApiControls(): void {
+  bindRemoteApiAddressCopies();
+  document.querySelectorAll<HTMLFormElement>('[data-remote-api-form]').forEach((form) => {
+    const profile = form.dataset['remoteApiForm'] === 'CLIENT' ? 'CLIENT' : 'ADMIN';
+    const enabled = form.elements.namedItem('enabled');
+    const bindMode = form.elements.namedItem('bindMode');
+    const password = form.elements.namedItem('password');
+    if (!(enabled instanceof HTMLInputElement)
+      || !(bindMode instanceof HTMLSelectElement || bindMode instanceof HTMLInputElement)
+      || !(password instanceof HTMLInputElement)) {
+      return;
+    }
+
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      if (!form.reportValidity()) {
+        return;
+      }
+      if (enabled.checked && !password.value && password.placeholder !== 'Contrasena configurada') {
+        password.setCustomValidity('Configura una contrasena de al menos 5 caracteres.');
+        password.reportValidity();
+        password.setCustomValidity('');
+        return;
+      }
+
+      const values = new FormData(form);
+      const username = values.get('username');
+      if (typeof username !== 'string') {
+        return;
+      }
+      const request: RemoteApiUpdateRequestDto = {
+        confirmed: true,
+        profile,
+        enabled: enabled.checked,
+        bindMode: bindMode.value === 'LOCAL_NETWORK' ? 'LOCAL_NETWORK' : 'LOCAL_ONLY',
+        port: Number(values.get('port')),
+        username,
+        ...(profile === 'CLIENT'
+          ? { permissions: values.getAll('permissions').filter(isRemoteApiPermission) }
+          : {}),
+        ...(password.value ? { password: password.value } : {})
+      };
+      runUiAction(
+        'No se pudo verificar el acceso de red de la API',
+        () => prepareRemoteApiConfirmation(request)
+      );
+    });
+  });
+}
+
+function bindRemoteApiAddressCopies(): void {
+  document.querySelectorAll<HTMLButtonElement>('.settings-api-address[data-copy-value]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const value = button.dataset['copyValue'];
+      if (value) {
+        void copyToClipboard(value, button);
+      }
+    });
+  });
+}
+
+function scheduleRemoteApiConnectionRefresh(status: RemoteApiStatusDto): void {
+  if (remoteApiConnectionRefreshTimer !== null) {
+    window.clearTimeout(remoteApiConnectionRefreshTimer);
+    remoteApiConnectionRefreshTimer = null;
+  }
+  if (!status.connections.some((connection) => connection.state === 'CHECKING')) {
+    return;
+  }
+  remoteApiConnectionRefreshTimer = window.setTimeout(() => {
+    remoteApiConnectionRefreshTimer = null;
+    void refreshRemoteApiConnectionStatus();
+  }, 1000);
+}
+
+async function refreshRemoteApiConnectionStatus(): Promise<void> {
+  if (!palcmApi || !navigationState.is('settings') || settingsViewState.getTab() !== 'remote-api') {
+    return;
+  }
+  const status = await palcmApi.remoteApi.getStatus();
+  if (!navigationState.is('settings') || settingsViewState.getTab() !== 'remote-api') {
+    return;
+  }
+  const current = document.querySelector<HTMLElement>('.settings-api-connection');
+  if (current) {
+    const template = document.createElement('template');
+    template.innerHTML = renderRemoteApiConnectionStatus(status).trim();
+    const next = template.content.firstElementChild;
+    if (next) {
+      current.replaceWith(next);
+      bindRemoteApiAddressCopies();
+    }
+  }
+  scheduleRemoteApiConnectionRefresh(status);
+}
+
+async function prepareRemoteApiConfirmation(request: RemoteApiUpdateRequestDto): Promise<void> {
+  let firewallConfigured = true;
+  if (palcmApi && request.enabled && request.bindMode === 'LOCAL_NETWORK') {
+    try {
+      const status = await palcmApi.remoteApi.getFirewallStatus({
+        profile: request.profile ?? 'ADMIN',
+        port: request.port
+      });
+      firewallConfigured = status.configured;
+    } catch {
+      firewallConfigured = false;
+    }
+  }
+  showRemoteApiConfirmation(request, firewallConfigured);
+}
+
+function showRemoteApiConfirmation(
+  request: RemoteApiUpdateRequestDto,
+  firewallConfigured: boolean
+): void {
+  if (!appFooter) {
+    return;
+  }
+
+  rootElement.classList.add('app--footer-visible');
+  appFooter.classList.remove('hidden');
+  appFooter.classList.add('app-footer--confirm');
+  const exposure = request.bindMode === 'LOCAL_NETWORK'
+    ? 'desde otros equipos de la red local'
+    : 'solo desde este equipo';
+  const profileLabel = request.profile === 'CLIENT' ? 'cliente' : 'administrativa';
+  const needsFirewall = request.enabled
+    && request.bindMode === 'LOCAL_NETWORK'
+    && !firewallConfigured;
+  appFooter.innerHTML = renderInlineConfirm({
+    message: request.enabled
+      ? `La API ${profileLabel} quedara disponible ${exposure} por el puerto ${String(request.port)}.${needsFirewall ? ' Windows aun no permite ese puerto.' : ''}`
+      : `La API ${profileLabel} se detendra y sus sesiones dejaran de funcionar.`,
+    actions: [
+      {
+        id: 'confirm-remote-api',
+        label: needsFirewall ? 'Habilitar y configurar Windows' : request.enabled ? 'Habilitar API' : 'Deshabilitar API',
+        tone: request.enabled ? 'warning' : 'secondary'
+      },
+      ...(needsFirewall
+        ? [{ id: 'confirm-remote-api-without-firewall', label: 'Continuar sin regla', tone: 'secondary' as const }]
+        : []),
+      { id: 'cancel-remote-api', label: 'Cancelar', tone: 'secondary' }
+    ]
+  });
+  document.querySelector<HTMLButtonElement>('#confirm-remote-api')?.addEventListener('click', () => {
+    runUiAction('No se pudo guardar la API web', () => updateRemoteApi({
+      ...request,
+      configureFirewall: needsFirewall
+    }));
+  });
+  document.querySelector<HTMLButtonElement>('#confirm-remote-api-without-firewall')?.addEventListener('click', () => {
+    runUiAction('No se pudo guardar la API web', () => updateRemoteApi(request));
+  });
+  document.querySelector<HTMLButtonElement>('#cancel-remote-api')?.addEventListener('click', () => {
+    updateFooterChrome();
+    void renderAppSettings();
+  });
+}
+
+async function updateRemoteApi(request: RemoteApiUpdateRequestDto): Promise<void> {
+  if (!palcmApi) {
+    return;
+  }
+  await palcmApi.remoteApi.update(request);
+  if (request.configureFirewall && request.enabled && request.bindMode === 'LOCAL_NETWORK') {
+    const accepted = await palcmApi.remoteApi.createFirewallRule({
+      confirmed: true,
+      profile: request.profile ?? 'ADMIN',
+      port: request.port
+    });
+    const firewallReady = await pollOperation(accepted.operationId);
+    if (!firewallReady) {
+      showToast('API habilitada, pero Windows no pudo configurarse', 'error');
+      updateFooterChrome();
+      await renderAppSettings();
+      return;
+    }
+  }
+  showToast(request.enabled ? 'API web actualizada' : 'API web deshabilitada');
+  updateFooterChrome();
+  await renderAppSettings();
+}
+
+function isRemoteApiPermission(value: FormDataEntryValue): value is RemoteApiPermission {
+  return typeof value === 'string'
+    && [
+      'GENERAL',
+      'SERVER_START',
+      'SERVER_RESTART',
+      'SERVER_STOP',
+      'PLAYERS_VIEW',
+      'PLAYERS_KICK',
+      'PLAYERS_BAN',
+      'LOGS'
+    ].includes(value);
 }
 
 function bindBackupFilters(): void {
@@ -2236,6 +2451,10 @@ function stopRuntimeViewRefreshers(): void {
   if (adminRefreshTimer !== null) {
     window.clearInterval(adminRefreshTimer);
     adminRefreshTimer = null;
+  }
+  if (remoteApiConnectionRefreshTimer !== null) {
+    window.clearTimeout(remoteApiConnectionRefreshTimer);
+    remoteApiConnectionRefreshTimer = null;
   }
 }
 
@@ -4477,7 +4696,9 @@ function announceAndFocusView(): void {
       ? 'Resumen'
       : settingsViewState.getTab() === 'application'
         ? 'Aplicacion'
-        : 'Automatizaciones'}`
+        : settingsViewState.getTab() === 'automation'
+          ? 'Automatizaciones'
+          : 'API web'}`
   };
   const label = labels[navigationState.current] ?? 'Contenido';
   setText(viewAnnouncer, `Vista ${label}`);

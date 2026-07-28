@@ -122,6 +122,9 @@ async function bootstrap(): Promise<void> {
 
   const nestContext = await createNestContext();
   registerIpcHandlers(ipcMain, nestContext);
+  app.once('before-quit', () => {
+    void nestContext.close();
+  });
 
   await app.whenReady();
   registerRendererProtocol();

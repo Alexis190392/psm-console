@@ -1,4 +1,4 @@
-export type SettingsTab = 'summary' | 'application' | 'automation';
+export type SettingsTab = 'summary' | 'application' | 'automation' | 'remote-api';
 
 export class SettingsViewState {
   private activeTab: SettingsTab = 'summary';

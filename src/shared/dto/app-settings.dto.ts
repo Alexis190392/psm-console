@@ -1,12 +1,14 @@
 import type { BackupPolicyDto } from './backup-status.dto';
+import type { RemoteApiSettingsDto } from './remote-api.dto';
 import type { ServerIdlePolicyDto } from './server-idle-policy.dto';
 
 export interface AppSettingsDto {
-  schemaVersion: 1;
+  schemaVersion: 5;
   automation: {
     idleShutdown: ServerIdlePolicyDto;
     backups: BackupPolicyDto;
   };
+  remoteApi: RemoteApiSettingsDto;
 }
 
 export interface AppSettingsStatusDto {

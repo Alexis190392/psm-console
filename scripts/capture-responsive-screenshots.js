@@ -18,7 +18,17 @@ const views = [
   { name: 'red-firewall', nav: 'network' },
   { name: 'backups', nav: 'backups' },
   { name: 'logs', nav: 'logs' },
-  { name: 'configuracion-resumen', nav: 'settings' }
+  { name: 'configuracion-resumen', nav: 'settings' },
+  {
+    name: 'configuracion-automatizaciones',
+    nav: 'settings',
+    selector: '[data-settings-sidebar-tab="automation"]'
+  },
+  {
+    name: 'configuracion-api-web',
+    nav: 'settings',
+    selector: '[data-settings-sidebar-tab="remote-api"]'
+  }
 ];
 const manualViews = [
   { name: 'general', selector: '.sidebar__link[data-nav="home"]', waitMs: 1200 },
@@ -28,7 +38,8 @@ const manualViews = [
   { name: 'logs', selector: '.sidebar__link[data-nav="logs"]', waitMs: 900, fixtureLogs: true },
   { name: 'configuracion-resumen', selector: '[data-settings-sidebar-tab="summary"]', waitMs: 1200 },
   { name: 'configuracion-aplicacion', selector: '[data-settings-sidebar-tab="application"]', waitMs: 1200 },
-  { name: 'configuracion-automatizaciones', selector: '[data-settings-sidebar-tab="automation"]', waitMs: 1200 }
+  { name: 'configuracion-automatizaciones', selector: '[data-settings-sidebar-tab="automation"]', waitMs: 1200 },
+  { name: 'configuracion-api-web', selector: '[data-settings-sidebar-tab="remote-api"]', waitMs: 1200 }
 ];
 const manualRuntimeViews = [
   { name: 'administracion-servidor', selector: '[data-admin-sidebar-tab="general"]', waitMs: 5000 },
@@ -84,6 +95,14 @@ async function capture(window, viewport, view) {
   window.setSize(viewport.width, viewport.height);
   await wait(400);
   await clickNav(window, view.nav);
+  if (view.selector) {
+    await waitForSelector(window, view.selector);
+    await window.webContents.executeJavaScript(`
+      document.querySelector(${JSON.stringify(view.selector)})?.click()
+    `);
+    await waitForSelector(window, `${view.selector}.sidebar__link--active`);
+    await wait(500);
+  }
   const image = await window.webContents.capturePage();
   writeFileSync(
     join(outputDir, `${viewport.name}-${String(viewport.width)}x${String(viewport.height)}-${view.name}.png`),
@@ -270,12 +289,23 @@ async function writeManualScreenshot(window, outputDir, view) {
 
 async function captureManualScreenshots(window) {
   const manualOutputDir = join(process.cwd(), 'resources', 'screenshots');
+  const requestedView = process.env.PALCM_CAPTURE_VIEW;
+  const selectedViews = requestedView
+    ? manualViews.filter((view) => view.name === requestedView)
+    : manualViews;
+  if (requestedView && selectedViews.length === 0) {
+    throw new Error(`Unknown manual capture view: ${requestedView}`);
+  }
   mkdirSync(manualOutputDir, { recursive: true });
   window.setSize(1440, 900);
   await wait(400);
 
-  for (const view of manualViews) {
+  for (const view of selectedViews) {
     await writeManualScreenshot(window, manualOutputDir, view);
+  }
+
+  if (requestedView) {
+    return;
   }
 
   await ensureServerRunning(window);

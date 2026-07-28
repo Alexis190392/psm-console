@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
+    <title>PSM Console Web</title>
+    <link rel="icon" href="/api/v1/logo.png">
+    <link rel="stylesheet" href="/api/v1/ui.css">
+    <script src="/api/v1/ui.js" defer></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <img src="/api/v1/logo.png" alt="" width="36" height="36">
+          <div>
+            <strong>PSM Console</strong>
+            <span id="access-profile-label">Administracion web</span>
+          </div>
+        </div>
+        <div id="connection-state" class="connection-state" hidden>
+          <span class="status-dot"></span>
+          <span id="connection-label">Conectado</span>
+        </div>
+      </header>
+
+      <main>
+        <section id="login-view" class="login-layout" aria-labelledby="login-title">
+          <form id="login-form" class="login-panel">
+            <img class="login-logo" src="/api/v1/logo.png" alt="PSM Console" width="92" height="92">
+            <p class="eyebrow">ACCESO REMOTO</p>
+            <h1 id="login-title">Iniciar sesion</h1>
+            <p class="supporting-text">Usa las credenciales configuradas en PSM Console.</p>
+
+            <label for="username">Usuario</label>
+            <input id="username" name="username" type="text" autocomplete="username" required>
+
+            <label for="password">Contrasena</label>
+            <div class="password-field">
+              <input id="password" name="password" type="password" autocomplete="current-password" required>
+              <button id="toggle-password" class="icon-button" type="button" aria-label="Mostrar contrasena" title="Mostrar contrasena">
+                <span aria-hidden="true">Ver</span>
+              </button>
+            </div>
+
+            <p id="login-error" class="form-error" role="alert" hidden></p>
+            <button id="login-button" class="primary-button full-width" type="submit">
+              <span>Ingresar</span>
+              <span aria-hidden="true">→</span>
+            </button>
+          </form>
+        </section>
+
+        <section id="dashboard-view" class="dashboard" hidden>
+          <aside class="sidebar" aria-label="Navegacion principal">
+            <nav>
+              <button class="nav-button active" type="button" data-view="general" data-permission-any="GENERAL,SERVER_START,SERVER_RESTART,SERVER_STOP">General</button>
+              <button class="nav-button" type="button" data-view="players" data-permission-any="PLAYERS_VIEW,PLAYERS_KICK,PLAYERS_BAN">Jugadores</button>
+              <button class="nav-button" type="button" data-view="logs" data-permission="LOGS">Logs</button>
+            </nav>
+            <button id="logout-button" class="secondary-button" type="button">Cerrar sesion</button>
+          </aside>
+
+          <div class="workspace">
+            <section id="general-view" class="content-view" data-content-view="general">
+              <div class="page-heading">
+                <div>
+                  <p class="eyebrow">GENERAL</p>
+                  <h1>Estado del servidor</h1>
+                </div>
+                <button class="icon-button refresh-button" type="button" data-refresh aria-label="Actualizar estado" title="Actualizar estado">↻</button>
+              </div>
+
+              <div class="status-grid" data-permission-any="GENERAL,SERVER_START,SERVER_RESTART,SERVER_STOP">
+                <article class="status-card" data-permission="GENERAL">
+                  <span>Aplicacion</span>
+                  <strong id="application-status">Consultando</strong>
+                  <small id="application-message">Leyendo estado actual...</small>
+                </article>
+                <article class="status-card" data-permission-any="GENERAL,SERVER_START,SERVER_RESTART,SERVER_STOP">
+                  <span>Servidor</span>
+                  <strong id="server-status">Consultando</strong>
+                  <small id="server-message">Verificando proceso...</small>
+                </article>
+                <article class="status-card" data-permission-any="PLAYERS_VIEW,PLAYERS_KICK,PLAYERS_BAN">
+                  <span>Jugadores</span>
+                  <strong id="player-count">--</strong>
+                  <small>Conectados en esta instancia</small>
+                </article>
+              </div>
+
+              <section class="action-panel" data-permission-any="SERVER_START,SERVER_RESTART,SERVER_STOP">
+                <div>
+                  <p class="eyebrow">CONTROL</p>
+                  <h2>Acciones del servidor</h2>
+                </div>
+                <div class="action-buttons">
+                  <button id="start-button" class="primary-button" type="button" data-permission="SERVER_START">Iniciar</button>
+                  <button id="restart-button" class="secondary-button" type="button" data-permission="SERVER_RESTART">Reiniciar</button>
+                  <button id="stop-button" class="danger-button" type="button" data-permission="SERVER_STOP">Detener</button>
+                </div>
+              </section>
+              <p id="operation-message" class="operation-message" aria-live="polite"></p>
+            </section>
+
+            <section id="players-view" class="content-view" data-content-view="players" hidden>
+              <div class="page-heading">
+                <div>
+                  <p class="eyebrow">JUGADORES</p>
+                  <h1>Conectados</h1>
+                </div>
+                <button class="icon-button refresh-button" type="button" data-refresh aria-label="Actualizar jugadores" title="Actualizar jugadores">↻</button>
+              </div>
+              <div id="players-list" class="data-list">
+                <p class="empty-state">Consultando jugadores...</p>
+              </div>
+            </section>
+
+            <section id="logs-view" class="content-view" data-content-view="logs" hidden>
+              <div class="page-heading">
+                <div>
+                  <p class="eyebrow">LOGS</p>
+                  <h1>Actividad actual</h1>
+                </div>
+                <button class="icon-button refresh-button" type="button" data-refresh aria-label="Actualizar logs" title="Actualizar logs">↻</button>
+              </div>
+              <pre id="logs-console" class="logs-console" tabindex="0">Consultando logs...</pre>
+            </section>
+          </div>
+        </section>
+      </main>
+      <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+    </div>
+  </body>
+</html>

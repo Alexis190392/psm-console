@@ -6,7 +6,7 @@ export const APP_INFO = {
   appId: 'com.palcm.servermanager',
   authorAlias: '>GR477<',
   authorName: 'Alexis Joel Dávila',
-  version: '0.14.0',
+  version: '0.16.5',
   channel: 'Dev'
 } as const;
 
