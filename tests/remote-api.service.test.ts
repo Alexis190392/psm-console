@@ -14,6 +14,7 @@ import { PalworldPlayersService } from '../src/backend/palworld-players/palworld
 import { PalworldProcessService } from '../src/backend/palworld-process/palworld-process.service';
 import { PortablePathService } from '../src/backend/portable-path/portable-path.service';
 import {
+  isExternalRemoteAddress,
   RemoteApiService,
   selectPreferredLanAddress
 } from '../src/backend/remote-api/remote-api.service';
@@ -54,7 +55,11 @@ describe('RemoteApiService', () => {
     expect(webResponse.status).toBe(200);
     expect(webResponse.headers.get('content-type')).toContain('text/html');
     expect(await webResponse.text()).toContain('id="login-form"');
-    expect((await fetch(`${baseUrl}/ui.css`)).headers.get('content-type')).toContain('text/css');
+    const cssResponse = await fetch(`${baseUrl}/ui.css`);
+    const css = await cssResponse.text();
+    expect(cssResponse.headers.get('content-type')).toContain('text/css');
+    expect(css).toContain('@media (max-width: 560px)');
+    expect(css).toContain('100dvh');
     expect((await fetch(`${baseUrl}/ui.js`)).headers.get('content-type')).toContain('text/javascript');
     expect((await fetch(`${baseUrl}/logo.png`)).headers.get('content-type')).toContain('image/png');
     expect((await fetch(`${baseUrl}/health`)).status).toBe(200);
@@ -270,6 +275,17 @@ describe('RemoteApiService', () => {
       '192.168.0.100',
       '192.168.0.100'
     ])).toBe('192.168.0.100');
+  });
+
+  it('distinguishes authenticated Internet addresses from local network addresses', () => {
+    const localAddresses = ['192.168.0.100', '100.212.134.158'];
+
+    expect(isExternalRemoteAddress('200.123.115.176', localAddresses)).toBe(true);
+    expect(isExternalRemoteAddress('::ffff:200.123.115.176', localAddresses)).toBe(true);
+    expect(isExternalRemoteAddress('192.168.0.35', localAddresses)).toBe(false);
+    expect(isExternalRemoteAddress('100.72.10.4', localAddresses)).toBe(false);
+    expect(isExternalRemoteAddress('127.0.0.1', localAddresses)).toBe(false);
+    expect(isExternalRemoteAddress('::1', localAddresses)).toBe(false);
   });
 });
 

@@ -86,6 +86,7 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
   private readonly loginAttempts = new Map<string, LoginAttempt>();
   private connections: RemoteApiConnectionDto[] = [];
   private connectionProbeVersion = 0;
+  private externalAccessConfirmed = false;
 
   constructor(
     private readonly appSettingsService: AppSettingsService,
@@ -198,6 +199,7 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
   private async stopAll(): Promise<void> {
     this.connectionProbeVersion += 1;
     this.connections = [];
+    this.externalAccessConfirmed = false;
     this.sessions.clear();
     this.loginAttempts.clear();
     const server = this.server;
@@ -503,6 +505,7 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
     };
     sendJson(response, 200, result);
     void this.loggingService.write('api', 'INFO', `Sesion API iniciada desde ${clientId}.`);
+    void this.confirmExternalAccess(clientId, settings);
   }
 
   private requireSession(
@@ -597,9 +600,15 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
       if (probeVersion !== this.connectionProbeVersion || !this.server) {
         return;
       }
+      if (this.externalAccessConfirmed) {
+        return;
+      }
       this.replacePublicConnection(createPublicConnection(diagnostics, port));
     } catch {
       if (probeVersion !== this.connectionProbeVersion || !this.server) {
+        return;
+      }
+      if (this.externalAccessConfirmed) {
         return;
       }
       this.replacePublicConnection({
@@ -609,6 +618,50 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
         message: 'No se pudo comprobar el acceso desde Internet.'
       });
     }
+  }
+
+  private async confirmExternalAccess(
+    clientAddress: string,
+    settings: Pick<StoredRemoteApiSettings, 'bindMode' | 'port'>
+  ): Promise<void> {
+    if (
+      settings.bindMode !== 'LOCAL_NETWORK'
+      || !isExternalRemoteAddress(clientAddress, this.networkService.getLocalAddresses())
+      || !this.server
+    ) {
+      return;
+    }
+
+    this.externalAccessConfirmed = true;
+    const probeVersion = this.connectionProbeVersion;
+    const currentConnection = this.connections.find((connection) => connection.kind === 'PUBLIC');
+    let endpoint = currentConnection?.endpoint;
+    if (!endpoint) {
+      try {
+        const diagnostics = await this.networkService.getPublicAddress();
+        endpoint = diagnostics.publicIp
+          ? createApiEndpoint(diagnostics.publicIp, settings.port)
+          : undefined;
+      } catch {
+        endpoint = undefined;
+      }
+    }
+    if (!this.isCurrentConnectionProbe(probeVersion)) {
+      return;
+    }
+
+    this.replacePublicConnection({
+      kind: 'PUBLIC',
+      label: 'Internet',
+      ...(endpoint ? { endpoint } : {}),
+      state: 'AVAILABLE',
+      message: 'Acceso confirmado por una sesion autenticada desde Internet.'
+    });
+    void this.loggingService.write(
+      'api',
+      'INFO',
+      'Acceso publico confirmado por una sesion autenticada desde Internet.'
+    );
   }
 
   private replacePublicConnection(connection: RemoteApiConnectionDto): void {
@@ -787,6 +840,42 @@ export function selectPreferredLanAddress(addresses: string[]): string | undefin
   return [...new Set(addresses)]
     .filter((address) => /^\d{1,3}(\.\d{1,3}){3}$/.test(address))
     .sort((left, right) => getLanAddressPriority(left) - getLanAddressPriority(right))[0];
+}
+
+export function isExternalRemoteAddress(address: string, localAddresses: string[] = []): boolean {
+  const normalized = normalizeRemoteAddress(address);
+  if (!normalized) {
+    return false;
+  }
+  if (localAddresses.map(normalizeRemoteAddress).includes(normalized)) {
+    return false;
+  }
+
+  const ipv4 = normalized.split('.').map(Number);
+  if (ipv4.length === 4 && ipv4.every((part) => Number.isInteger(part) && part >= 0 && part <= 255)) {
+    const [first = -1, second = -1] = ipv4;
+    return !(
+      first === 0
+      || first === 10
+      || first === 127
+      || (first === 169 && second === 254)
+      || (first === 172 && second >= 16 && second <= 31)
+      || (first === 192 && second === 168)
+      || (first === 100 && second >= 64 && second <= 127)
+      || first >= 224
+    );
+  }
+
+  return normalized.includes(':')
+    && normalized !== '::1'
+    && !normalized.startsWith('fe80:')
+    && !normalized.startsWith('fc')
+    && !normalized.startsWith('fd');
+}
+
+function normalizeRemoteAddress(address: string): string {
+  const normalized = address.trim().toLowerCase().split('%')[0] ?? '';
+  return normalized.startsWith('::ffff:') ? normalized.slice(7) : normalized;
 }
 
 function getLanAddressPriority(address: string): number {
