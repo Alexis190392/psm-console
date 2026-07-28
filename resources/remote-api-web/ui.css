@@ -206,16 +206,53 @@ input:focus {
 }
 
 .password-field input {
-  padding-right: 62px;
+  padding-right: 56px;
 }
 
 .password-field .icon-button {
   position: absolute;
   top: 5px;
   right: 5px;
-  width: 48px;
+  width: 42px;
   height: 34px;
-  font-size: 11px;
+}
+
+.password-visibility-icon {
+  position: relative;
+  display: block;
+  width: 20px;
+  height: 13px;
+  border: 2px solid currentColor;
+  border-radius: 50% / 60%;
+}
+
+.password-visibility-icon::before {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  content: "";
+  transform: translate(-50%, -50%);
+}
+
+.password-visibility-icon::after {
+  position: absolute;
+  top: 50%;
+  left: -3px;
+  width: 24px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+  box-shadow: 0 0 0 2px var(--surface-strong);
+  content: "";
+  transform: rotate(-42deg);
+}
+
+.password-visibility-button.is-visible .password-visibility-icon::after {
+  display: none;
 }
 
 .form-error {

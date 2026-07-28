@@ -444,8 +444,10 @@
   document.getElementById('toggle-password').addEventListener('click', function () {
     var visible = passwordInput.type === 'text';
     passwordInput.type = visible ? 'password' : 'text';
-    this.firstElementChild.textContent = visible ? 'Ver' : 'Ocultar';
+    this.classList.toggle('is-visible', !visible);
+    this.setAttribute('aria-pressed', String(!visible));
     this.setAttribute('aria-label', visible ? 'Mostrar contrasena' : 'Ocultar contrasena');
+    this.setAttribute('title', visible ? 'Mostrar contrasena' : 'Ocultar contrasena');
   });
   document.getElementById('logout-button').addEventListener('click', function () {
     void logout();

@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { createSummaryCardState } from '../src/renderer/components/summary-card';
 import {
+  createGeneralRemoteApiCard,
   renderGeneralUpdateAction,
-  renderGeneralView
+  renderGeneralView,
+  shouldRefreshGeneralRemoteApi
 } from '../src/renderer/views/general-view';
 
 describe('general view', () => {
@@ -51,5 +53,43 @@ describe('general view', () => {
     expect(html).toContain('data-open-release="true"');
     expect(html).toContain('Nueva versión v0.11.1');
     expect(renderGeneralUpdateAction(null)).toBe('');
+  });
+
+  it('shows a confirmed public web API as a copyable General card', () => {
+    const status = {
+      state: 'RUNNING',
+      connections: [{
+        kind: 'PUBLIC',
+        label: 'Internet',
+        endpoint: 'http://203.0.113.25:8213/api/v1',
+        state: 'AVAILABLE',
+        message: 'Acceso confirmado.'
+      }],
+      client: { state: 'DISABLED' }
+    } as Parameters<typeof createGeneralRemoteApiCard>[0];
+
+    expect(createGeneralRemoteApiCard(status)).toEqual(expect.objectContaining({
+      title: 'API web',
+      value: '203.0.113.25:8213/api/v1',
+      copyValue: 'http://203.0.113.25:8213/api/v1'
+    }));
+    expect(shouldRefreshGeneralRemoteApi(status)).toBe(false);
+  });
+
+  it('keeps checking an exposed API until Internet access is confirmed', () => {
+    const status = {
+      state: 'RUNNING',
+      connections: [{
+        kind: 'PUBLIC',
+        label: 'Internet',
+        endpoint: 'http://203.0.113.25:8213/api/v1',
+        state: 'UNKNOWN',
+        message: 'Verificando.'
+      }],
+      client: { state: 'DISABLED' }
+    } as Parameters<typeof shouldRefreshGeneralRemoteApi>[0];
+
+    expect(createGeneralRemoteApiCard(status)).toBeNull();
+    expect(shouldRefreshGeneralRemoteApi(status)).toBe(true);
   });
 });

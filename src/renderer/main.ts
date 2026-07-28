@@ -57,8 +57,11 @@ import {
   renderSettingsForm
 } from './views/server-configuration-view';
 import {
+  createGeneralRemoteApiCard,
+  renderGeneralRemoteApiCard,
   renderGeneralUpdateAction,
-  renderGeneralView as renderGeneralViewHtml
+  renderGeneralView as renderGeneralViewHtml,
+  shouldRefreshGeneralRemoteApi
 } from './views/general-view';
 import { renderPreflightSummaryView, renderSimpleView as renderSimpleViewHtml } from './views/status-views';
 import { NavigationState } from './state/navigation-state';
@@ -318,6 +321,7 @@ let updateStatusRequest: Promise<AppUpdateStatusDto> | null = null;
 let announcedUpdateVersion: string | null = null;
 let adminRefreshTimer: number | null = null;
 let remoteApiConnectionRefreshTimer: number | null = null;
+let generalRemoteApiRefreshTimer: number | null = null;
 let adminStatusRequest: Promise<[PalworldAdminStatusDto, PalworldPlayersStatusDto]> | null = null;
 const adminViewState = new AdminViewState();
 const settingsViewState = new SettingsViewState();
@@ -1215,11 +1219,12 @@ async function renderGeneralView(renderId: number): Promise<void> {
   }
 
   renderViewLoading('General', 'Actualizando servidor, conexiones, jugadores y backups.');
-  const [port, backupSummary, serverRuntime, playersSummary] = await Promise.all([
+  const [port, backupSummary, serverRuntime, playersSummary, remoteApiStatus] = await Promise.all([
     readConfiguredPort(),
     readBackupSummaryForGeneral(),
     readServerRuntimeForGeneral(),
-    readPlayersStatusForGeneral()
+    readPlayersStatusForGeneral(),
+    readRemoteApiStatusForGeneral()
   ]);
 
   if (!isCurrentViewRender(renderId, 'home')) {
@@ -1235,6 +1240,7 @@ async function renderGeneralView(renderId: number): Promise<void> {
   const backupState = createBackupSummaryCard(backupSummary);
   const serverState = createServerRuntimeSummary(serverRuntime);
   const playersState = createPlayersSummaryCard(playersSummary);
+  const remoteApiCard = createGeneralRemoteApiCard(remoteApiStatus);
   const networkFreshness = formatLastVerification(latestFirewallCheckedAt);
 
   setContent(renderGeneralViewHtml({
@@ -1273,7 +1279,8 @@ async function renderGeneralView(renderId: number): Promise<void> {
           target: 'admin',
           adminTab: 'players',
           ...playersState.state
-      }
+      },
+      ...(remoteApiCard ? [remoteApiCard] : [])
     ],
     supportCards: [
       {
@@ -1311,7 +1318,55 @@ async function renderGeneralView(renderId: number): Promise<void> {
   void hydrateGeneralLocalPreview(port, renderId);
   void hydrateGeneralPublicPreview(port, renderId);
   void hydrateGeneralNetworkSummary(port, renderId);
+  scheduleGeneralRemoteApiRefresh(remoteApiStatus, renderId);
   void loadReleaseUpdateStatus();
+}
+
+async function readRemoteApiStatusForGeneral(): Promise<RemoteApiStatusDto | null> {
+  if (!palcmApi) {
+    return null;
+  }
+
+  try {
+    return await palcmApi.remoteApi.getStatus();
+  } catch (error) {
+    appendConsoleLine(`No se pudo leer la API web para General: ${error instanceof Error ? error.message : String(error)}`);
+    return null;
+  }
+}
+
+function scheduleGeneralRemoteApiRefresh(status: RemoteApiStatusDto | null, renderId: number): void {
+  if (generalRemoteApiRefreshTimer !== null) {
+    window.clearTimeout(generalRemoteApiRefreshTimer);
+    generalRemoteApiRefreshTimer = null;
+  }
+  if (!shouldRefreshGeneralRemoteApi(status) || !isCurrentViewRender(renderId, 'home')) {
+    return;
+  }
+
+  generalRemoteApiRefreshTimer = window.setTimeout(() => {
+    generalRemoteApiRefreshTimer = null;
+    void refreshGeneralRemoteApiCard(renderId);
+  }, 3_000);
+}
+
+async function refreshGeneralRemoteApiCard(renderId: number): Promise<void> {
+  const status = await readRemoteApiStatusForGeneral();
+  if (!isCurrentViewRender(renderId, 'home')) {
+    return;
+  }
+
+  const html = renderGeneralRemoteApiCard(status);
+  if (html) {
+    const currentCard = document.querySelector('#general-remote-api-card');
+    if (currentCard) {
+      replaceSummaryCard('general-remote-api-card', html);
+    } else {
+      document.querySelector('#general-primary-grid')?.insertAdjacentHTML('beforeend', html);
+    }
+    bindSummaryCards();
+  }
+  scheduleGeneralRemoteApiRefresh(status, renderId);
 }
 
 function bindReleaseUpdateAction(): void {
@@ -2489,6 +2544,10 @@ function stopRuntimeViewRefreshers(): void {
   if (remoteApiConnectionRefreshTimer !== null) {
     window.clearTimeout(remoteApiConnectionRefreshTimer);
     remoteApiConnectionRefreshTimer = null;
+  }
+  if (generalRemoteApiRefreshTimer !== null) {
+    window.clearTimeout(generalRemoteApiRefreshTimer);
+    generalRemoteApiRefreshTimer = null;
   }
 }
 
