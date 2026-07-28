@@ -13,7 +13,11 @@ import { PalworldConfigurationService } from '../src/backend/palworld-configurat
 import { PalworldPlayersService } from '../src/backend/palworld-players/palworld-players.service';
 import { PalworldProcessService } from '../src/backend/palworld-process/palworld-process.service';
 import { PortablePathService } from '../src/backend/portable-path/portable-path.service';
-import { RemoteApiService } from '../src/backend/remote-api/remote-api.service';
+import {
+  isExternalRemoteAddress,
+  RemoteApiService,
+  selectPreferredLanAddress
+} from '../src/backend/remote-api/remote-api.service';
 import { ApplicationStatus } from '../src/shared/enums/application-status';
 
 describe('RemoteApiService', () => {
@@ -51,8 +55,21 @@ describe('RemoteApiService', () => {
     expect(webResponse.status).toBe(200);
     expect(webResponse.headers.get('content-type')).toContain('text/html');
     expect(await webResponse.text()).toContain('id="login-form"');
-    expect((await fetch(`${baseUrl}/ui.css`)).headers.get('content-type')).toContain('text/css');
-    expect((await fetch(`${baseUrl}/ui.js`)).headers.get('content-type')).toContain('text/javascript');
+    const cssResponse = await fetch(`${baseUrl}/ui.css`);
+    const css = await cssResponse.text();
+    expect(cssResponse.headers.get('content-type')).toContain('text/css');
+    expect(css).toContain('@media (max-width: 560px)');
+    expect(css).toContain('100dvh');
+    expect(css).toContain('max-height: 60px');
+    expect(css).toContain('display: block');
+    expect(css).toContain('password-visibility-icon');
+    expect(css).toContain('border: 0');
+    expect(css).toContain('background: transparent');
+    const scriptResponse = await fetch(`${baseUrl}/ui.js`);
+    const script = await scriptResponse.text();
+    expect(scriptResponse.headers.get('content-type')).toContain('text/javascript');
+    expect(script).toContain("throw new Error('No permitido')");
+    expect(script).toContain("apiRequest('/session')");
     expect((await fetch(`${baseUrl}/logo.png`)).headers.get('content-type')).toContain('image/png');
     expect((await fetch(`${baseUrl}/health`)).status).toBe(200);
     expect((await fetch(`${baseUrl}/status`)).status).toBe(401);
@@ -71,6 +88,16 @@ describe('RemoteApiService', () => {
     const now = vi.spyOn(Date, 'now').mockReturnValue(Number.MAX_SAFE_INTEGER);
     expect((await fetch(`${baseUrl}/status`, { headers: authorization })).status).toBe(200);
     now.mockRestore();
+
+    await remoteApi.update({
+      confirmed: true,
+      enabled: true,
+      bindMode: 'LOCAL_ONLY',
+      port,
+      username: 'renamed-operator',
+      password: 'updated-password'
+    });
+    expect((await fetch(`${baseUrl}/status`, { headers: authorization })).status).toBe(200);
 
     const startResponse = await fetch(`${baseUrl}/server/start`, {
       method: 'POST',
@@ -173,6 +200,24 @@ describe('RemoteApiService', () => {
     const adminHeaders = { authorization: `Bearer ${adminLogin.token}` };
     expect(adminLogin.profile).toBe('ADMIN');
     expect((await fetch(`${baseUrl}/status`, { headers: adminHeaders })).status).toBe(200);
+
+    const updatedStatus = await remoteApi.update({
+      confirmed: true,
+      profile: 'CLIENT',
+      enabled: true,
+      bindMode: 'LOCAL_ONLY',
+      port,
+      username: 'friend',
+      permissions: ['LOGS']
+    });
+    expect(updatedStatus.client.state).toBe('RUNNING');
+    expect((await fetch(`${baseUrl}/players`, { headers: clientHeaders })).status).toBe(403);
+    expect((await fetch(`${baseUrl}/logs`, { headers: clientHeaders })).status).toBe(200);
+    const refreshedSession = await fetch(`${baseUrl}/session`, { headers: clientHeaders });
+    expect(await refreshedSession.json()).toEqual({
+      profile: 'CLIENT',
+      permissions: ['LOGS']
+    });
   });
 
   it('enforces start, restart and stop permissions independently', async () => {
@@ -215,13 +260,13 @@ describe('RemoteApiService', () => {
     expect(fixture.stop).not.toHaveBeenCalled();
   });
 
-  it('reports loopback, LAN and verified public API addresses', async () => {
+  it('verifies loopback, LAN and Internet sequentially', async () => {
     const port = await getFreePort();
     const appSettings = new AppSettingsService(paths);
     const fixture = createRemoteApiFixture(appSettings, portableRoot);
     remoteApi = fixture.service;
 
-    await remoteApi.update({
+    const startingStatus = await remoteApi.update({
       confirmed: true,
       enabled: true,
       bindMode: 'LOCAL_NETWORK',
@@ -229,6 +274,12 @@ describe('RemoteApiService', () => {
       username: 'operator',
       password: 'secure-password'
     });
+
+    expect(startingStatus.connections.map(({ kind, state }) => ({ kind, state }))).toEqual([
+      { kind: 'LOOPBACK', state: 'CHECKING' },
+      { kind: 'LAN', state: 'UNKNOWN' },
+      { kind: 'PUBLIC', state: 'UNKNOWN' }
+    ]);
 
     await vi.waitFor(async () => {
       const status = await remoteApi?.getStatus();
@@ -244,7 +295,7 @@ describe('RemoteApiService', () => {
       }),
       expect.objectContaining({
         kind: 'LAN',
-        endpoint: `http://192.0.2.10:${String(port)}/api/v1`,
+        endpoint: `http://127.0.0.1:${String(port)}/api/v1`,
         state: 'AVAILABLE'
       }),
       expect.objectContaining({
@@ -253,6 +304,25 @@ describe('RemoteApiService', () => {
         state: 'AVAILABLE'
       })
     ]));
+  });
+
+  it('chooses one private LAN address over VPN and duplicated adapters', () => {
+    expect(selectPreferredLanAddress([
+      '100.212.134.158',
+      '192.168.0.100',
+      '192.168.0.100'
+    ])).toBe('192.168.0.100');
+  });
+
+  it('distinguishes authenticated Internet addresses from local network addresses', () => {
+    const localAddresses = ['192.168.0.100', '100.212.134.158'];
+
+    expect(isExternalRemoteAddress('200.123.115.176', localAddresses)).toBe(true);
+    expect(isExternalRemoteAddress('::ffff:200.123.115.176', localAddresses)).toBe(true);
+    expect(isExternalRemoteAddress('192.168.0.35', localAddresses)).toBe(false);
+    expect(isExternalRemoteAddress('100.72.10.4', localAddresses)).toBe(false);
+    expect(isExternalRemoteAddress('127.0.0.1', localAddresses)).toBe(false);
+    expect(isExternalRemoteAddress('::1', localAddresses)).toBe(false);
   });
 });
 
@@ -348,7 +418,7 @@ function createRemoteApiFixture(
         updatedAt: new Date().toISOString()
       }))
     } as unknown as LoggingService,
-    { getLocalAddresses: () => ['192.0.2.10'], getPublicAddress } as unknown as NetworkService,
+    { getLocalAddresses: () => ['127.0.0.1'], getPublicAddress } as unknown as NetworkService,
     { get: vi.fn() } as unknown as OperationManagerService
   );
   return { service, start, restart, stop, execute, getPublicAddress };

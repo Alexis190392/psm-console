@@ -1,5 +1,11 @@
 import { Injectable, type OnApplicationBootstrap, type OnApplicationShutdown } from '@nestjs/common';
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import {
+  createServer,
+  get as httpGet,
+  type IncomingMessage,
+  type Server,
+  type ServerResponse
+} from 'node:http';
 import { randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
@@ -34,6 +40,8 @@ const MAX_BODY_BYTES = 64 * 1024;
 const LOGIN_WINDOW_MS = 5 * 60 * 1000;
 const LOGIN_LOCK_MS = 30 * 1000;
 const MAX_LOGIN_FAILURES = 5;
+const CONNECTION_PROBE_DELAY_MS = 450;
+const CONNECTION_PROBE_TIMEOUT_MS = 1_500;
 const WEB_ASSETS = {
   [`${API_PREFIX}/`]: {
     filename: 'index.html',
@@ -78,6 +86,7 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
   private readonly loginAttempts = new Map<string, LoginAttempt>();
   private connections: RemoteApiConnectionDto[] = [];
   private connectionProbeVersion = 0;
+  private externalAccessConfirmed = false;
 
   constructor(
     private readonly appSettingsService: AppSettingsService,
@@ -116,14 +125,22 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
   }
 
   async update(request: RemoteApiUpdateRequestDto): Promise<RemoteApiStatusDto> {
+    const previous = await this.appSettingsService.getRemoteApiSettings();
     await this.appSettingsService.updateRemoteApi(request);
-    await this.applyCurrentSettings();
+    const current = await this.appSettingsService.getRemoteApiSettings();
+    if (requiresRemoteApiRestart(previous, current)) {
+      await this.applyCurrentSettings(current);
+    } else {
+      this.updateClientSessionPermissions(current.client.permissions);
+    }
     return this.getStatus();
   }
 
-  private async applyCurrentSettings(): Promise<void> {
+  private async applyCurrentSettings(
+    currentSettings?: StoredRemoteApiSettings
+  ): Promise<void> {
     await this.stopAll();
-    const settings = await this.appSettingsService.getRemoteApiSettings();
+    const settings = currentSettings ?? await this.appSettingsService.getRemoteApiSettings();
     if (!settings.enabled) {
       this.setState('ADMIN', 'DISABLED', 'API administrativa deshabilitada.');
     }
@@ -133,6 +150,14 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
     if (settings.enabled || settings.client.enabled) {
       await this.start(settings);
     }
+  }
+
+  private updateClientSessionPermissions(permissions: RemoteApiPermission[]): void {
+    this.sessions.forEach((session) => {
+      if (session.profile === 'CLIENT') {
+        session.permissions = [...permissions];
+      }
+    });
   }
 
   private async start(settings: StoredRemoteApiSettings): Promise<void> {
@@ -158,8 +183,9 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
       });
       this.server = server;
       const localAddresses = this.networkService.getLocalAddresses();
-      const endpoint = createEndpoint(settings, localAddresses);
-      this.connections = createInitialConnections(settings, localAddresses);
+      const lanAddress = selectPreferredLanAddress(localAddresses);
+      const endpoint = createEndpoint(settings, lanAddress);
+      this.connections = createInitialConnections(settings, lanAddress);
       const probeVersion = ++this.connectionProbeVersion;
       enabledProfiles.forEach((profile) => {
         this.runtimes[profile].endpoint = endpoint;
@@ -170,9 +196,7 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
         );
       });
       void this.loggingService.write('api', 'INFO', `API web compartida disponible en ${endpoint}.`);
-      if (settings.bindMode === 'LOCAL_NETWORK') {
-        void this.refreshPublicConnection(settings.port, probeVersion);
-      }
+      void this.verifyConnectionsSequentially(settings, lanAddress, probeVersion);
     } catch (error) {
       server.close();
       this.server = null;
@@ -191,6 +215,7 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
   private async stopAll(): Promise<void> {
     this.connectionProbeVersion += 1;
     this.connections = [];
+    this.externalAccessConfirmed = false;
     this.sessions.clear();
     this.loginAttempts.clear();
     const server = this.server;
@@ -496,6 +521,7 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
     };
     sendJson(response, 200, result);
     void this.loggingService.write('api', 'INFO', `Sesion API iniciada desde ${clientId}.`);
+    void this.confirmExternalAccess(clientId, settings);
   }
 
   private requireSession(
@@ -510,15 +536,95 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
     return { token, session };
   }
 
+  private async verifyConnectionsSequentially(
+    settings: Pick<StoredRemoteApiSettings, 'bindMode' | 'port'>,
+    lanAddress: string | undefined,
+    probeVersion: number
+  ): Promise<void> {
+    await delay(CONNECTION_PROBE_DELAY_MS);
+    if (!this.isCurrentConnectionProbe(probeVersion)) {
+      return;
+    }
+
+    const loopbackAvailable = await probeApiHealth(createApiEndpoint('127.0.0.1', settings.port));
+    if (!this.isCurrentConnectionProbe(probeVersion)) {
+      return;
+    }
+    this.replaceConnection(createVerifiedConnection(
+      'LOOPBACK',
+      'Este equipo',
+      createApiEndpoint('127.0.0.1', settings.port),
+      loopbackAvailable,
+      'Disponible mientras PSM Console permanezca abierta.',
+      'La API no responde desde este equipo.'
+    ));
+
+    if (!loopbackAvailable || settings.bindMode !== 'LOCAL_NETWORK') {
+      return;
+    }
+
+    if (!lanAddress) {
+      this.replaceConnection({
+        kind: 'LAN',
+        label: 'Red local',
+        state: 'UNKNOWN',
+        message: 'No se detecto una direccion IPv4 de red local.'
+      });
+      return;
+    }
+
+    this.replaceConnection({
+      kind: 'LAN',
+      label: 'Red local',
+      endpoint: createApiEndpoint(lanAddress, settings.port),
+      state: 'CHECKING',
+      message: 'Comprobando acceso desde la direccion de red local.'
+    });
+    await delay(CONNECTION_PROBE_DELAY_MS);
+    if (!this.isCurrentConnectionProbe(probeVersion)) {
+      return;
+    }
+    const lanAvailable = await probeApiHealth(createApiEndpoint(lanAddress, settings.port));
+    if (!this.isCurrentConnectionProbe(probeVersion)) {
+      return;
+    }
+    this.replaceConnection(createVerifiedConnection(
+      'LAN',
+      'Red local',
+      createApiEndpoint(lanAddress, settings.port),
+      lanAvailable,
+      'Disponible para equipos de la misma red.',
+      'La API no responde mediante la direccion de red local.'
+    ));
+
+    if (!lanAvailable) {
+      return;
+    }
+
+    this.replaceConnection({
+      kind: 'PUBLIC',
+      label: 'Internet',
+      state: 'CHECKING',
+      message: 'Comprobando IP publica y acceso TCP desde Internet.'
+    });
+    await this.refreshPublicConnection(settings.port, probeVersion);
+  }
+
   private async refreshPublicConnection(port: number, probeVersion: number): Promise<void> {
     try {
       const diagnostics = await this.networkService.getPublicAddress({ port });
       if (probeVersion !== this.connectionProbeVersion || !this.server) {
         return;
       }
+      if (this.externalAccessConfirmed) {
+        return;
+      }
       this.replacePublicConnection(createPublicConnection(diagnostics, port));
     } catch {
       if (probeVersion !== this.connectionProbeVersion || !this.server) {
+        return;
+      }
+      if (this.externalAccessConfirmed) {
         return;
       }
       this.replacePublicConnection({
@@ -530,11 +636,62 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
     }
   }
 
+  private async confirmExternalAccess(
+    clientAddress: string,
+    settings: Pick<StoredRemoteApiSettings, 'bindMode' | 'port'>
+  ): Promise<void> {
+    if (
+      settings.bindMode !== 'LOCAL_NETWORK'
+      || !isExternalRemoteAddress(clientAddress, this.networkService.getLocalAddresses())
+      || !this.server
+    ) {
+      return;
+    }
+
+    this.externalAccessConfirmed = true;
+    const probeVersion = this.connectionProbeVersion;
+    const currentConnection = this.connections.find((connection) => connection.kind === 'PUBLIC');
+    let endpoint = currentConnection?.endpoint;
+    if (!endpoint) {
+      try {
+        const diagnostics = await this.networkService.getPublicAddress();
+        endpoint = diagnostics.publicIp
+          ? createApiEndpoint(diagnostics.publicIp, settings.port)
+          : undefined;
+      } catch {
+        endpoint = undefined;
+      }
+    }
+    if (!this.isCurrentConnectionProbe(probeVersion)) {
+      return;
+    }
+
+    this.replacePublicConnection({
+      kind: 'PUBLIC',
+      label: 'Internet',
+      ...(endpoint ? { endpoint } : {}),
+      state: 'AVAILABLE',
+      message: 'Acceso confirmado por una sesion autenticada desde Internet.'
+    });
+    void this.loggingService.write(
+      'api',
+      'INFO',
+      'Acceso publico confirmado por una sesion autenticada desde Internet.'
+    );
+  }
+
   private replacePublicConnection(connection: RemoteApiConnectionDto): void {
-    this.connections = [
-      ...this.connections.filter((item) => item.kind !== 'PUBLIC'),
-      connection
-    ];
+    this.replaceConnection(connection);
+  }
+
+  private replaceConnection(connection: RemoteApiConnectionDto): void {
+    this.connections = this.connections.map((item) =>
+      item.kind === connection.kind ? connection : item
+    );
+  }
+
+  private isCurrentConnectionProbe(probeVersion: number): boolean {
+    return probeVersion === this.connectionProbeVersion && this.server !== null;
   }
 
   private requirePermission(session: ApiSession, permission: RemoteApiPermission): void {
@@ -628,6 +785,16 @@ function getEnabledProfiles(settings: StoredRemoteApiSettings): RemoteApiProfile
   ];
 }
 
+function requiresRemoteApiRestart(
+  previous: StoredRemoteApiSettings,
+  current: StoredRemoteApiSettings
+): boolean {
+  return previous.enabled !== current.enabled
+    || previous.client.enabled !== current.client.enabled
+    || previous.bindMode !== current.bindMode
+    || previous.port !== current.port;
+}
+
 function allRemoteApiPermissions(): RemoteApiPermission[] {
   return [
     'GENERAL',
@@ -643,47 +810,47 @@ function allRemoteApiPermissions(): RemoteApiPermission[] {
 
 function createEndpoint(
   settings: Pick<StoredRemoteApiSettings, 'bindMode' | 'port'>,
-  localAddresses: string[]
+  lanAddress: string | undefined
 ): string {
   const host = settings.bindMode === 'LOCAL_ONLY'
     ? '127.0.0.1'
-    : localAddresses[0] ?? '127.0.0.1';
+    : lanAddress ?? '127.0.0.1';
   return `http://${host}:${String(settings.port)}/api/v1`;
 }
 
 function createInitialConnections(
   settings: Pick<StoredRemoteApiSettings, 'bindMode' | 'port'>,
-  localAddresses: string[]
+  lanAddress: string | undefined
 ): RemoteApiConnectionDto[] {
   const loopback: RemoteApiConnectionDto = {
     kind: 'LOOPBACK',
     label: 'Este equipo',
     endpoint: createApiEndpoint('127.0.0.1', settings.port),
-    state: 'AVAILABLE',
-    message: 'Disponible mientras PSM Console permanezca abierta.'
+    state: 'CHECKING',
+    message: 'Comprobando acceso desde este equipo.'
   };
-  const lan = localAddresses.length > 0
-    ? localAddresses.map<RemoteApiConnectionDto>((address) => ({
+  const lan: RemoteApiConnectionDto = lanAddress
+    ? {
         kind: 'LAN',
         label: 'Red local',
-        endpoint: createApiEndpoint(address, settings.port),
-        state: settings.bindMode === 'LOCAL_NETWORK' ? 'AVAILABLE' : 'DISABLED',
+        endpoint: createApiEndpoint(lanAddress, settings.port),
+        state: settings.bindMode === 'LOCAL_NETWORK' ? 'UNKNOWN' : 'DISABLED',
         message: settings.bindMode === 'LOCAL_NETWORK'
-          ? 'Disponible para equipos de la misma red.'
+          ? 'Esperando la verificacion de este equipo.'
           : 'Activa el acceso de red local para habilitar esta direccion.'
-      }))
-    : [{
-        kind: 'LAN' as const,
+      }
+    : {
+        kind: 'LAN',
         label: 'Red local',
-        state: 'UNKNOWN' as const,
+        state: 'UNKNOWN',
         message: 'No se detecto una direccion IPv4 de red local.'
-      }];
+      };
   const publicConnection: RemoteApiConnectionDto = settings.bindMode === 'LOCAL_NETWORK'
     ? {
         kind: 'PUBLIC',
         label: 'Internet',
-        state: 'CHECKING',
-        message: 'Comprobando IP publica y acceso TCP desde Internet.'
+        state: 'UNKNOWN',
+        message: 'Esperando la verificacion de la red local.'
       }
     : {
         kind: 'PUBLIC',
@@ -692,7 +859,112 @@ function createInitialConnections(
         message: 'La API esta limitada a este equipo y no se expone a Internet.'
       };
 
-  return [loopback, ...lan, publicConnection];
+  return [loopback, lan, publicConnection];
+}
+
+export function selectPreferredLanAddress(addresses: string[]): string | undefined {
+  return [...new Set(addresses)]
+    .filter((address) => /^\d{1,3}(\.\d{1,3}){3}$/.test(address))
+    .sort((left, right) => getLanAddressPriority(left) - getLanAddressPriority(right))[0];
+}
+
+export function isExternalRemoteAddress(address: string, localAddresses: string[] = []): boolean {
+  const normalized = normalizeRemoteAddress(address);
+  if (!normalized) {
+    return false;
+  }
+  if (localAddresses.map(normalizeRemoteAddress).includes(normalized)) {
+    return false;
+  }
+
+  const ipv4 = normalized.split('.').map(Number);
+  if (ipv4.length === 4 && ipv4.every((part) => Number.isInteger(part) && part >= 0 && part <= 255)) {
+    const [first = -1, second = -1] = ipv4;
+    return !(
+      first === 0
+      || first === 10
+      || first === 127
+      || (first === 169 && second === 254)
+      || (first === 172 && second >= 16 && second <= 31)
+      || (first === 192 && second === 168)
+      || (first === 100 && second >= 64 && second <= 127)
+      || first >= 224
+    );
+  }
+
+  return normalized.includes(':')
+    && normalized !== '::1'
+    && !normalized.startsWith('fe80:')
+    && !normalized.startsWith('fc')
+    && !normalized.startsWith('fd');
+}
+
+function normalizeRemoteAddress(address: string): string {
+  const normalized = address.trim().toLowerCase().split('%')[0] ?? '';
+  return normalized.startsWith('::ffff:') ? normalized.slice(7) : normalized;
+}
+
+function getLanAddressPriority(address: string): number {
+  const [first, second] = address.split('.').map(Number);
+  if (first === 192 && second === 168) {
+    return 0;
+  }
+  if (first === 10) {
+    return 1;
+  }
+  if (first === 172 && second !== undefined && second >= 16 && second <= 31) {
+    return 2;
+  }
+  if (first === 127) {
+    return 3;
+  }
+  if (first === 169 && second === 254) {
+    return 5;
+  }
+  if (first === 100 && second !== undefined && second >= 64 && second <= 127) {
+    return 6;
+  }
+  return 4;
+}
+
+function createVerifiedConnection(
+  kind: 'LOOPBACK' | 'LAN',
+  label: string,
+  endpoint: string,
+  available: boolean,
+  availableMessage: string,
+  unavailableMessage: string
+): RemoteApiConnectionDto {
+  return {
+    kind,
+    label,
+    endpoint,
+    state: available ? 'AVAILABLE' : 'UNAVAILABLE',
+    message: available ? availableMessage : unavailableMessage
+  };
+}
+
+async function probeApiHealth(endpoint: string): Promise<boolean> {
+  const url = new URL(`${endpoint}/health`);
+  return new Promise((resolve) => {
+    const request = httpGet(url, { timeout: CONNECTION_PROBE_TIMEOUT_MS }, (response) => {
+      response.resume();
+      resolve(response.statusCode === 200);
+    });
+    request.on('timeout', () => {
+      request.destroy();
+      resolve(false);
+    });
+    request.on('error', () => {
+      resolve(false);
+    });
+  });
+}
+
+async function delay(milliseconds: number): Promise<void> {
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
 }
 
 function createPublicConnection(

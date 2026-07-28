@@ -22,6 +22,7 @@ export const ipcChannels = {
   serverStop: 'server:stop',
   serverRestart: 'server:restart',
   serverGetRuntimeStatus: 'server:get-runtime-status',
+  serverRuntimeChanged: 'server:runtime-changed',
   serverGetQueryPortStatus: 'server:get-query-port-status',
   serverStopQueryPortOwner: 'server:stop-query-port-owner',
   playersGetStatus: 'players:get-status',

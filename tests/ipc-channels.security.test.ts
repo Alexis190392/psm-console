@@ -23,6 +23,7 @@ describe('IPC channel surface', () => {
     expect(ipcChannels.serverUpdate).toBe('server:update');
     expect(ipcChannels.serverRepair).toBe('server:repair');
     expect(ipcChannels.serverRestart).toBe('server:restart');
+    expect(ipcChannels.serverRuntimeChanged).toBe('server:runtime-changed');
     expect(ipcChannels.serverGetQueryPortStatus).toBe('server:get-query-port-status');
     expect(ipcChannels.serverStopQueryPortOwner).toBe('server:stop-query-port-owner');
   });

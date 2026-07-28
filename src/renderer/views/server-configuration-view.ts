@@ -17,7 +17,7 @@ export function renderConfigurationPresets(): string {
         <small>Preparan el formulario sin guardar</small>
       </summary>
       <div class="preset-bar__actions">
-        ${CONFIGURATION_PRESETS.map((preset) => `<button class="secondary-button preset-button" type="button" data-preset="${escapeHtml(preset.id)}">${escapeHtml(preset.label)}</button>`).join('')}
+        ${CONFIGURATION_PRESETS.map((preset) => `<button class="choice-chip preset-button" type="button" data-preset="${escapeHtml(preset.id)}">${escapeHtml(preset.label)}</button>`).join('')}
       </div>
     </details>
   `;
@@ -50,10 +50,13 @@ export function renderSettingsForm(parsed: ParsedPalworldSettings): string {
   return Array.from(groupSettings(parsed.settings).entries())
     .map(
       ([group, settings]) => `
-        <section class="settings-group">
-          <h4>${escapeHtml(group)} <span data-group-count>${String(settings.length)}</span></h4>
+        <details class="settings-group">
+          <summary>
+            <span>${escapeHtml(group)}</span>
+            <small data-group-count>${String(settings.length)}</small>
+          </summary>
           <div class="settings-grid">${settings.map(renderSettingControl).join('')}</div>
-        </section>
+        </details>
       `
     )
     .join('');

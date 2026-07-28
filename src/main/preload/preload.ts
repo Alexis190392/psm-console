@@ -101,6 +101,7 @@ const ipcChannels = {
   serverStop: 'server:stop',
   serverRestart: 'server:restart',
   serverGetRuntimeStatus: 'server:get-runtime-status',
+  serverRuntimeChanged: 'server:runtime-changed',
   serverGetQueryPortStatus: 'server:get-query-port-status',
   serverStopQueryPortOwner: 'server:stop-query-port-owner',
   playersGetStatus: 'players:get-status',
@@ -170,6 +171,7 @@ export interface PalcmApi {
     stop: (request: PalworldStopRequestDto) => Promise<OperationAcceptedDto>;
     restart: (request: PalworldRestartRequestDto) => Promise<OperationAcceptedDto>;
     getRuntimeStatus: () => Promise<PalworldRuntimeStatusDto>;
+    onRuntimeStatusChanged: (listener: () => void) => () => void;
     getQueryPortStatus: () => Promise<PalworldQueryPortStatusDto>;
     stopQueryPortOwner: (request: PalworldStopQueryPortOwnerRequestDto) => Promise<OperationAcceptedDto>;
   };
@@ -274,6 +276,15 @@ const api: PalcmApi = {
       ipcRenderer.invoke(ipcChannels.serverRestart, request) as Promise<OperationAcceptedDto>,
     getRuntimeStatus: () =>
       ipcRenderer.invoke(ipcChannels.serverGetRuntimeStatus) as Promise<PalworldRuntimeStatusDto>,
+    onRuntimeStatusChanged: (listener) => {
+      const handler = (): void => {
+        listener();
+      };
+      ipcRenderer.on(ipcChannels.serverRuntimeChanged, handler);
+      return () => {
+        ipcRenderer.removeListener(ipcChannels.serverRuntimeChanged, handler);
+      };
+    },
     getQueryPortStatus: () =>
       ipcRenderer.invoke(ipcChannels.serverGetQueryPortStatus) as Promise<PalworldQueryPortStatusDto>,
     stopQueryPortOwner: (request) =>

@@ -5,6 +5,7 @@
   var TOKEN_KEY = 'psm-console-api-token';
   var refreshTimer = null;
   var toastTimer = null;
+  var permissionReloadTimer = null;
   var access = {
     profile: 'ADMIN',
     permissions: [
@@ -57,6 +58,14 @@
     if (response.status === 401 && path !== '/auth/login') {
       showLogin('La sesion finalizo. Ingresa nuevamente.');
       throw new Error('AUTHENTICATION_REQUIRED');
+    }
+    if (response.status === 403) {
+      if (permissionReloadTimer === null) {
+        permissionReloadTimer = setTimeout(function () {
+          window.location.reload();
+        }, 1_000);
+      }
+      throw new Error('No permitido');
     }
     if (!response.ok) {
       throw new Error(getErrorLabel(payload.message || payload.error));
@@ -117,19 +126,36 @@
       var permissions = (element.dataset.permissionAny || '').split(',');
       element.hidden = !permissions.some(hasPermission);
     });
-    var firstVisibleNavigation = Array.from(document.querySelectorAll('.nav-button')).find(function (button) {
+    var visibleNavigation = Array.from(document.querySelectorAll('.nav-button')).filter(function (button) {
       return !button.hidden;
     });
-    if (firstVisibleNavigation) {
-      selectView(firstVisibleNavigation.dataset.view);
+    var activeNavigation = document.querySelector('.nav-button.active');
+    if ((!activeNavigation || activeNavigation.hidden) && visibleNavigation[0]) {
+      selectView(visibleNavigation[0].dataset.view);
+      return true;
     }
+    return false;
   }
 
   function startRefreshTimer() {
     clearInterval(refreshTimer);
     refreshTimer = setInterval(function () {
-      void refreshVisibleView(false);
+      void refreshSessionAndVisibleView();
     }, 4000);
+  }
+
+  async function refreshSessionAndVisibleView() {
+    try {
+      var session = await apiRequest('/session');
+      var viewChanged = applyAccess(session);
+      if (!viewChanged) {
+        await refreshVisibleView(false);
+      }
+    } catch (error) {
+      if (error.message !== 'AUTHENTICATION_REQUIRED') {
+        showToast(error.message);
+      }
+    }
   }
 
   async function login(event) {
@@ -444,8 +470,10 @@
   document.getElementById('toggle-password').addEventListener('click', function () {
     var visible = passwordInput.type === 'text';
     passwordInput.type = visible ? 'password' : 'text';
-    this.firstElementChild.textContent = visible ? 'Ver' : 'Ocultar';
+    this.classList.toggle('is-visible', !visible);
+    this.setAttribute('aria-pressed', String(!visible));
     this.setAttribute('aria-label', visible ? 'Mostrar contrasena' : 'Ocultar contrasena');
+    this.setAttribute('title', visible ? 'Mostrar contrasena' : 'Ocultar contrasena');
   });
   document.getElementById('logout-button').addEventListener('click', function () {
     void logout();

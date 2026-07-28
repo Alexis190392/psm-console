@@ -1,6 +1,6 @@
 {
   "name": "palcm",
-  "version": "0.16.5",
+  "version": "0.16.18",
   "private": true,
   "description": "PSM Console by >GR477< - Palworld Server Manager",
   "author": "Alexis Joel Dávila (>GR477<)",
@@ -37,7 +37,7 @@
   },
   "devDependencies": {
     "@types/node": "22.15.0",
-    "electron": "43.1.1",
+    "electron": "43.2.0",
     "electron-builder": "26.15.3",
     "eslint": "10.7.0",
     "typescript": "6.0.3",

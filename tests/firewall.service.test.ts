@@ -3,6 +3,7 @@ import {
   buildElevatedPowerShellLauncher,
   buildFirewallCheckScript,
   createFirewallCheckErrorMessage,
+  findExternalPlayerConnection,
   resolveFirewallPortRequirements
 } from '../src/backend/firewall/firewall.service';
 
@@ -50,5 +51,27 @@ describe('FirewallService', () => {
     expect(launcher).toContain('-Verb RunAs');
     expect(launcher).toContain('-WindowStyle Hidden');
     expect(launcher).toContain("'-WindowStyle','Hidden'");
+  });
+
+  it('confirms public access from an external connected player', () => {
+    expect(findExternalPlayerConnection(
+      [{ name: 'Remoto', ip: '198.51.100.25' }],
+      ['192.168.0.100'],
+      '2026-07-28T15:00:00.000Z'
+    )).toEqual(expect.objectContaining({
+      source: 'REMOTE_PLAYER',
+      observedAt: '2026-07-28T15:00:00.000Z'
+    }));
+  });
+
+  it('does not treat LAN, loopback or VPN addresses as public evidence', () => {
+    expect(findExternalPlayerConnection(
+      [
+        { name: 'LAN', ip: '192.168.0.50' },
+        { name: 'Local', ip: '127.0.0.1' },
+        { name: 'VPN', ip: '100.100.20.30' }
+      ],
+      ['192.168.0.100']
+    )).toBeUndefined();
   });
 });

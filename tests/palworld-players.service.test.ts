@@ -87,6 +87,7 @@ describe('PalworldPlayersService', () => {
             name: 'Alex',
             userId: 'steam_a',
             playerId: 'player_a',
+            ip: '198.51.100.25',
             ping: 24.2,
             location_x: 100,
             location_y: 200,
@@ -128,7 +129,14 @@ describe('PalworldPlayersService', () => {
     await expect(service.getStatus()).resolves.toMatchObject({
       status: 'READY',
       currentPlayers: 1,
-      players: [expect.objectContaining({ userId: 'steam_a', online: true, locationX: 100, locationY: 200, level: 12 })],
+      players: [expect.objectContaining({
+        userId: 'steam_a',
+        ip: '198.51.100.25',
+        online: true,
+        locationX: 100,
+        locationY: 200,
+        level: 12
+      })],
       previousPlayers: [expect.objectContaining({ userId: 'steam_b', online: false, banState: 'BANNED', locationX: -50, locationY: 80, level: 9 })]
     });
   });

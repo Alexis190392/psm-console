@@ -35,6 +35,11 @@ describe('renderer action wiring', () => {
       expect(source, `El formulario administrativo ${kind} no se resuelve`).toContain(`formKind === '${kind}'`);
     }
   });
+
+  it('refreshes the desktop runtime state after remote server actions', () => {
+    expect(source).toContain('palcmApi.server.onRuntimeStatusChanged(scheduleRuntimeStateRefresh)');
+    expect(source).toContain('await refreshStatusChrome()');
+  });
 });
 
 function collectTypeScript(directory: string): string[] {

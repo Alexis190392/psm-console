@@ -39,8 +39,8 @@
             <label for="password">Contrasena</label>
             <div class="password-field">
               <input id="password" name="password" type="password" autocomplete="current-password" required>
-              <button id="toggle-password" class="icon-button" type="button" aria-label="Mostrar contrasena" title="Mostrar contrasena">
-                <span aria-hidden="true">Ver</span>
+              <button id="toggle-password" class="icon-button password-visibility-button" type="button" aria-label="Mostrar contrasena" title="Mostrar contrasena" aria-pressed="false">
+                <span class="password-visibility-icon" aria-hidden="true"></span>
               </button>
             </div>
 
@@ -59,7 +59,10 @@
               <button class="nav-button" type="button" data-view="players" data-permission-any="PLAYERS_VIEW,PLAYERS_KICK,PLAYERS_BAN">Jugadores</button>
               <button class="nav-button" type="button" data-view="logs" data-permission="LOGS">Logs</button>
             </nav>
-            <button id="logout-button" class="secondary-button" type="button">Cerrar sesion</button>
+            <button id="logout-button" class="secondary-button" type="button">
+              <span class="logout-label">Cerrar sesion</span>
+              <span class="logout-short" aria-hidden="true">Salir</span>
+            </button>
           </aside>
 
           <div class="workspace">

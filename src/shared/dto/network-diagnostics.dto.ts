@@ -14,11 +14,18 @@ export interface PublicAddressRequestDto {
   port?: number;
 }
 
+export interface ExternalAccessEvidenceDto {
+  source: 'REMOTE_PLAYER';
+  observedAt: string;
+  message: string;
+}
+
 export interface NetworkDiagnosticsDto {
   publicIp: string | null;
   localIpv4: string[];
   cgnatStatus: CgnatStatus;
   publicPortProbe?: PublicPortProbeDto;
+  externalAccessEvidence?: ExternalAccessEvidenceDto;
   message: string;
   recommendation: string;
   updatedAt: string;

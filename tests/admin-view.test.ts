@@ -44,7 +44,7 @@ describe('admin view', () => {
   it('renders server administration actions in the general tab', () => {
     const html = renderAdminStatus(adminStatus, playersStatus, 'general');
 
-    expect(html).toContain('ADMINISTRACION / SERVIDOR');
+    expect(html).toContain('<h3>Servidor</h3>');
     expect(html).toContain('data-admin-form="save"');
     expect(html).toContain('data-admin-form="shutdown"');
     expect(html).toContain('data-admin-form="stop"');
@@ -56,7 +56,7 @@ describe('admin view', () => {
   it('renders current and previous players with safe actions', () => {
     const html = renderAdminStatus(adminStatus, playersStatus, 'players');
 
-    expect(html).toContain('ADMINISTRACION / JUGADORES');
+    expect(html).toContain('<h3>Jugadores</h3>');
     expect(html).toContain('En curso');
     expect(html).toContain('Vistos anteriormente');
     expect(html).toContain('data-player-action="kick"');
@@ -73,7 +73,7 @@ describe('admin view', () => {
   it('renders relative player positions in the map tab', () => {
     const html = renderAdminStatus(adminStatus, playersStatus, 'map');
 
-    expect(html).toContain('ADMINISTRACION / MAPA');
+    expect(html).toContain('<h3>Mapa</h3>');
     expect(html).toContain('admin-map-marker');
     expect(html).toContain('X 120 / Y -45');
   });
