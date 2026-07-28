@@ -1,6 +1,13 @@
 export type RemoteApiBindMode = 'LOCAL_ONLY' | 'LOCAL_NETWORK';
 export type RemoteApiRuntimeState = 'DISABLED' | 'STARTING' | 'RUNNING' | 'ERROR';
 export type RemoteApiProfile = 'ADMIN' | 'CLIENT';
+export type RemoteApiConnectionKind = 'LOOPBACK' | 'LAN' | 'PUBLIC';
+export type RemoteApiConnectionState =
+  | 'AVAILABLE'
+  | 'CHECKING'
+  | 'UNAVAILABLE'
+  | 'UNKNOWN'
+  | 'DISABLED';
 export type RemoteApiPermission =
   | 'GENERAL'
   | 'SERVER_START'
@@ -50,6 +57,15 @@ export interface RemoteApiProfileStatusDto {
 export interface RemoteApiStatusDto extends RemoteApiProfileStatusDto {
   settings: RemoteApiSettingsDto;
   client: RemoteApiProfileStatusDto;
+  connections: RemoteApiConnectionDto[];
+}
+
+export interface RemoteApiConnectionDto {
+  kind: RemoteApiConnectionKind;
+  label: string;
+  endpoint?: string;
+  state: RemoteApiConnectionState;
+  message: string;
 }
 
 export interface RemoteApiLoginRequestDto {
@@ -59,7 +75,7 @@ export interface RemoteApiLoginRequestDto {
 
 export interface RemoteApiLoginResultDto {
   token: string;
-  expiresAt: string;
+  expiresAt: null;
   profile: RemoteApiProfile;
   permissions: RemoteApiPermission[];
 }

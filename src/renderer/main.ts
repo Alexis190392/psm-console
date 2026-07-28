@@ -21,6 +21,7 @@ import type { PalworldPlayersStatusDto } from '../shared/dto/palworld-players-st
 import type { PalworldQueryPortStatusDto, PalworldRuntimeStatusDto } from '../shared/dto/palworld-runtime-status.dto';
 import type {
   RemoteApiPermission,
+  RemoteApiStatusDto,
   RemoteApiUpdateRequestDto
 } from '../shared/dto/remote-api.dto';
 import {
@@ -46,7 +47,10 @@ import { getOperationFailureMessage, isOperationSuccessful } from './utils/opera
 import { cssEscape, escapeHtml, normalizeSearchText } from './utils/text';
 import { renderBackupsView as renderBackupsViewHtml } from './views/backups-view';
 import { renderAdminStatus } from './views/admin-view';
-import { renderAppSettingsView } from './views/app-settings-view';
+import {
+  renderAppSettingsView,
+  renderRemoteApiConnectionStatus
+} from './views/app-settings-view';
 import {
   renderConfigurationPresets,
   renderSettingsFilterBar,
@@ -313,6 +317,7 @@ let latestUpdateStatus: AppUpdateStatusDto | null = null;
 let updateStatusRequest: Promise<AppUpdateStatusDto> | null = null;
 let announcedUpdateVersion: string | null = null;
 let adminRefreshTimer: number | null = null;
+let remoteApiConnectionRefreshTimer: number | null = null;
 let adminStatusRequest: Promise<[PalworldAdminStatusDto, PalworldPlayersStatusDto]> | null = null;
 const adminViewState = new AdminViewState();
 const settingsViewState = new SettingsViewState();
@@ -2121,6 +2126,7 @@ async function renderAppSettings(renderId = ++activeViewRenderId): Promise<void>
       settingsViewState.getTab()
     ));
     bindAppSettingsControls();
+    scheduleRemoteApiConnectionRefresh(remoteApiStatus);
   } catch (error) {
     if (isCurrentViewRender(renderId, 'settings')) {
       renderSimpleView('Configuracion', `No se pudieron cargar las preferencias. ${error instanceof Error ? error.message : String(error)}`);
@@ -2166,6 +2172,7 @@ function bindAppSettingsControls(): void {
 }
 
 function bindRemoteApiControls(): void {
+  bindRemoteApiAddressCopies();
   document.querySelectorAll<HTMLFormElement>('[data-remote-api-form]').forEach((form) => {
     const profile = form.dataset['remoteApiForm'] === 'CLIENT' ? 'CLIENT' : 'ADMIN';
     const enabled = form.elements.namedItem('enabled');
@@ -2212,6 +2219,52 @@ function bindRemoteApiControls(): void {
       );
     });
   });
+}
+
+function bindRemoteApiAddressCopies(): void {
+  document.querySelectorAll<HTMLButtonElement>('.settings-api-address[data-copy-value]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const value = button.dataset['copyValue'];
+      if (value) {
+        void copyToClipboard(value, button);
+      }
+    });
+  });
+}
+
+function scheduleRemoteApiConnectionRefresh(status: RemoteApiStatusDto): void {
+  if (remoteApiConnectionRefreshTimer !== null) {
+    window.clearTimeout(remoteApiConnectionRefreshTimer);
+    remoteApiConnectionRefreshTimer = null;
+  }
+  if (!status.connections.some((connection) => connection.state === 'CHECKING')) {
+    return;
+  }
+  remoteApiConnectionRefreshTimer = window.setTimeout(() => {
+    remoteApiConnectionRefreshTimer = null;
+    void refreshRemoteApiConnectionStatus();
+  }, 1000);
+}
+
+async function refreshRemoteApiConnectionStatus(): Promise<void> {
+  if (!palcmApi || !navigationState.is('settings') || settingsViewState.getTab() !== 'remote-api') {
+    return;
+  }
+  const status = await palcmApi.remoteApi.getStatus();
+  if (!navigationState.is('settings') || settingsViewState.getTab() !== 'remote-api') {
+    return;
+  }
+  const current = document.querySelector<HTMLElement>('.settings-api-connection');
+  if (current) {
+    const template = document.createElement('template');
+    template.innerHTML = renderRemoteApiConnectionStatus(status).trim();
+    const next = template.content.firstElementChild;
+    if (next) {
+      current.replaceWith(next);
+      bindRemoteApiAddressCopies();
+    }
+  }
+  scheduleRemoteApiConnectionRefresh(status);
 }
 
 async function prepareRemoteApiConfirmation(request: RemoteApiUpdateRequestDto): Promise<void> {
@@ -2398,6 +2451,10 @@ function stopRuntimeViewRefreshers(): void {
   if (adminRefreshTimer !== null) {
     window.clearInterval(adminRefreshTimer);
     adminRefreshTimer = null;
+  }
+  if (remoteApiConnectionRefreshTimer !== null) {
+    window.clearTimeout(remoteApiConnectionRefreshTimer);
+    remoteApiConnectionRefreshTimer = null;
   }
 }
 

@@ -212,41 +212,12 @@ function renderAutomationSettings(summary: BackupSummaryDto, idleStatus: ServerI
 function renderRemoteApiSettings(status: RemoteApiStatusDto): string {
   const settings = status.settings;
   const enabled = settings.enabled;
-  const sharedRunning = status.state === 'RUNNING' || status.client.state === 'RUNNING';
-  const sharedStarting = status.state === 'STARTING' || status.client.state === 'STARTING';
-  const sharedError = status.state === 'ERROR' || status.client.state === 'ERROR';
-  const sharedState = sharedRunning
-    ? 'RUNNING'
-    : sharedStarting
-      ? 'STARTING'
-      : sharedError
-        ? 'ERROR'
-        : 'DISABLED';
-  const endpoint = status.endpoint ?? status.client.endpoint;
   const passwordHint = settings.passwordConfigured
     ? 'Deja este campo vacio para conservar la contraseña actual.'
     : 'Configura una contraseña de al menos 5 caracteres para habilitar la API.';
 
   return `
     <section class="settings-api-layout">
-      <article class="settings-api-connection">
-        <div class="settings-api-connection__state">
-          <span class="settings-api-status__indicator settings-api-status__indicator--${sharedState.toLowerCase()}"></span>
-          <div>
-            <span class="view-kicker">CONEXION WEB</span>
-            <strong>${sharedRunning ? 'API disponible' : remoteApiStateLabel(sharedState)}</strong>
-          </div>
-        </div>
-        <dl class="settings-api-connection__details">
-          <div><dt>Acceso</dt><dd>${settings.bindMode === 'LOCAL_NETWORK' ? 'Red local' : 'Este equipo'}</dd></div>
-          <div><dt>Puerto</dt><dd><code>${String(settings.port)}</code></dd></div>
-          <div class="settings-api-connection__endpoint">
-            <dt>Direccion</dt>
-            <dd><code>${escapeHtml(endpoint ?? 'Se habilita al activar un perfil')}</code></dd>
-          </div>
-          <div><dt>Sesion</dt><dd>8 h</dd></div>
-        </dl>
-      </article>
       <div class="settings-api-profiles">
         <form class="admin-card settings-api-form" data-remote-api-form="ADMIN">
         <div class="admin-card__title-row">
@@ -282,11 +253,7 @@ function renderRemoteApiSettings(status: RemoteApiStatusDto): string {
             <small>${passwordHint}</small>
           </label>
         </div>
-        <div class="settings-api-profile-status">
-          <span class="settings-api-status__indicator settings-api-status__indicator--${status.state.toLowerCase()}"></span>
-          <span>${escapeHtml(remoteApiStateLabel(status.state))}</span>
-          <small>${escapeHtml(status.message)}</small>
-        </div>
+        ${renderRemoteApiProfileError(status)}
         <p class="settings-api-status__warning ${settings.bindMode === 'LOCAL_NETWORK' ? '' : 'hidden'}">
           HTTP disponible en la red local. Usalo solo en una LAN confiable.
         </p>
@@ -296,8 +263,75 @@ function renderRemoteApiSettings(status: RemoteApiStatusDto): string {
         </form>
         ${renderClientApiProfile(status.client)}
       </div>
+      ${renderRemoteApiConnectionStatus(status)}
     </section>
   `;
+}
+
+export function renderRemoteApiConnectionStatus(status: RemoteApiStatusDto): string {
+  const sharedState = resolveSharedRemoteApiState(status);
+  const running = sharedState === 'RUNNING';
+  const connections = status.connections;
+  return `
+    <article class="settings-api-connection">
+      <header class="settings-api-connection__header">
+        <div>
+          <span class="view-kicker">CONEXION WEB</span>
+          <h4>Direcciones disponibles</h4>
+        </div>
+        <div class="settings-api-connection__state">
+          <span class="settings-api-status__indicator settings-api-status__indicator--${sharedState.toLowerCase()}"></span>
+          <strong>${running ? 'En ejecucion' : remoteApiStateLabel(sharedState)}</strong>
+        </div>
+      </header>
+      <div class="settings-api-addresses">
+        ${connections.length > 0
+          ? connections.map((connection) => `
+              <button
+                class="settings-api-address settings-api-address--${connection.state.toLowerCase()}"
+                type="button"
+                ${connection.endpoint ? `data-copy-value="${escapeHtml(connection.endpoint)}"` : 'disabled'}
+                title="${escapeHtml(connection.endpoint ? 'Copiar direccion' : connection.message)}"
+              >
+                <span class="settings-api-address__indicator" aria-hidden="true"></span>
+                <span class="settings-api-address__content">
+                  <strong>${escapeHtml(connection.label)}</strong>
+                  <code>${escapeHtml(connection.endpoint ?? connectionStateLabel(connection.state))}</code>
+                  <small>${escapeHtml(connection.message)}</small>
+                </span>
+                ${connection.endpoint ? renderIcon('copy', 'settings-api-address__copy') : ''}
+              </button>
+            `).join('')
+          : `
+              <div class="settings-api-address settings-api-address--disabled">
+                <span class="settings-api-address__indicator" aria-hidden="true"></span>
+                <span class="settings-api-address__content">
+                  <strong>Sin direcciones activas</strong>
+                  <small>Habilita la API administrativa o cliente para iniciar la conexion web.</small>
+                </span>
+              </div>
+            `}
+      </div>
+      <dl class="settings-api-connection__meta">
+        <div><dt>Acceso</dt><dd>${status.settings.bindMode === 'LOCAL_NETWORK' ? 'Red local' : 'Este equipo'}</dd></div>
+        <div><dt>Puerto</dt><dd><code>${String(status.settings.port)}</code></dd></div>
+        <div><dt>Sesion</dt><dd>Mientras la app este abierta</dd></div>
+      </dl>
+    </article>
+  `;
+}
+
+function resolveSharedRemoteApiState(status: RemoteApiStatusDto): RemoteApiStatusDto['state'] {
+  if (status.state === 'RUNNING' || status.client.state === 'RUNNING') {
+    return 'RUNNING';
+  }
+  if (status.state === 'STARTING' || status.client.state === 'STARTING') {
+    return 'STARTING';
+  }
+  if (status.state === 'ERROR' || status.client.state === 'ERROR') {
+    return 'ERROR';
+  }
+  return 'DISABLED';
 }
 
 function renderClientApiProfile(status: RemoteApiProfileStatusDto): string {
@@ -330,16 +364,18 @@ function renderClientApiProfile(status: RemoteApiProfileStatusDto): string {
         </label>
       </div>
       ${renderClientPermissions(permissions)}
-      <div class="settings-api-profile-status">
-        <span class="settings-api-status__indicator settings-api-status__indicator--${status.state.toLowerCase()}"></span>
-        <span>${escapeHtml(remoteApiStateLabel(status.state))}</span>
-        <small>${escapeHtml(status.message)}</small>
-      </div>
+      ${renderRemoteApiProfileError(status)}
       <div class="admin-card__actions">
         <button class="primary-button button-with-icon" type="submit">${renderIcon('save')}<span>Guardar API cliente</span></button>
       </div>
     </form>
   `;
+}
+
+function renderRemoteApiProfileError(status: RemoteApiProfileStatusDto): string {
+  return status.state === 'ERROR'
+    ? `<p class="settings-api-profile-error">${escapeHtml(status.message)}</p>`
+    : '';
 }
 
 function renderClientPermissions(permissions: RemoteApiPermission[]): string {
@@ -404,4 +440,20 @@ function remoteApiStateLabel(state: RemoteApiStatusDto['state']): string {
     return 'Error';
   }
   return 'Deshabilitada';
+}
+
+function connectionStateLabel(state: RemoteApiStatusDto['connections'][number]['state']): string {
+  if (state === 'CHECKING') {
+    return 'Verificando';
+  }
+  if (state === 'UNAVAILABLE') {
+    return 'No disponible';
+  }
+  if (state === 'UNKNOWN') {
+    return 'No confirmado';
+  }
+  if (state === 'DISABLED') {
+    return 'No expuesta';
+  }
+  return 'Disponible';
 }

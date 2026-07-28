@@ -62,11 +62,15 @@ describe('RemoteApiService', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ username: 'operator', password: 'secure-password' })
     });
-    const login = await loginResponse.json() as { token: string };
+    const login = await loginResponse.json() as { token: string; expiresAt: string | null };
     const authorization = { authorization: `Bearer ${login.token}` };
 
     expect(loginResponse.status).toBe(200);
+    expect(login.expiresAt).toBeNull();
     expect((await fetch(`${baseUrl}/status`, { headers: authorization })).status).toBe(200);
+    const now = vi.spyOn(Date, 'now').mockReturnValue(Number.MAX_SAFE_INTEGER);
+    expect((await fetch(`${baseUrl}/status`, { headers: authorization })).status).toBe(200);
+    now.mockRestore();
 
     const startResponse = await fetch(`${baseUrl}/server/start`, {
       method: 'POST',
@@ -210,6 +214,46 @@ describe('RemoteApiService', () => {
     expect(fixture.restart).not.toHaveBeenCalled();
     expect(fixture.stop).not.toHaveBeenCalled();
   });
+
+  it('reports loopback, LAN and verified public API addresses', async () => {
+    const port = await getFreePort();
+    const appSettings = new AppSettingsService(paths);
+    const fixture = createRemoteApiFixture(appSettings, portableRoot);
+    remoteApi = fixture.service;
+
+    await remoteApi.update({
+      confirmed: true,
+      enabled: true,
+      bindMode: 'LOCAL_NETWORK',
+      port,
+      username: 'operator',
+      password: 'secure-password'
+    });
+
+    await vi.waitFor(async () => {
+      const status = await remoteApi?.getStatus();
+      expect(status?.connections.find((connection) => connection.kind === 'PUBLIC')?.state).toBe('AVAILABLE');
+    });
+    const status = await remoteApi.getStatus();
+
+    expect(status.connections).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'LOOPBACK',
+        endpoint: `http://127.0.0.1:${String(port)}/api/v1`,
+        state: 'AVAILABLE'
+      }),
+      expect.objectContaining({
+        kind: 'LAN',
+        endpoint: `http://192.0.2.10:${String(port)}/api/v1`,
+        state: 'AVAILABLE'
+      }),
+      expect.objectContaining({
+        kind: 'PUBLIC',
+        endpoint: `http://203.0.113.25:${String(port)}/api/v1`,
+        state: 'AVAILABLE'
+      })
+    ]));
+  });
 });
 
 function createRemoteApiFixture(
@@ -221,6 +265,7 @@ function createRemoteApiFixture(
   restart: ReturnType<typeof vi.fn>;
   stop: ReturnType<typeof vi.fn>;
   execute: ReturnType<typeof vi.fn>;
+  getPublicAddress: ReturnType<typeof vi.fn>;
 } {
   const start = vi.fn(() => ({ operationId: 'start-operation' }));
   const restart = vi.fn(() => ({ operationId: 'restart-operation' }));
@@ -229,6 +274,26 @@ function createRemoteApiFixture(
     action: 'kick',
     status: 'OK',
     message: 'Accion aplicada.',
+    updatedAt: new Date().toISOString()
+  }));
+  const getPublicAddress = vi.fn(({ port }: { port?: number } = {}) => ({
+    publicIp: '203.0.113.25',
+    localIpv4: ['192.0.2.10'],
+    cgnatStatus: 'NEEDS_ROUTER_CHECK' as const,
+    ...(port
+      ? {
+          publicPortProbe: {
+            port,
+            tcp: 'OPEN' as const,
+            udp: 'UNKNOWN' as const,
+            provider: 'test',
+            checkedAt: new Date().toISOString(),
+            message: 'TCP abierto.'
+          }
+        }
+      : {}),
+    message: 'IP publica detectada.',
+    recommendation: 'Prueba.',
     updatedAt: new Date().toISOString()
   }));
   const service = new RemoteApiService(
@@ -283,10 +348,10 @@ function createRemoteApiFixture(
         updatedAt: new Date().toISOString()
       }))
     } as unknown as LoggingService,
-    { getLocalAddresses: () => ['192.0.2.10'], getPublicAddress: vi.fn() } as unknown as NetworkService,
+    { getLocalAddresses: () => ['192.0.2.10'], getPublicAddress } as unknown as NetworkService,
     { get: vi.fn() } as unknown as OperationManagerService
   );
-  return { service, start, restart, stop, execute };
+  return { service, start, restart, stop, execute, getPublicAddress };
 }
 
 async function getFreePort(): Promise<number> {

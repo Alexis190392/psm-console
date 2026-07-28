@@ -685,6 +685,25 @@ input[type="range"] {
   background: currentcolor;
 }
 
+.ui-icon--copy::before,
+.ui-icon--copy::after {
+  width: 0.66em;
+  height: 0.66em;
+  border: 1.5px solid currentcolor;
+  border-radius: 2px;
+}
+
+.ui-icon--copy::before {
+  top: 14%;
+  left: 14%;
+}
+
+.ui-icon--copy::after {
+  right: 14%;
+  bottom: 14%;
+  background: var(--color-surface);
+}
+
 .ui-icon--file::after {
   top: 12%;
   right: 12%;
@@ -2151,63 +2170,148 @@ input[type="range"] {
 }
 
 .settings-api-connection {
-  display: flex;
-  align-items: center;
-  gap: 24px;
+  display: grid;
+  gap: 14px;
   min-width: 0;
-  padding: 14px 16px;
+  padding: 16px;
   border: 1px solid var(--color-border);
   border-radius: 6px;
   background: rgba(10, 15, 19, 0.55);
 }
 
+.settings-api-connection__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.settings-api-connection__header > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.settings-api-connection__header h4 {
+  margin: 0;
+}
+
 .settings-api-connection__state {
   display: flex;
   align-items: center;
-  gap: 12px;
-  min-width: 150px;
+  gap: 9px;
 }
 
-.settings-api-connection__state div {
+.settings-api-addresses {
   display: grid;
-  gap: 3px;
-}
-
-.settings-api-connection__details {
-  display: grid;
-  flex: 1;
-  grid-template-columns: minmax(90px, 0.7fr) minmax(70px, 0.5fr) minmax(220px, 2fr) minmax(70px, 0.5fr);
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
   gap: 10px;
-  min-width: 0;
-  margin: 0;
 }
 
-.settings-api-connection__details div {
+.settings-api-address {
+  display: grid;
+  grid-template-columns: 11px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+  min-height: 86px;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: rgba(9, 13, 17, 0.7);
+  color: var(--color-text);
+  text-align: left;
+}
+
+button.settings-api-address:not(:disabled) {
+  cursor: pointer;
+}
+
+button.settings-api-address:not(:disabled):hover,
+button.settings-api-address:not(:disabled):focus-visible {
+  border-color: rgba(0, 229, 255, 0.46);
+  background: rgba(0, 229, 255, 0.055);
+}
+
+.settings-api-address:disabled {
+  opacity: 0.78;
+  cursor: default;
+}
+
+.settings-api-address__indicator {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--color-text-muted);
+}
+
+.settings-api-address--available .settings-api-address__indicator {
+  background: var(--color-success);
+  box-shadow: 0 0 0 4px rgba(0, 216, 163, 0.12);
+}
+
+.settings-api-address--checking .settings-api-address__indicator {
+  border: 2px solid rgba(0, 229, 255, 0.25);
+  border-top-color: var(--color-primary);
+  background: transparent;
+  animation: spin 0.8s linear infinite;
+}
+
+.settings-api-address--unknown .settings-api-address__indicator {
+  background: var(--color-warning);
+  box-shadow: 0 0 0 4px rgba(255, 195, 51, 0.1);
+}
+
+.settings-api-address--unavailable .settings-api-address__indicator {
+  background: var(--color-danger);
+  box-shadow: 0 0 0 4px rgba(255, 94, 98, 0.1);
+}
+
+.settings-api-address__content {
   display: grid;
   gap: 3px;
   min-width: 0;
-  padding-left: 12px;
-  border-left: 1px solid var(--color-border);
 }
 
-.settings-api-connection__details dt,
-.settings-api-connection__details dd {
-  min-width: 0;
-  margin: 0;
-}
-
-.settings-api-connection__details dt {
-  color: var(--color-text-muted);
-  font-size: 11px;
-}
-
-.settings-api-connection__details dd {
+.settings-api-address__content code {
   overflow: hidden;
+  color: var(--color-text);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.settings-api-connection__details code {
+.settings-api-address__content small {
+  color: var(--color-text-muted);
+  line-height: 1.35;
+}
+
+.settings-api-address__copy {
+  color: var(--color-primary);
+}
+
+.settings-api-connection__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 24px;
+  margin: 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+}
+
+.settings-api-connection__meta div {
+  display: flex;
+  gap: 7px;
+}
+
+.settings-api-connection__meta dt,
+.settings-api-connection__meta dd {
+  margin: 0;
+}
+
+.settings-api-connection__meta dt {
+  color: var(--color-text-muted);
+}
+
+.settings-api-connection__meta dd {
   color: var(--color-text);
 }
 
@@ -2268,21 +2372,13 @@ input[type="range"] {
   background: var(--color-danger);
 }
 
-.settings-api-profile-status {
-  display: grid;
-  grid-template-columns: 11px max-content minmax(0, 1fr);
-  align-items: center;
-  gap: 9px;
-  min-width: 0;
-  padding-top: 12px;
-  border-top: 1px solid var(--color-border);
-}
-
-.settings-api-profile-status small {
-  overflow: hidden;
-  color: var(--color-text-muted);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.settings-api-profile-error {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 94, 98, 0.3);
+  border-radius: 6px;
+  background: rgba(255, 94, 98, 0.07);
+  color: var(--color-danger);
 }
 
 .settings-api-status__warning {
@@ -2615,15 +2711,6 @@ input[type="range"] {
     grid-template-columns: 1fr;
   }
 
-  .settings-api-connection {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .settings-api-connection__details {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .settings-update-row {
     align-items: stretch;
     flex-direction: column;
@@ -2724,15 +2811,6 @@ input[type="range"] {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .settings-api-connection {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .settings-api-connection__details {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .settings-update-row {
     align-items: stretch;
     flex-direction: column;
@@ -2753,20 +2831,15 @@ input[type="range"] {
     display: none;
   }
 
-  .settings-api-connection__details {
+  .settings-api-connection__header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .settings-api-addresses {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .settings-api-profile-status {
-    grid-template-columns: 11px minmax(0, 1fr);
-  }
-
-  .settings-api-profile-status small {
-    grid-column: 2;
-    overflow: visible;
-    text-overflow: clip;
-    white-space: normal;
-  }
 }
 
 .admin-broadcast-bar {

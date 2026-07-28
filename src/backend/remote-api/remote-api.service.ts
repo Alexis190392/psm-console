@@ -6,6 +6,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { APP_INFO } from '../../shared/constants/app-info';
 import type {
+  RemoteApiConnectionDto,
   RemoteApiLoginResultDto,
   RemoteApiPermission,
   RemoteApiProfile,
@@ -13,6 +14,7 @@ import type {
   RemoteApiStatusDto,
   RemoteApiUpdateRequestDto
 } from '../../shared/dto/remote-api.dto';
+import type { NetworkDiagnosticsDto } from '../../shared/dto/network-diagnostics.dto';
 import { ApplicationStateService } from '../application-state/application-state.service';
 import { AppSettingsService } from '../app-settings/app-settings.service';
 import { BackupService } from '../backup/backup.service';
@@ -28,7 +30,6 @@ import type {
 } from './remote-api-settings.types';
 
 const API_PREFIX = '/api/v1';
-const SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
 const MAX_BODY_BYTES = 64 * 1024;
 const LOGIN_WINDOW_MS = 5 * 60 * 1000;
 const LOGIN_LOCK_MS = 30 * 1000;
@@ -49,7 +50,6 @@ const WEB_ASSETS = {
 } as const;
 
 interface ApiSession {
-  expiresAt: number;
   profile: RemoteApiProfile;
   permissions: RemoteApiPermission[];
 }
@@ -76,6 +76,8 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
   };
   private readonly sessions = new Map<string, ApiSession>();
   private readonly loginAttempts = new Map<string, LoginAttempt>();
+  private connections: RemoteApiConnectionDto[] = [];
+  private connectionProbeVersion = 0;
 
   constructor(
     private readonly appSettingsService: AppSettingsService,
@@ -108,7 +110,8 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
       ...(admin.endpoint ? { endpoint: admin.endpoint } : {}),
       message: admin.message,
       updatedAt: admin.updatedAt,
-      client
+      client,
+      connections: this.connections.map((connection) => ({ ...connection }))
     };
   }
 
@@ -154,7 +157,10 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
         });
       });
       this.server = server;
-      const endpoint = createEndpoint(settings, this.networkService.getLocalAddresses());
+      const localAddresses = this.networkService.getLocalAddresses();
+      const endpoint = createEndpoint(settings, localAddresses);
+      this.connections = createInitialConnections(settings, localAddresses);
+      const probeVersion = ++this.connectionProbeVersion;
       enabledProfiles.forEach((profile) => {
         this.runtimes[profile].endpoint = endpoint;
         this.setState(
@@ -164,6 +170,9 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
         );
       });
       void this.loggingService.write('api', 'INFO', `API web compartida disponible en ${endpoint}.`);
+      if (settings.bindMode === 'LOCAL_NETWORK') {
+        void this.refreshPublicConnection(settings.port, probeVersion);
+      }
     } catch (error) {
       server.close();
       this.server = null;
@@ -180,6 +189,8 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
   }
 
   private async stopAll(): Promise<void> {
+    this.connectionProbeVersion += 1;
+    this.connections = [];
     this.sessions.clear();
     this.loginAttempts.clear();
     const server = this.server;
@@ -473,14 +484,13 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
 
     this.loginAttempts.delete(clientId);
     const token = randomBytes(32).toString('base64url');
-    const expiresAt = Date.now() + SESSION_DURATION_MS;
     const permissions = profile === 'ADMIN'
       ? allRemoteApiPermissions()
       : [...settings.client.permissions];
-    this.sessions.set(token, { expiresAt, profile, permissions });
+    this.sessions.set(token, { profile, permissions });
     const result: RemoteApiLoginResultDto = {
       token,
-      expiresAt: new Date(expiresAt).toISOString(),
+      expiresAt: null,
       profile,
       permissions
     };
@@ -494,13 +504,37 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
     const authorization = request.headers.authorization ?? '';
     const token = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
     const session = this.sessions.get(token);
-    if (!token || !session || session.expiresAt <= Date.now()) {
-      if (token) {
-        this.sessions.delete(token);
-      }
+    if (!token || !session) {
       throw new ApiHttpError(401, 'REMOTE_API_AUTHENTICATION_REQUIRED');
     }
     return { token, session };
+  }
+
+  private async refreshPublicConnection(port: number, probeVersion: number): Promise<void> {
+    try {
+      const diagnostics = await this.networkService.getPublicAddress({ port });
+      if (probeVersion !== this.connectionProbeVersion || !this.server) {
+        return;
+      }
+      this.replacePublicConnection(createPublicConnection(diagnostics, port));
+    } catch {
+      if (probeVersion !== this.connectionProbeVersion || !this.server) {
+        return;
+      }
+      this.replacePublicConnection({
+        kind: 'PUBLIC',
+        label: 'Internet',
+        state: 'UNKNOWN',
+        message: 'No se pudo comprobar el acceso desde Internet.'
+      });
+    }
+  }
+
+  private replacePublicConnection(connection: RemoteApiConnectionDto): void {
+    this.connections = [
+      ...this.connections.filter((item) => item.kind !== 'PUBLIC'),
+      connection
+    ];
   }
 
   private requirePermission(session: ApiSession, permission: RemoteApiPermission): void {
@@ -615,6 +649,94 @@ function createEndpoint(
     ? '127.0.0.1'
     : localAddresses[0] ?? '127.0.0.1';
   return `http://${host}:${String(settings.port)}/api/v1`;
+}
+
+function createInitialConnections(
+  settings: Pick<StoredRemoteApiSettings, 'bindMode' | 'port'>,
+  localAddresses: string[]
+): RemoteApiConnectionDto[] {
+  const loopback: RemoteApiConnectionDto = {
+    kind: 'LOOPBACK',
+    label: 'Este equipo',
+    endpoint: createApiEndpoint('127.0.0.1', settings.port),
+    state: 'AVAILABLE',
+    message: 'Disponible mientras PSM Console permanezca abierta.'
+  };
+  const lan = localAddresses.length > 0
+    ? localAddresses.map<RemoteApiConnectionDto>((address) => ({
+        kind: 'LAN',
+        label: 'Red local',
+        endpoint: createApiEndpoint(address, settings.port),
+        state: settings.bindMode === 'LOCAL_NETWORK' ? 'AVAILABLE' : 'DISABLED',
+        message: settings.bindMode === 'LOCAL_NETWORK'
+          ? 'Disponible para equipos de la misma red.'
+          : 'Activa el acceso de red local para habilitar esta direccion.'
+      }))
+    : [{
+        kind: 'LAN' as const,
+        label: 'Red local',
+        state: 'UNKNOWN' as const,
+        message: 'No se detecto una direccion IPv4 de red local.'
+      }];
+  const publicConnection: RemoteApiConnectionDto = settings.bindMode === 'LOCAL_NETWORK'
+    ? {
+        kind: 'PUBLIC',
+        label: 'Internet',
+        state: 'CHECKING',
+        message: 'Comprobando IP publica y acceso TCP desde Internet.'
+      }
+    : {
+        kind: 'PUBLIC',
+        label: 'Internet',
+        state: 'DISABLED',
+        message: 'La API esta limitada a este equipo y no se expone a Internet.'
+      };
+
+  return [loopback, ...lan, publicConnection];
+}
+
+function createPublicConnection(
+  diagnostics: NetworkDiagnosticsDto,
+  port: number
+): RemoteApiConnectionDto {
+  const endpoint = diagnostics.publicIp
+    ? createApiEndpoint(diagnostics.publicIp, port)
+    : undefined;
+  const tcpState = diagnostics.publicPortProbe?.tcp;
+
+  if (tcpState === 'OPEN') {
+    return {
+      kind: 'PUBLIC',
+      label: 'Internet',
+      ...(endpoint ? { endpoint } : {}),
+      state: 'AVAILABLE',
+      message: 'El puerto TCP responde desde Internet.'
+    };
+  }
+
+  if (tcpState === 'CLOSED') {
+    return {
+      kind: 'PUBLIC',
+      label: 'Internet',
+      ...(endpoint ? { endpoint } : {}),
+      state: 'UNAVAILABLE',
+      message: 'El puerto TCP no responde desde Internet. Revisa el router o el proveedor.'
+    };
+  }
+
+  return {
+    kind: 'PUBLIC',
+    label: 'Internet',
+    ...(endpoint ? { endpoint } : {}),
+    state: 'UNKNOWN',
+    message: endpoint
+      ? 'IP publica detectada, pero no se pudo confirmar el acceso al puerto.'
+      : 'No se pudo obtener la IP publica.'
+  };
+}
+
+function createApiEndpoint(host: string, port: number): string {
+  return `http://${host}:${String(port)}/api/v1`;
 }
 
 function applyCommonSecurityHeaders(response: ServerResponse): void {

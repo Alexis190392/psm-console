@@ -65,7 +65,8 @@ const remoteApiStatus = {
     state: 'DISABLED' as const,
     message: 'API cliente deshabilitada.',
     updatedAt: new Date().toISOString()
-  }
+  },
+  connections: []
 };
 
 describe('app settings view', () => {
@@ -169,7 +170,23 @@ describe('app settings view', () => {
           passwordConfigured: true
         },
         state: 'RUNNING',
-        endpoint: 'http://127.0.0.1:8213/api/v1'
+        endpoint: 'http://127.0.0.1:8213/api/v1',
+        connections: [
+          {
+            kind: 'LOOPBACK' as const,
+            label: 'Este equipo',
+            endpoint: 'http://127.0.0.1:8213/api/v1',
+            state: 'AVAILABLE' as const,
+            message: 'Disponible mientras PSM Console permanezca abierta.'
+          },
+          {
+            kind: 'PUBLIC' as const,
+            label: 'Internet',
+            endpoint: 'http://203.0.113.25:8213/api/v1',
+            state: 'UNKNOWN' as const,
+            message: 'IP publica detectada, pero no se pudo confirmar el acceso al puerto.'
+          }
+        ]
       },
       'remote-api'
     );
@@ -180,7 +197,10 @@ describe('app settings view', () => {
     expect(html).toContain('Contrasena configurada');
     expect(html).toContain('minlength="5"');
     expect(html).toContain('http://127.0.0.1:8213/api/v1');
-    expect(html).toContain('<dt>Sesion</dt><dd>8 h</dd>');
+    expect(html).toContain('http://203.0.113.25:8213/api/v1');
+    expect(html).toContain('<dt>Sesion</dt><dd>Mientras la app este abierta</dd>');
+    expect(html).toContain('data-copy-value="http://127.0.0.1:8213/api/v1"');
+    expect(html).toContain('settings-api-address--unknown');
     expect(html.match(/name="port" type="number"/g)).toHaveLength(1);
     expect(html).toContain('settings-api-connection');
     expect(html).toContain('settings-api-profiles');
