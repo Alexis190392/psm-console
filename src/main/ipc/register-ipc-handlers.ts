@@ -78,6 +78,14 @@ export function registerIpcHandlers(
   const remoteApiService = nestContext.get(RemoteApiService);
   const serverIdleShutdownService = nestContext.get(ServerIdleShutdownService);
 
+  palworldProcessService.onRuntimeStateChanged(() => {
+    BrowserWindow.getAllWindows().forEach((window) => {
+      if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
+        window.webContents.send(ipcChannels.serverRuntimeChanged);
+      }
+    });
+  });
+
   ipcMain.handle(ipcChannels.appGetStatus, () =>
     applicationStateService.getStatus()
   );

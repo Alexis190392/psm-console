@@ -57,6 +57,7 @@ export class PalworldProcessService {
   private lastProcessScanAt = 0;
   private cachedProcessScan: DetectedPalServerProcess[] = [];
   private stopRequestedAt = 0;
+  private readonly runtimeStateListeners = new Set<() => void>();
 
   constructor(
     private readonly palworldInstallationService: PalworldInstallationService,
@@ -78,6 +79,13 @@ export class PalworldProcessService {
       updatedAt: this.updatedAt,
       message: this.message,
       logs: [...this.logs]
+    };
+  }
+
+  onRuntimeStateChanged(listener: () => void): () => void {
+    this.runtimeStateListeners.add(listener);
+    return () => {
+      this.runtimeStateListeners.delete(listener);
     };
   }
 
@@ -552,6 +560,9 @@ export class PalworldProcessService {
     }
 
     void this.loggingService?.write('palserver', state === 'ERROR' ? 'ERROR' : 'INFO', message);
+    this.runtimeStateListeners.forEach((listener) => {
+      listener();
+    });
   }
 
   private completeActiveOperation(operationId: string, message: string): void {

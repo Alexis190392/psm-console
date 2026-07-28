@@ -342,6 +342,7 @@ let confirmationReturnFocus: HTMLElement | null = null;
 let confirmationFocusActive = false;
 let inlineConfirmationReturnFocus: HTMLElement | null = null;
 let activeViewRenderId = 0;
+let runtimeStateRefreshTimer: number | null = null;
 let latestSummary: {
   steamCmdStatus: string;
   serverStatus: string;
@@ -362,6 +363,7 @@ if (!palcmApi) {
   showIpcError('El preload seguro no expuso window.palcm. Revisar preload, sandbox y build.');
 } else {
   palcmApi.firewall.onDiagnosticProgress(updateFirewallDiagnosticProgress);
+  palcmApi.server.onRuntimeStatusChanged(scheduleRuntimeStateRefresh);
   await refreshState();
 
   confirmActionButton?.addEventListener('click', () => {
@@ -468,6 +470,29 @@ if (!palcmApi) {
   });
 
   observeConfirmationFocus();
+}
+
+function scheduleRuntimeStateRefresh(): void {
+  if (runtimeStateRefreshTimer !== null) {
+    window.clearTimeout(runtimeStateRefreshTimer);
+  }
+
+  runtimeStateRefreshTimer = window.setTimeout(() => {
+    runtimeStateRefreshTimer = null;
+    void synchronizeRuntimeState();
+  }, 50);
+}
+
+async function synchronizeRuntimeState(): Promise<void> {
+  const previousStatus = latestStatus;
+  await refreshStatusChrome();
+
+  if (
+    latestStatus !== previousStatus
+    && (navigationState.is('home') || navigationState.is('admin'))
+  ) {
+    renderActiveView();
+  }
 }
 
 async function refreshState(): Promise<void> {
