@@ -8,6 +8,30 @@ export interface MainWindowSize {
   height: number;
 }
 
+export function createSplashWindowOptions(): BrowserWindowConstructorOptions {
+  return {
+    width: 240,
+    height: 240,
+    center: true,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    show: false,
+    hasShadow: false,
+    backgroundColor: '#00000000',
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
+    }
+  };
+}
+
 function resolveWindowIcon(): string | undefined {
   const electronApp = app as { isPackaged?: boolean } | undefined;
   const resourcesPath = typeof process.resourcesPath === 'string' ? process.resourcesPath : process.cwd();

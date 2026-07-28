@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { createMainWindowOptions } from '../src/main/electron/window-options';
+import {
+  createMainWindowOptions,
+  createSplashWindowOptions
+} from '../src/main/electron/window-options';
 
 describe('Electron window security options', () => {
   it('keeps the renderer isolated from Node.js', () => {
@@ -27,6 +30,24 @@ describe('Electron window security options', () => {
       minWidth: 1100,
       minHeight: 700,
       movable: true
+    });
+  });
+
+  it('keeps the splash transparent, isolated and outside the taskbar', () => {
+    const options = createSplashWindowOptions();
+
+    expect(options).toMatchObject({
+      frame: false,
+      transparent: true,
+      resizable: false,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      show: false,
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true
+      }
     });
   });
 });

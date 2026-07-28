@@ -5,7 +5,7 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { APP_INFO } from '../../shared/constants/app-info';
 import { createNestContext } from '../bootstrap/nest-bootstrap';
 import { registerIpcHandlers } from '../ipc/register-ipc-handlers';
-import { createMainWindowOptions } from './window-options';
+import { createMainWindowOptions, createSplashWindowOptions } from './window-options';
 
 const RENDERER_PROTOCOL = 'palcm';
 const RENDERER_CSP = [
@@ -99,16 +99,36 @@ function registerRendererProtocol(): void {
   });
 }
 
-async function createMainWindow(): Promise<BrowserWindow> {
+async function createSplashWindow(): Promise<BrowserWindow> {
+  const window = new BrowserWindow(createSplashWindowOptions());
+  window.setIgnoreMouseEvents(true);
+  await window.loadURL(`${RENDERER_PROTOCOL}://app/splash.html`);
+  window.show();
+  return window;
+}
+
+async function createMainWindow(splashWindow?: BrowserWindow): Promise<BrowserWindow> {
   const { workAreaSize } = screen.getPrimaryDisplay();
   const window = new BrowserWindow(
-    createMainWindowOptions({
-      width: Math.max(1100, Math.min(1440, workAreaSize.width)),
-      height: Math.max(700, Math.min(900, workAreaSize.height))
-    })
+    {
+      ...createMainWindowOptions({
+        width: Math.max(1100, Math.min(1440, workAreaSize.width)),
+        height: Math.max(700, Math.min(900, workAreaSize.height))
+      }),
+      show: false
+    }
   );
 
+  const readyToShow = new Promise<void>((resolveReady) => {
+    window.once('ready-to-show', resolveReady);
+  });
   await window.loadURL(`${RENDERER_PROTOCOL}://app/index.html`);
+  await readyToShow;
+
+  if (splashWindow && !splashWindow.isDestroyed()) {
+    splashWindow.destroy();
+  }
+  window.show();
 
   return window;
 }
@@ -120,15 +140,17 @@ async function bootstrap(): Promise<void> {
   process.env['PALCM_ELECTRON_IS_PACKAGED'] = app.isPackaged ? 'true' : 'false';
   process.env['PALCM_ELECTRON_EXE_PATH'] = app.getPath('exe');
 
+  await app.whenReady();
+  registerRendererProtocol();
+  const splashWindow = await createSplashWindow();
+
   const nestContext = await createNestContext();
   registerIpcHandlers(ipcMain, nestContext);
   app.once('before-quit', () => {
     void nestContext.close();
   });
 
-  await app.whenReady();
-  registerRendererProtocol();
-  await createMainWindow();
+  await createMainWindow(splashWindow);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
