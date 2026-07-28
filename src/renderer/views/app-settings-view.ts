@@ -123,7 +123,7 @@ function renderApplicationSettings(status: AppSettingsStatusDto, update: AppUpda
   return `
     <section class="settings-overview-grid">
       <article class="content-card settings-overview-card">
-        <span class="view-kicker">DATOS DE LA APP</span>
+        <h4>Datos de la app</h4>
         <dl>
           <div><dt>Raiz portable</dt><dd title="${escapeHtml(status.portableRoot)}">${escapeHtml(status.portableRoot)}</dd></div>
           <div><dt>Preferencias</dt><dd>${escapeHtml(status.settingsRelativePath)}</dd></div>
@@ -132,7 +132,7 @@ function renderApplicationSettings(status: AppSettingsStatusDto, update: AppUpda
         </dl>
       </article>
       <article class="content-card settings-overview-card">
-        <span class="view-kicker">ACTUALIZACIONES</span>
+        <h4>Actualizaciones</h4>
         <div class="settings-update-row">
           <div>
             <strong>${escapeHtml(update?.message ?? 'Sin comprobacion reciente.')}</strong>
@@ -157,7 +157,6 @@ function renderAutomationSettings(summary: BackupSummaryDto, idleStatus: ServerI
   return `
     <section class="settings-automation-grid">
       <form class="admin-card admin-card--idle" data-idle-policy-form>
-        <span class="view-kicker">SERVIDOR VACIO</span>
         <div class="admin-card__title-row">
           <h4>Apagado automatico</h4>
           <label class="toggle-control">
@@ -177,7 +176,6 @@ function renderAutomationSettings(summary: BackupSummaryDto, idleStatus: ServerI
         <button class="secondary-button button-with-icon" type="submit">${renderIcon('save')}<span>Guardar</span></button>
       </form>
       <form id="backup-policy-form" class="admin-card settings-backup-policy">
-        <span class="view-kicker">RESPALDOS</span>
         <div class="admin-card__title-row">
           <h4>Backups automaticos</h4>
           <label class="toggle-control">
@@ -221,10 +219,7 @@ function renderRemoteApiSettings(status: RemoteApiStatusDto): string {
       <div class="settings-api-profiles">
         <form class="admin-card settings-api-form" data-remote-api-form="ADMIN">
         <div class="admin-card__title-row">
-          <div>
-            <span class="view-kicker">ADMINISTRADOR</span>
-            <h4>API administrativa</h4>
-          </div>
+          <h4>API administrativa</h4>
           <label class="toggle-control">
             <input name="enabled" type="checkbox" ${enabled ? 'checked' : ''} />
             <span class="toggle-control__track" aria-hidden="true"><span></span></span>
@@ -275,10 +270,7 @@ export function renderRemoteApiConnectionStatus(status: RemoteApiStatusDto): str
   return `
     <article class="settings-api-connection">
       <header class="settings-api-connection__header">
-        <div>
-          <span class="view-kicker">CONEXION WEB</span>
-          <h4>Direcciones disponibles</h4>
-        </div>
+        <h4>Direcciones disponibles</h4>
         <div class="settings-api-connection__state">
           <span class="settings-api-status__indicator settings-api-status__indicator--${sharedState.toLowerCase()}"></span>
           <strong>${running ? 'En ejecucion' : remoteApiStateLabel(sharedState)}</strong>
@@ -340,10 +332,7 @@ function renderClientApiProfile(status: RemoteApiProfileStatusDto): string {
   return `
     <form class="admin-card settings-api-form" data-remote-api-form="CLIENT">
       <div class="admin-card__title-row">
-        <div>
-          <span class="view-kicker">ACCESO LIMITADO</span>
-          <h4>API cliente</h4>
-        </div>
+        <h4>API cliente</h4>
         <label class="toggle-control">
           <input name="enabled" type="checkbox" ${settings.enabled ? 'checked' : ''} />
           <span class="toggle-control__track" aria-hidden="true"><span></span></span>
@@ -381,29 +370,29 @@ function renderRemoteApiProfileError(status: RemoteApiProfileStatusDto): string 
 function renderClientPermissions(permissions: RemoteApiPermission[]): string {
   const groups: Array<{
     label: string;
-    options: Array<{ value: RemoteApiPermission; label: string; detail: string }>;
+    options: Array<{ value: RemoteApiPermission; label: string }>;
   }> = [
     {
       label: 'Informacion',
       options: [
-        { value: 'GENERAL', label: 'Estado general', detail: 'Estado de la aplicacion y del servidor.' },
-        { value: 'LOGS', label: 'Logs', detail: 'Actividad de la instancia.' }
+        { value: 'GENERAL', label: 'Estado general' },
+        { value: 'LOGS', label: 'Logs' }
       ]
     },
     {
       label: 'Control del servidor',
       options: [
-        { value: 'SERVER_START', label: 'Iniciar', detail: 'Encender el servidor.' },
-        { value: 'SERVER_RESTART', label: 'Reiniciar', detail: 'Reiniciar el proceso.' },
-        { value: 'SERVER_STOP', label: 'Detener', detail: 'Apagar el servidor.' }
+        { value: 'SERVER_START', label: 'Iniciar' },
+        { value: 'SERVER_RESTART', label: 'Reiniciar' },
+        { value: 'SERVER_STOP', label: 'Detener' }
       ]
     },
     {
       label: 'Jugadores',
       options: [
-        { value: 'PLAYERS_VIEW', label: 'Ver jugadores', detail: 'Consultar jugadores conectados.' },
-        { value: 'PLAYERS_KICK', label: 'Expulsar', detail: 'Desconectar jugadores.' },
-        { value: 'PLAYERS_BAN', label: 'Banear', detail: 'Bloquear jugadores.' }
+        { value: 'PLAYERS_VIEW', label: 'Ver jugadores' },
+        { value: 'PLAYERS_KICK', label: 'Expulsar' },
+        { value: 'PLAYERS_BAN', label: 'Banear' }
       ]
     }
   ];
@@ -416,9 +405,9 @@ function renderClientPermissions(permissions: RemoteApiPermission[]): string {
             <h5>${group.label}</h5>
             <div class="settings-api-permissions__grid">
               ${group.options.map((option) => `
-                <label class="settings-permission-option">
+                <label class="choice-chip settings-permission-option">
                   <input name="permissions" type="checkbox" value="${option.value}" ${permissions.includes(option.value) ? 'checked' : ''} />
-                  <span><strong>${option.label}</strong><small>${option.detail}</small></span>
+                  <span>${option.label}</span>
                 </label>
               `).join('')}
             </div>

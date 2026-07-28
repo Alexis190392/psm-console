@@ -37,9 +37,9 @@ export function renderBackupsView(summary: BackupSummaryDto): string {
         <div class="backup-list__header">
           <h4>Historial</h4>
           <div class="segmented-filter" role="group" aria-label="Filtrar backups por tipo">
-            <button class="segmented-filter__button segmented-filter__button--active" type="button" data-backup-filter="all" aria-pressed="true">Todos</button>
-            <button class="segmented-filter__button" type="button" data-backup-filter="configuration" aria-pressed="false">INI</button>
-            <button class="segmented-filter__button" type="button" data-backup-filter="world" aria-pressed="false">Mundo</button>
+            <button class="choice-chip segmented-filter__button segmented-filter__button--active" type="button" data-backup-filter="all" aria-pressed="true">Todos</button>
+            <button class="choice-chip segmented-filter__button" type="button" data-backup-filter="configuration" aria-pressed="false">INI</button>
+            <button class="choice-chip segmented-filter__button" type="button" data-backup-filter="world" aria-pressed="false">Mundo</button>
           </div>
         </div>
         <div class="backup-list__columns" aria-hidden="true">

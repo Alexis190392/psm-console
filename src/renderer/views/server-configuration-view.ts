@@ -17,7 +17,7 @@ export function renderConfigurationPresets(): string {
         <small>Preparan el formulario sin guardar</small>
       </summary>
       <div class="preset-bar__actions">
-        ${CONFIGURATION_PRESETS.map((preset) => `<button class="secondary-button preset-button" type="button" data-preset="${escapeHtml(preset.id)}">${escapeHtml(preset.label)}</button>`).join('')}
+        ${CONFIGURATION_PRESETS.map((preset) => `<button class="choice-chip preset-button" type="button" data-preset="${escapeHtml(preset.id)}">${escapeHtml(preset.label)}</button>`).join('')}
       </div>
     </details>
   `;

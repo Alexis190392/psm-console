@@ -19,7 +19,7 @@ export function renderAdminStatus(
         ${
           isReady
             ? renderAdminTabs(adminStatus, playersStatus, activeTab)
-            : `<div class="admin-toolbar"><span class="view-kicker">ADMINISTRACION</span><span class="view-meta-pill">${escapeHtml(adminStatus.message)}</span></div><p class="empty-state">${escapeHtml(adminStatus.message)}</p>`
+            : `<div class="admin-toolbar"><h3>Administracion</h3><span class="view-meta-pill">${escapeHtml(adminStatus.message)}</span></div><p class="empty-state">${escapeHtml(adminStatus.message)}</p>`
         }
       </section>
     </div>
@@ -32,14 +32,14 @@ function renderAdminTabs(
   activeTab: AdminTab
 ): string {
   const tabLabel: Record<AdminTab, string> = {
-    general: 'SERVIDOR',
-    players: 'JUGADORES',
-    map: 'MAPA'
+    general: 'Servidor',
+    players: 'Jugadores',
+    map: 'Mapa'
   };
 
   return `
     <div class="admin-toolbar">
-      <span class="view-kicker">ADMINISTRACION / ${tabLabel[activeTab]}</span>
+      <h3>${tabLabel[activeTab]}</h3>
       <span class="view-meta-pill">${escapeHtml(adminStatus.message)}</span>
     </div>
     ${renderAdminActiveTab(adminStatus, playersStatus, activeTab)}
@@ -75,7 +75,6 @@ function renderAdminGeneralTab(adminStatus: PalworldAdminStatusDto): string {
     </div>
     <div class="admin-grid">
       <form class="admin-card" data-admin-form="save">
-        <span class="view-kicker">MUNDO</span>
         <h4>Guardar mundo</h4>
         <p class="admin-card__hint">Guarda el estado actual.</p>
         <button class="secondary-button button-with-icon" type="submit">
@@ -84,7 +83,6 @@ function renderAdminGeneralTab(adminStatus: PalworldAdminStatusDto): string {
         </button>
       </form>
       <form class="admin-card" data-admin-form="shutdown">
-        <span class="view-kicker">APAGADO</span>
         <h4>Apagado programado</h4>
         <label class="compact-field">
           <span>Espera</span>
@@ -126,10 +124,7 @@ function renderAdminPlayersTab(playersStatus: PalworldPlayersStatusDto): string 
     <div class="admin-players-layout">
       <section class="admin-players-panel admin-players-panel--wide">
         <div class="players-list-card__header">
-          <div>
-            <p class="eyebrow">JUGADORES</p>
-            <h3>Jugadores conectados</h3>
-          </div>
+          <h3>Jugadores conectados</h3>
           <span>${renderPlayersHeaderMeta(playersStatus)}</span>
         </div>
         ${renderAdminPlayersList(playersStatus)}
@@ -147,7 +142,7 @@ function renderAdminMapTab(playersStatus: PalworldPlayersStatusDto): string {
     return `
       <section class="admin-map-panel">
         <div class="admin-map__header">
-          <div><span class="view-kicker">MAPA</span><h3>Ubicacion de jugadores</h3></div>
+          <h3>Ubicacion de jugadores</h3>
           <span class="view-meta-pill">${escapeHtml(formatDateTime(playersStatus.updatedAt))}</span>
         </div>
         <p class="empty-state">No hay jugadores conectados con coordenadas reportadas por la REST API.</p>
@@ -158,7 +153,7 @@ function renderAdminMapTab(playersStatus: PalworldPlayersStatusDto): string {
   return `
     <section class="admin-map-panel">
       <div class="admin-map__header">
-        <div><span class="view-kicker">MAPA</span><h3>Ubicacion de jugadores</h3></div>
+        <h3>Ubicacion de jugadores</h3>
         <span class="view-meta-pill">${String(locatedPlayers.length)} activos</span>
       </div>
       <div class="admin-map-layout">
@@ -181,7 +176,6 @@ function renderAdminSnapshotCard(
   const entries = Object.entries(snapshot ?? {}).slice(0, 6);
   return `
     <article class="admin-snapshot-card">
-      <span class="view-kicker">${escapeHtml(title.toUpperCase())}</span>
       <h4>${escapeHtml(title)}</h4>
       <span class="sr-only">${escapeHtml(detail)}</span>
       ${

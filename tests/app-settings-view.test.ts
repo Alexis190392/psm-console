@@ -209,6 +209,8 @@ describe('app settings view', () => {
     expect(html).toContain('value="SERVER_STOP"');
     expect(html).toContain('value="PLAYERS_KICK"');
     expect(html).toContain('value="PLAYERS_BAN"');
+    expect(html).not.toContain('Estado de la aplicacion y del servidor.');
+    expect(html).not.toContain('Desconectar jugadores.');
     expect(html).not.toContain('passwordHash');
   });
 });
