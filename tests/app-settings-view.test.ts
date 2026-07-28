@@ -4,7 +4,7 @@ import type { RemoteApiPermission } from '../src/shared/dto/remote-api.dto';
 
 const appStatus = {
   settings: {
-    schemaVersion: 4 as const,
+    schemaVersion: 5 as const,
     automation: {
       idleShutdown: { enabled: true, emptySeconds: 120 },
       backups: {
@@ -26,7 +26,14 @@ const appStatus = {
         port: 8213,
         username: 'cliente',
         passwordConfigured: false,
-        permissions: ['GENERAL', 'SERVER_CONTROL', 'PLAYERS', 'LOGS'] as RemoteApiPermission[]
+        permissions: [
+          'GENERAL',
+          'SERVER_START',
+          'SERVER_RESTART',
+          'SERVER_STOP',
+          'PLAYERS_VIEW',
+          'LOGS'
+        ] as RemoteApiPermission[]
       }
     }
   },
@@ -177,6 +184,11 @@ describe('app settings view', () => {
     expect(html.match(/name="port" type="number"/g)).toHaveLength(1);
     expect(html).toContain('settings-api-connection');
     expect(html).toContain('settings-api-profiles');
+    expect(html).toContain('value="SERVER_START"');
+    expect(html).toContain('value="SERVER_RESTART"');
+    expect(html).toContain('value="SERVER_STOP"');
+    expect(html).toContain('value="PLAYERS_KICK"');
+    expect(html).toContain('value="PLAYERS_BAN"');
     expect(html).not.toContain('passwordHash');
   });
 });

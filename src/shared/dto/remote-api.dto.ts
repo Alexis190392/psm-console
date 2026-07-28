@@ -1,7 +1,15 @@
 export type RemoteApiBindMode = 'LOCAL_ONLY' | 'LOCAL_NETWORK';
 export type RemoteApiRuntimeState = 'DISABLED' | 'STARTING' | 'RUNNING' | 'ERROR';
 export type RemoteApiProfile = 'ADMIN' | 'CLIENT';
-export type RemoteApiPermission = 'GENERAL' | 'SERVER_CONTROL' | 'PLAYERS' | 'LOGS';
+export type RemoteApiPermission =
+  | 'GENERAL'
+  | 'SERVER_START'
+  | 'SERVER_RESTART'
+  | 'SERVER_STOP'
+  | 'PLAYERS_VIEW'
+  | 'PLAYERS_KICK'
+  | 'PLAYERS_BAN'
+  | 'LOGS';
 
 export interface RemoteApiProfileSettingsDto {
   enabled: boolean;

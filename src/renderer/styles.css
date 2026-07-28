@@ -2312,6 +2312,24 @@ input[type="range"] {
   font-size: 12px;
 }
 
+.settings-api-permission-groups {
+  display: grid;
+  gap: 14px;
+}
+
+.settings-api-permission-group {
+  display: grid;
+  gap: 8px;
+}
+
+.settings-api-permission-group h5 {
+  margin: 0;
+  color: var(--color-primary);
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
 .settings-api-permissions__grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

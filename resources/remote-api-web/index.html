@@ -55,8 +55,8 @@
         <section id="dashboard-view" class="dashboard" hidden>
           <aside class="sidebar" aria-label="Navegacion principal">
             <nav>
-              <button class="nav-button active" type="button" data-view="general" data-permission-any="GENERAL,SERVER_CONTROL">General</button>
-              <button class="nav-button" type="button" data-view="players" data-permission="PLAYERS">Jugadores</button>
+              <button class="nav-button active" type="button" data-view="general" data-permission-any="GENERAL,SERVER_START,SERVER_RESTART,SERVER_STOP">General</button>
+              <button class="nav-button" type="button" data-view="players" data-permission-any="PLAYERS_VIEW,PLAYERS_KICK,PLAYERS_BAN">Jugadores</button>
               <button class="nav-button" type="button" data-view="logs" data-permission="LOGS">Logs</button>
             </nav>
             <button id="logout-button" class="secondary-button" type="button">Cerrar sesion</button>
@@ -72,33 +72,33 @@
                 <button class="icon-button refresh-button" type="button" data-refresh aria-label="Actualizar estado" title="Actualizar estado">↻</button>
               </div>
 
-              <div class="status-grid" data-permission="GENERAL">
-                <article class="status-card">
+              <div class="status-grid" data-permission-any="GENERAL,SERVER_START,SERVER_RESTART,SERVER_STOP">
+                <article class="status-card" data-permission="GENERAL">
                   <span>Aplicacion</span>
                   <strong id="application-status">Consultando</strong>
                   <small id="application-message">Leyendo estado actual...</small>
                 </article>
-                <article class="status-card">
+                <article class="status-card" data-permission-any="GENERAL,SERVER_START,SERVER_RESTART,SERVER_STOP">
                   <span>Servidor</span>
                   <strong id="server-status">Consultando</strong>
                   <small id="server-message">Verificando proceso...</small>
                 </article>
-                <article class="status-card" data-permission="PLAYERS">
+                <article class="status-card" data-permission-any="PLAYERS_VIEW,PLAYERS_KICK,PLAYERS_BAN">
                   <span>Jugadores</span>
                   <strong id="player-count">--</strong>
                   <small>Conectados en esta instancia</small>
                 </article>
               </div>
 
-              <section class="action-panel" data-permission="SERVER_CONTROL">
+              <section class="action-panel" data-permission-any="SERVER_START,SERVER_RESTART,SERVER_STOP">
                 <div>
                   <p class="eyebrow">CONTROL</p>
                   <h2>Acciones del servidor</h2>
                 </div>
                 <div class="action-buttons">
-                  <button id="start-button" class="primary-button" type="button">Iniciar</button>
-                  <button id="restart-button" class="secondary-button" type="button">Reiniciar</button>
-                  <button id="stop-button" class="danger-button" type="button">Detener</button>
+                  <button id="start-button" class="primary-button" type="button" data-permission="SERVER_START">Iniciar</button>
+                  <button id="restart-button" class="secondary-button" type="button" data-permission="SERVER_RESTART">Reiniciar</button>
+                  <button id="stop-button" class="danger-button" type="button" data-permission="SERVER_STOP">Detener</button>
                 </div>
               </section>
               <p id="operation-message" class="operation-message" aria-live="polite"></p>

@@ -107,7 +107,7 @@ describe('RemoteApiService', () => {
       port: port + 1,
       username: 'friend',
       password: 'abcde',
-      permissions: ['PLAYERS']
+      permissions: ['PLAYERS_VIEW', 'PLAYERS_KICK']
     });
     const baseUrl = `http://127.0.0.1:${String(port)}/api/v1`;
     expect(status.client.state).toBe('RUNNING');
@@ -128,7 +128,7 @@ describe('RemoteApiService', () => {
     const clientHeaders = { authorization: `Bearer ${clientLogin.token}` };
 
     expect(clientLogin.profile).toBe('CLIENT');
-    expect(clientLogin.permissions).toEqual(['PLAYERS']);
+    expect(clientLogin.permissions).toEqual(['PLAYERS_VIEW', 'PLAYERS_KICK']);
     expect((await fetch(`${baseUrl}/session`, { headers: clientHeaders })).status).toBe(200);
     expect((await fetch(`${baseUrl}/players`, { headers: clientHeaders })).status).toBe(200);
     expect((await fetch(`${baseUrl}/status`, { headers: clientHeaders })).status).toBe(403);
@@ -138,6 +138,27 @@ describe('RemoteApiService', () => {
       headers: clientHeaders
     })).status).toBe(403);
     expect(fixture.start).not.toHaveBeenCalled();
+    expect((await fetch(`${baseUrl}/admin/actions`, {
+      method: 'POST',
+      headers: {
+        ...clientHeaders,
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({ action: 'kick', userId: 'steam_123' })
+    })).status).toBe(200);
+    expect(fixture.execute).toHaveBeenCalledWith({
+      confirmed: true,
+      action: 'kick',
+      userId: 'steam_123'
+    });
+    expect((await fetch(`${baseUrl}/admin/actions`, {
+      method: 'POST',
+      headers: {
+        ...clientHeaders,
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({ action: 'ban', userId: 'steam_123' })
+    })).status).toBe(403);
 
     const adminLoginResponse = await fetch(`${baseUrl}/auth/login`, {
       method: 'POST',
@@ -149,13 +170,67 @@ describe('RemoteApiService', () => {
     expect(adminLogin.profile).toBe('ADMIN');
     expect((await fetch(`${baseUrl}/status`, { headers: adminHeaders })).status).toBe(200);
   });
+
+  it('enforces start, restart and stop permissions independently', async () => {
+    const port = await getFreePort();
+    const appSettings = new AppSettingsService(paths);
+    const fixture = createRemoteApiFixture(appSettings, portableRoot);
+    remoteApi = fixture.service;
+
+    await remoteApi.update({
+      confirmed: true,
+      enabled: false,
+      bindMode: 'LOCAL_ONLY',
+      port,
+      username: 'admin'
+    });
+    await remoteApi.update({
+      confirmed: true,
+      profile: 'CLIENT',
+      enabled: true,
+      bindMode: 'LOCAL_ONLY',
+      port,
+      username: 'starter',
+      password: 'abcde',
+      permissions: ['SERVER_START']
+    });
+    const baseUrl = `http://127.0.0.1:${String(port)}/api/v1`;
+    const loginResponse = await fetch(`${baseUrl}/auth/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username: 'starter', password: 'abcde' })
+    });
+    const login = await loginResponse.json() as { token: string };
+    const headers = { authorization: `Bearer ${login.token}` };
+
+    expect((await fetch(`${baseUrl}/server/start`, { method: 'POST', headers })).status).toBe(202);
+    expect((await fetch(`${baseUrl}/server/restart`, { method: 'POST', headers })).status).toBe(403);
+    expect((await fetch(`${baseUrl}/server/stop`, { method: 'POST', headers })).status).toBe(403);
+    expect(fixture.start).toHaveBeenCalledOnce();
+    expect(fixture.restart).not.toHaveBeenCalled();
+    expect(fixture.stop).not.toHaveBeenCalled();
+  });
 });
 
 function createRemoteApiFixture(
   appSettings: AppSettingsService,
   portableRoot: string
-): { service: RemoteApiService; start: ReturnType<typeof vi.fn> } {
+): {
+  service: RemoteApiService;
+  start: ReturnType<typeof vi.fn>;
+  restart: ReturnType<typeof vi.fn>;
+  stop: ReturnType<typeof vi.fn>;
+  execute: ReturnType<typeof vi.fn>;
+} {
   const start = vi.fn(() => ({ operationId: 'start-operation' }));
+  const restart = vi.fn(() => ({ operationId: 'restart-operation' }));
+  const stop = vi.fn(() => ({ operationId: 'stop-operation' }));
+  const execute = vi.fn(() => ({
+    action: 'kick',
+    status: 'OK',
+    message: 'Accion aplicada.',
+    updatedAt: new Date().toISOString()
+  }));
   const service = new RemoteApiService(
     appSettings,
     {
@@ -185,8 +260,8 @@ function createRemoteApiFixture(
         logs: []
       }),
       start,
-      stop: vi.fn(),
-      restart: vi.fn()
+      stop,
+      restart
     } as unknown as PalworldProcessService,
     {
       getStatus: vi.fn(() => ({
@@ -198,7 +273,7 @@ function createRemoteApiFixture(
         message: 'No hay jugadores conectados.'
       }))
     } as unknown as PalworldPlayersService,
-    { getStatus: vi.fn(), execute: vi.fn() } as unknown as PalworldAdminService,
+    { getStatus: vi.fn(), execute } as unknown as PalworldAdminService,
     { readActive: vi.fn(), saveActive: vi.fn(), restoreDefault: vi.fn() } as unknown as PalworldConfigurationService,
     { getSummary: vi.fn(), createConfigurationBackup: vi.fn(), createWorldBackup: vi.fn() } as unknown as BackupService,
     {
@@ -211,7 +286,7 @@ function createRemoteApiFixture(
     { getLocalAddresses: () => ['192.0.2.10'], getPublicAddress: vi.fn() } as unknown as NetworkService,
     { get: vi.fn() } as unknown as OperationManagerService
   );
-  return { service, start };
+  return { service, start, restart, stop, execute };
 }
 
 async function getFreePort(): Promise<number> {

@@ -2305,7 +2305,16 @@ async function updateRemoteApi(request: RemoteApiUpdateRequestDto): Promise<void
 
 function isRemoteApiPermission(value: FormDataEntryValue): value is RemoteApiPermission {
   return typeof value === 'string'
-    && ['GENERAL', 'SERVER_CONTROL', 'PLAYERS', 'LOGS'].includes(value);
+    && [
+      'GENERAL',
+      'SERVER_START',
+      'SERVER_RESTART',
+      'SERVER_STOP',
+      'PLAYERS_VIEW',
+      'PLAYERS_KICK',
+      'PLAYERS_BAN',
+      'LOGS'
+    ].includes(value);
 }
 
 function bindBackupFilters(): void {

@@ -22,12 +22,12 @@ describe('AppSettingsService', () => {
       await readFile(join(paths.getConfigRoot(), 'app-settings.json'), 'utf8')
     ) as { schemaVersion: number };
 
-    expect(settings.schemaVersion).toBe(4);
+    expect(settings.schemaVersion).toBe(5);
     expect(settings.automation.idleShutdown.enabled).toBe(false);
     expect(settings.remoteApi.enabled).toBe(false);
     expect(settings.remoteApi.passwordConfigured).toBe(false);
     expect(settings.remoteApi.client.enabled).toBe(false);
-    expect(stored.schemaVersion).toBe(4);
+    expect(stored.schemaVersion).toBe(5);
   });
 
   it('migrates existing backup and idle policies without changing their values', async () => {
@@ -76,10 +76,10 @@ describe('AppSettingsService', () => {
       await readFile(join(paths.getConfigRoot(), 'app-settings.json'), 'utf8')
     ) as { schemaVersion: number };
 
-    expect(settings.schemaVersion).toBe(4);
+    expect(settings.schemaVersion).toBe(5);
     expect(settings.automation.idleShutdown.emptySeconds).toBe(180);
     expect(settings.automation.backups.automaticIntervalHours).toBe(8);
-    expect(stored.schemaVersion).toBe(4);
+    expect(stored.schemaVersion).toBe(5);
   });
 
   it('migrates schema 2 administrative API settings and adds a disabled client profile', async () => {
@@ -110,7 +110,7 @@ describe('AppSettingsService', () => {
 
     const settings = await service.read();
 
-    expect(settings.schemaVersion).toBe(4);
+    expect(settings.schemaVersion).toBe(5);
     expect(settings.remoteApi.port).toBe(9213);
     expect(settings.remoteApi.username).toBe('operator');
     expect(settings.remoteApi.client.enabled).toBe(false);
@@ -145,13 +145,61 @@ describe('AppSettingsService', () => {
       port: 9999,
       username: 'guest',
       password: 'abcde',
-      permissions: ['GENERAL', 'PLAYERS']
+      permissions: ['GENERAL', 'PLAYERS_VIEW', 'PLAYERS_KICK']
     });
 
     expect(status.client.passwordConfigured).toBe(true);
-    expect(status.client.permissions).toEqual(['GENERAL', 'PLAYERS']);
+    expect(status.client.permissions).toEqual(['GENERAL', 'PLAYERS_VIEW', 'PLAYERS_KICK']);
     expect(await service.verifyRemoteApiCredentials('CLIENT', 'guest', 'abcde')).toBe(true);
     expect(await service.verifyRemoteApiCredentials('ADMIN', 'guest', 'abcde')).toBe(false);
+  });
+
+  it('migrates broad schema 4 client permissions to granular actions', async () => {
+    await mkdir(paths.getConfigRoot(), { recursive: true });
+    await writeFile(
+      join(paths.getConfigRoot(), 'app-settings.json'),
+      JSON.stringify({
+        schemaVersion: 4,
+        automation: {
+          idleShutdown: { enabled: false, emptySeconds: 300 },
+          backups: {
+            automaticEnabled: false,
+            automaticIntervalHours: 24,
+            automaticRetentionPerType: 10,
+            compressWorldBackups: false
+          }
+        },
+        remoteApi: {
+          enabled: false,
+          bindMode: 'LOCAL_ONLY',
+          port: 8213,
+          username: 'admin',
+          passwordSalt: '',
+          passwordHash: '',
+          client: {
+            enabled: false,
+            bindMode: 'LOCAL_ONLY',
+            port: 8213,
+            username: 'cliente',
+            passwordSalt: '',
+            passwordHash: '',
+            permissions: ['GENERAL', 'SERVER_CONTROL', 'PLAYERS', 'LOGS']
+          }
+        }
+      })
+    );
+
+    const settings = await service.read();
+
+    expect(settings.schemaVersion).toBe(5);
+    expect(settings.remoteApi.client.permissions).toEqual([
+      'GENERAL',
+      'SERVER_START',
+      'SERVER_RESTART',
+      'SERVER_STOP',
+      'PLAYERS_VIEW',
+      'LOGS'
+    ]);
   });
 
   it('rejects shorter passwords and keeps both profiles on the shared connection', async () => {

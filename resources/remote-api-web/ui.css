@@ -427,6 +427,44 @@ input:focus {
   white-space: nowrap;
 }
 
+.player-controls {
+  display: grid;
+  justify-items: end;
+  gap: 9px;
+}
+
+.player-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.player-action {
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.player-action:hover,
+.player-action:focus-visible {
+  border-color: var(--cyan);
+}
+
+.player-action--danger {
+  border-color: rgba(255, 107, 114, 0.42);
+  color: #ffb0b4;
+}
+
+.player-action:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
 .empty-state {
   padding: 30px;
   border: 1px dashed #34444e;
@@ -565,6 +603,14 @@ input:focus {
   .player-row {
     grid-template-columns: 1fr;
     gap: 7px;
+  }
+
+  .player-controls {
+    justify-items: start;
+  }
+
+  .player-actions {
+    justify-content: flex-start;
   }
 
   .action-buttons {

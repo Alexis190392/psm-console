@@ -7,7 +7,16 @@
   var toastTimer = null;
   var access = {
     profile: 'ADMIN',
-    permissions: ['GENERAL', 'SERVER_CONTROL', 'PLAYERS', 'LOGS']
+    permissions: [
+      'GENERAL',
+      'SERVER_START',
+      'SERVER_RESTART',
+      'SERVER_STOP',
+      'PLAYERS_VIEW',
+      'PLAYERS_KICK',
+      'PLAYERS_BAN',
+      'LOGS'
+    ]
   };
 
   var loginView = document.getElementById('login-view');
@@ -233,12 +242,64 @@
         : 'Ubicacion no disponible';
       details.append(playerId, location);
 
+      var controls = document.createElement('div');
+      controls.className = 'player-controls';
       var ping = document.createElement('span');
       ping.className = 'player-ping';
       ping.textContent = player.ping !== undefined ? Math.round(player.ping) + ' ms' : '-- ms';
-      row.append(identity, details, ping);
+      controls.appendChild(ping);
+
+      var userId = player.userId || '';
+      if (userId && (hasPermission('PLAYERS_KICK') || hasPermission('PLAYERS_BAN'))) {
+        var actions = document.createElement('div');
+        actions.className = 'player-actions';
+        if (hasPermission('PLAYERS_KICK')) {
+          actions.appendChild(createPlayerActionButton('Expulsar', 'kick', userId, player.name));
+        }
+        if (hasPermission('PLAYERS_BAN')) {
+          actions.appendChild(createPlayerActionButton('Banear', 'ban', userId, player.name, true));
+        }
+        controls.appendChild(actions);
+      }
+
+      row.append(identity, details, controls);
       container.appendChild(row);
     });
+  }
+
+  function createPlayerActionButton(label, action, userId, playerName, dangerous) {
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = dangerous ? 'player-action player-action--danger' : 'player-action';
+    button.textContent = label;
+    button.addEventListener('click', function () {
+      void executePlayerAction(action, userId, playerName || 'este jugador', button);
+    });
+    return button;
+  }
+
+  async function executePlayerAction(action, userId, playerName, button) {
+    var verb = action === 'ban' ? 'banear' : 'expulsar';
+    if (!window.confirm('Confirmas ' + verb + ' a ' + playerName + '?')) {
+      return;
+    }
+    button.disabled = true;
+    try {
+      await apiRequest('/admin/actions', {
+        method: 'POST',
+        body: JSON.stringify({
+          action: action,
+          userId: userId,
+          message: 'Accion solicitada desde PSM Console Web.'
+        })
+      });
+      showToast(action === 'ban' ? 'Jugador baneado.' : 'Jugador expulsado.');
+      await refreshPlayers();
+    } catch (error) {
+      showToast(error.message);
+    } finally {
+      button.disabled = false;
+    }
   }
 
   async function refreshLogs() {
@@ -257,10 +318,19 @@
   async function refreshAll() {
     try {
       var requests = [];
-      if (hasPermission('GENERAL') || hasPermission('SERVER_CONTROL')) {
+      if (
+        hasPermission('GENERAL')
+        || hasPermission('SERVER_START')
+        || hasPermission('SERVER_RESTART')
+        || hasPermission('SERVER_STOP')
+      ) {
         requests.push(refreshStatus());
       }
-      if (hasPermission('PLAYERS')) {
+      if (
+        hasPermission('PLAYERS_VIEW')
+        || hasPermission('PLAYERS_KICK')
+        || hasPermission('PLAYERS_BAN')
+      ) {
         requests.push(refreshPlayers());
       }
       if (hasPermission('LOGS')) {

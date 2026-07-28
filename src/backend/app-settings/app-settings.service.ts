@@ -24,12 +24,12 @@ import type {
   StoredRemoteApiSettings
 } from '../remote-api/remote-api-settings.types';
 
-const APP_SETTINGS_SCHEMA_VERSION = 4;
+const APP_SETTINGS_SCHEMA_VERSION = 5;
 const PASSWORD_KEY_LENGTH = 64;
 const scryptAsync = promisify(scrypt);
 
 interface StoredAppSettings {
-  schemaVersion: 4;
+  schemaVersion: 5;
   automation: {
     idleShutdown: ServerIdlePolicyDto;
     backups: BackupPolicyDto;
@@ -341,11 +341,32 @@ function validateRemoteApiPassword(password: string): void {
 function validateRemoteApiPermissions(
   permissions: StoredRemoteApiClientSettings['permissions']
 ): StoredRemoteApiClientSettings['permissions'] {
-  const allowed = new Set(['GENERAL', 'SERVER_CONTROL', 'PLAYERS', 'LOGS']);
-  if (!Array.isArray(permissions) || permissions.some((permission) => !allowed.has(permission))) {
+  const allowed = new Set([
+    'GENERAL',
+    'SERVER_START',
+    'SERVER_RESTART',
+    'SERVER_STOP',
+    'PLAYERS_VIEW',
+    'PLAYERS_KICK',
+    'PLAYERS_BAN',
+    'LOGS'
+  ]);
+  if (!Array.isArray(permissions)) {
     throw new Error('REMOTE_API_CLIENT_PERMISSIONS_INVALID');
   }
-  return [...new Set(permissions)];
+  const migrated = permissions.flatMap((permission) => {
+    if ((permission as string) === 'SERVER_CONTROL') {
+      return ['SERVER_START', 'SERVER_RESTART', 'SERVER_STOP'];
+    }
+    if ((permission as string) === 'PLAYERS') {
+      return ['PLAYERS_VIEW'];
+    }
+    return [permission];
+  });
+  if (migrated.some((permission) => !allowed.has(permission))) {
+    throw new Error('REMOTE_API_CLIENT_PERMISSIONS_INVALID');
+  }
+  return [...new Set(migrated)] as StoredRemoteApiClientSettings['permissions'];
 }
 
 function toPublicSettings(settings: StoredAppSettings): AppSettingsDto {

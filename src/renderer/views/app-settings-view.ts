@@ -343,21 +343,50 @@ function renderClientApiProfile(status: RemoteApiProfileStatusDto): string {
 }
 
 function renderClientPermissions(permissions: RemoteApiPermission[]): string {
-  const options: Array<{ value: RemoteApiPermission; label: string; detail: string }> = [
-    { value: 'GENERAL', label: 'Estado general', detail: 'Estado de la aplicacion y del servidor.' },
-    { value: 'SERVER_CONTROL', label: 'Control del servidor', detail: 'Iniciar, reiniciar y detener.' },
-    { value: 'PLAYERS', label: 'Jugadores', detail: 'Listado de jugadores conectados.' },
-    { value: 'LOGS', label: 'Logs', detail: 'Actividad de la instancia.' }
+  const groups: Array<{
+    label: string;
+    options: Array<{ value: RemoteApiPermission; label: string; detail: string }>;
+  }> = [
+    {
+      label: 'Informacion',
+      options: [
+        { value: 'GENERAL', label: 'Estado general', detail: 'Estado de la aplicacion y del servidor.' },
+        { value: 'LOGS', label: 'Logs', detail: 'Actividad de la instancia.' }
+      ]
+    },
+    {
+      label: 'Control del servidor',
+      options: [
+        { value: 'SERVER_START', label: 'Iniciar', detail: 'Encender el servidor.' },
+        { value: 'SERVER_RESTART', label: 'Reiniciar', detail: 'Reiniciar el proceso.' },
+        { value: 'SERVER_STOP', label: 'Detener', detail: 'Apagar el servidor.' }
+      ]
+    },
+    {
+      label: 'Jugadores',
+      options: [
+        { value: 'PLAYERS_VIEW', label: 'Ver jugadores', detail: 'Consultar jugadores conectados.' },
+        { value: 'PLAYERS_KICK', label: 'Expulsar', detail: 'Desconectar jugadores.' },
+        { value: 'PLAYERS_BAN', label: 'Banear', detail: 'Bloquear jugadores.' }
+      ]
+    }
   ];
   return `
     <fieldset class="settings-api-permissions">
       <legend>Contenido visible para el cliente</legend>
-      <div class="settings-api-permissions__grid">
-        ${options.map((option) => `
-          <label class="settings-permission-option">
-            <input name="permissions" type="checkbox" value="${option.value}" ${permissions.includes(option.value) ? 'checked' : ''} />
-            <span><strong>${option.label}</strong><small>${option.detail}</small></span>
-          </label>
+      <div class="settings-api-permission-groups">
+        ${groups.map((group) => `
+          <section class="settings-api-permission-group">
+            <h5>${group.label}</h5>
+            <div class="settings-api-permissions__grid">
+              ${group.options.map((option) => `
+                <label class="settings-permission-option">
+                  <input name="permissions" type="checkbox" value="${option.value}" ${permissions.includes(option.value) ? 'checked' : ''} />
+                  <span><strong>${option.label}</strong><small>${option.detail}</small></span>
+                </label>
+              `).join('')}
+            </div>
+          </section>
         `).join('')}
       </div>
     </fieldset>

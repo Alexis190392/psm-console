@@ -26,6 +26,13 @@ export const DEFAULT_REMOTE_API_SETTINGS: RemoteApiSettingsDto = {
     port: 8213,
     username: 'cliente',
     passwordConfigured: false,
-    permissions: ['GENERAL', 'SERVER_CONTROL', 'PLAYERS', 'LOGS']
+    permissions: [
+      'GENERAL',
+      'SERVER_START',
+      'SERVER_RESTART',
+      'SERVER_STOP',
+      'PLAYERS_VIEW',
+      'LOGS'
+    ]
   }
 };

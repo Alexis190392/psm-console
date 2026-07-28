@@ -295,7 +295,12 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
     const path = requestUrl.pathname;
 
     if (method === 'GET' && path === `${API_PREFIX}/status`) {
-      this.requireAnyPermission(session, ['GENERAL', 'SERVER_CONTROL']);
+      this.requireAnyPermission(session, [
+        'GENERAL',
+        'SERVER_START',
+        'SERVER_RESTART',
+        'SERVER_STOP'
+      ]);
       sendJson(response, 200, {
         application: this.applicationStateService.getStatus(),
         actions: this.applicationStateService.getAllowedActions(),
@@ -304,30 +309,39 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
       return;
     }
     if (method === 'GET' && path === `${API_PREFIX}/server`) {
-      this.requirePermission(session, 'GENERAL');
+      this.requireAnyPermission(session, [
+        'GENERAL',
+        'SERVER_START',
+        'SERVER_RESTART',
+        'SERVER_STOP'
+      ]);
       sendJson(response, 200, this.palworldProcessService.getRuntimeStatus());
       return;
     }
     if (method === 'POST' && path === `${API_PREFIX}/server/start`) {
-      this.requirePermission(session, 'SERVER_CONTROL');
+      this.requirePermission(session, 'SERVER_START');
       sendJson(response, 202, this.palworldProcessService.start({ confirmed: true }));
       this.logMutation('Inicio de servidor solicitado desde API web.');
       return;
     }
     if (method === 'POST' && path === `${API_PREFIX}/server/stop`) {
-      this.requirePermission(session, 'SERVER_CONTROL');
+      this.requirePermission(session, 'SERVER_STOP');
       sendJson(response, 202, this.palworldProcessService.stop({ confirmed: true }));
       this.logMutation('Detencion de servidor solicitada desde API web.');
       return;
     }
     if (method === 'POST' && path === `${API_PREFIX}/server/restart`) {
-      this.requirePermission(session, 'SERVER_CONTROL');
+      this.requirePermission(session, 'SERVER_RESTART');
       sendJson(response, 202, this.palworldProcessService.restart({ confirmed: true }));
       this.logMutation('Reinicio de servidor solicitado desde API web.');
       return;
     }
     if (method === 'GET' && path === `${API_PREFIX}/players`) {
-      this.requirePermission(session, 'PLAYERS');
+      this.requireAnyPermission(session, [
+        'PLAYERS_VIEW',
+        'PLAYERS_KICK',
+        'PLAYERS_BAN'
+      ]);
       sendJson(response, 200, await this.palworldPlayersService.getStatus());
       return;
     }
@@ -337,11 +351,25 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
       return;
     }
     if (method === 'POST' && path === `${API_PREFIX}/admin/actions`) {
-      this.requireAdmin(session);
       const body = await readJsonBody(request);
+      const action = requireString(body, 'action') as
+        | 'announce'
+        | 'save'
+        | 'kick'
+        | 'ban'
+        | 'unban'
+        | 'shutdown'
+        | 'stop';
+      if (action === 'kick') {
+        this.requirePermission(session, 'PLAYERS_KICK');
+      } else if (action === 'ban') {
+        this.requirePermission(session, 'PLAYERS_BAN');
+      } else {
+        this.requireAdmin(session);
+      }
       sendJson(response, 200, await this.palworldAdminService.execute({
         confirmed: true,
-        action: requireString(body, 'action') as 'announce' | 'save' | 'kick' | 'ban' | 'unban' | 'shutdown' | 'stop',
+        action,
         ...(optionalString(body, 'message') ? { message: optionalString(body, 'message') } : {}),
         ...(optionalString(body, 'userId') ? { userId: optionalString(body, 'userId') } : {}),
         ...(typeof body['seconds'] === 'number' ? { seconds: body['seconds'] } : {})
@@ -405,7 +433,7 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
       return;
     }
     if (method === 'GET' && path.startsWith(`${API_PREFIX}/operations/`)) {
-      this.requirePermission(session, 'SERVER_CONTROL');
+      this.requireAnyPermission(session, ['SERVER_START', 'SERVER_RESTART', 'SERVER_STOP']);
       const operationId = decodeURIComponent(path.slice(`${API_PREFIX}/operations/`.length));
       sendJson(response, 200, this.operationManagerService.get(operationId));
       return;
@@ -567,7 +595,16 @@ function getEnabledProfiles(settings: StoredRemoteApiSettings): RemoteApiProfile
 }
 
 function allRemoteApiPermissions(): RemoteApiPermission[] {
-  return ['GENERAL', 'SERVER_CONTROL', 'PLAYERS', 'LOGS'];
+  return [
+    'GENERAL',
+    'SERVER_START',
+    'SERVER_RESTART',
+    'SERVER_STOP',
+    'PLAYERS_VIEW',
+    'PLAYERS_KICK',
+    'PLAYERS_BAN',
+    'LOGS'
+  ];
 }
 
 function createEndpoint(
