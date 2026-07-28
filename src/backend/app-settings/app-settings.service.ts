@@ -48,6 +48,8 @@ interface LegacyAppSettings {
 
 @Injectable()
 export class AppSettingsService {
+  private accessQueue: Promise<void> = Promise.resolve();
+
   constructor(private readonly portablePathService: PortablePathService) {}
 
   async getStatus(): Promise<AppSettingsStatusDto> {
@@ -61,18 +63,20 @@ export class AppSettingsService {
   }
 
   async read(): Promise<AppSettingsDto> {
-    return toPublicSettings(await this.readStored());
+    return this.withExclusiveAccess(async () => toPublicSettings(await this.readStored()));
   }
 
   async getRemoteApiSettings(): Promise<StoredRemoteApiSettings> {
-    const settings = (await this.readStored()).remoteApi;
-    return {
-      ...settings,
-      client: {
-        ...settings.client,
-        permissions: [...settings.client.permissions]
-      }
-    };
+    return this.withExclusiveAccess(async () => {
+      const settings = (await this.readStored()).remoteApi;
+      return {
+        ...settings,
+        client: {
+          ...settings.client,
+          permissions: [...settings.client.permissions]
+        }
+      };
+    });
   }
 
   async verifyRemoteApiCredentials(
@@ -102,66 +106,87 @@ export class AppSettingsService {
       throw new Error('REMOTE_API_UPDATE_REQUIRES_CONFIRMATION');
     }
 
-    const settings = await this.readStored();
-    const profile = request.profile ?? 'ADMIN';
-    const current = profile === 'CLIENT' ? settings.remoteApi.client : settings.remoteApi;
-    const username = validateRemoteApiUsername(request.username);
-    const password = request.password?.trim() ?? '';
-    let passwordSalt = current.passwordSalt;
-    let passwordHash = current.passwordHash;
+    return this.withExclusiveAccess(async () => {
+      const settings = await this.readStored();
+      const profile = request.profile ?? 'ADMIN';
+      const current = profile === 'CLIENT' ? settings.remoteApi.client : settings.remoteApi;
+      const username = validateRemoteApiUsername(request.username);
+      const password = request.password?.trim() ?? '';
+      let passwordSalt = current.passwordSalt;
+      let passwordHash = current.passwordHash;
 
-    if (password) {
-      validateRemoteApiPassword(password);
-      passwordSalt = randomBytes(24).toString('hex');
-      passwordHash = await hashPassword(password, passwordSalt);
-    }
-
-    if (request.enabled && (!passwordSalt || !passwordHash)) {
-      throw new Error('REMOTE_API_PASSWORD_REQUIRED');
-    }
-
-    if (profile === 'CLIENT') {
-      settings.remoteApi.client = validateStoredRemoteApiClient({
-        enabled: request.enabled,
-        bindMode: settings.remoteApi.bindMode,
-        port: settings.remoteApi.port,
-        username,
-        passwordSalt,
-        passwordHash,
-        permissions: request.permissions ?? settings.remoteApi.client.permissions
-      });
-      if (settings.remoteApi.client.enabled && settings.remoteApi.client.permissions.length === 0) {
-        throw new Error('REMOTE_API_CLIENT_PERMISSION_REQUIRED');
+      if (password) {
+        validateRemoteApiPassword(password);
+        passwordSalt = randomBytes(24).toString('hex');
+        passwordHash = await hashPassword(password, passwordSalt);
       }
-    } else {
-      settings.remoteApi = validateStoredRemoteApi({
-        ...settings.remoteApi,
-        enabled: request.enabled,
-        bindMode: request.bindMode,
-        port: request.port,
-        username,
-        passwordSalt,
-        passwordHash
-      });
-      settings.remoteApi.client.bindMode = settings.remoteApi.bindMode;
-      settings.remoteApi.client.port = settings.remoteApi.port;
-    }
-    await this.write(settings);
-    return toPublicRemoteApiSettings(settings.remoteApi);
+
+      if (request.enabled && (!passwordSalt || !passwordHash)) {
+        throw new Error('REMOTE_API_PASSWORD_REQUIRED');
+      }
+
+      if (profile === 'CLIENT') {
+        settings.remoteApi.client = validateStoredRemoteApiClient({
+          enabled: request.enabled,
+          bindMode: settings.remoteApi.bindMode,
+          port: settings.remoteApi.port,
+          username,
+          passwordSalt,
+          passwordHash,
+          permissions: request.permissions ?? settings.remoteApi.client.permissions
+        });
+        if (settings.remoteApi.client.enabled && settings.remoteApi.client.permissions.length === 0) {
+          throw new Error('REMOTE_API_CLIENT_PERMISSION_REQUIRED');
+        }
+      } else {
+        settings.remoteApi = validateStoredRemoteApi({
+          ...settings.remoteApi,
+          enabled: request.enabled,
+          bindMode: request.bindMode,
+          port: request.port,
+          username,
+          passwordSalt,
+          passwordHash
+        });
+        settings.remoteApi.client.bindMode = settings.remoteApi.bindMode;
+        settings.remoteApi.client.port = settings.remoteApi.port;
+      }
+      await this.write(settings);
+      return toPublicRemoteApiSettings(settings.remoteApi);
+    });
   }
 
   async updateBackupPolicy(policy: BackupPolicyDto): Promise<BackupPolicyDto> {
-    const settings = await this.readStored();
-    settings.automation.backups = validateBackupPolicy(policy);
-    await this.write(settings);
-    return settings.automation.backups;
+    return this.withExclusiveAccess(async () => {
+      const settings = await this.readStored();
+      settings.automation.backups = validateBackupPolicy(policy);
+      await this.write(settings);
+      return settings.automation.backups;
+    });
   }
 
   async updateIdlePolicy(policy: ServerIdlePolicyDto): Promise<ServerIdlePolicyDto> {
-    const settings = await this.readStored();
-    settings.automation.idleShutdown = validateIdlePolicy(policy);
-    await this.write(settings);
-    return settings.automation.idleShutdown;
+    return this.withExclusiveAccess(async () => {
+      const settings = await this.readStored();
+      settings.automation.idleShutdown = validateIdlePolicy(policy);
+      await this.write(settings);
+      return settings.automation.idleShutdown;
+    });
+  }
+
+  private async withExclusiveAccess<T>(operation: () => Promise<T>): Promise<T> {
+    const previous = this.accessQueue;
+    let release!: () => void;
+    this.accessQueue = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    await previous;
+    try {
+      return await operation();
+    } finally {
+      release();
+    }
   }
 
   private async readStored(): Promise<StoredAppSettings> {

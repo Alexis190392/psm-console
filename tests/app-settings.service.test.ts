@@ -30,6 +30,22 @@ describe('AppSettingsService', () => {
     expect(stored.schemaVersion).toBe(5);
   });
 
+  it('serializes concurrent reads while creating the initial settings file', async () => {
+    const [settings, remoteApi, status] = await Promise.all([
+      service.read(),
+      service.getRemoteApiSettings(),
+      service.getStatus()
+    ]);
+    const stored = JSON.parse(
+      await readFile(join(paths.getConfigRoot(), 'app-settings.json'), 'utf8')
+    ) as { schemaVersion: number };
+
+    expect(settings.schemaVersion).toBe(5);
+    expect(remoteApi.enabled).toBe(false);
+    expect(status.settings.schemaVersion).toBe(5);
+    expect(stored.schemaVersion).toBe(5);
+  });
+
   it('migrates existing backup and idle policies without changing their values', async () => {
     await mkdir(paths.getConfigRoot(), { recursive: true });
     await writeFile(
