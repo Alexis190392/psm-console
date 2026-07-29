@@ -370,6 +370,14 @@ Los cambios comunes se guardan automáticamente. Para cambiar un usuario o una c
 
 La contraseña se almacena como un hash con salt y nunca vuelve a mostrarse. Tanto la contraseña administrativa como la del cliente deben tener entre cinco y 128 caracteres.
 
+### Acceso desde el navegador
+
+Al abrir la dirección configurada se muestra el acceso web con la identidad visual de PSM Console:
+
+![Acceso a PSM Console Web](../../resources/screenshots/api-web-login.png)
+
+Las capturas utilizan credenciales y datos simulados. El usuario y la contraseña reales son los configurados en la aplicación.
+
 ### Permisos del cliente
 
 Al habilitar la API cliente, selecciona las acciones disponibles:
@@ -382,6 +390,17 @@ Al habilitar la API cliente, selecciona las acciones disponibles:
 - Banear jugadores.
 
 Los permisos se aplican en tiempo real. Si una función se deshabilita mientras el cliente conserva esa pantalla abierta, la siguiente operación devuelve **No permitido** y actualiza la vista.
+
+El perfil administrativo conserva todas las secciones y controles:
+
+![Panel administrativo de PSM Console Web](../../resources/screenshots/api-web-administrativa.png)
+
+El perfil cliente muestra únicamente las secciones y acciones habilitadas. La interfaz también se adapta a navegadores móviles:
+
+<p align="center">
+  <img src="../../resources/screenshots/api-web-cliente.png" alt="Panel web con acceso cliente" width="68%" />
+  <img src="../../resources/screenshots/api-web-cliente-movil.png" alt="Panel cliente adaptado a móvil" width="28%" />
+</p>
 
 ### Firewall y direcciones
 

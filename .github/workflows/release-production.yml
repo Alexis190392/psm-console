@@ -9,6 +9,7 @@ on:
       - "**/*.md"
       - "docs/**"
       - "resources/screenshots/**"
+      - ".github/workflows/**"
 
 permissions:
   contents: write

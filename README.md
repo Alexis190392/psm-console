@@ -44,6 +44,10 @@ El manual explica la preparación inicial, configuración, administración, back
   <img src="resources/screenshots/red-firewall.png" alt="Red y Firewall" width="49%" />
 </p>
 
+### Acceso web
+
+![Panel administrativo de PSM Console Web](resources/screenshots/api-web-administrativa.png)
+
 ## Requisitos
 
 ### Para usar el portable
