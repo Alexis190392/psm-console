@@ -41,11 +41,12 @@ No ejecutes el portable desde una carpeta temporal, dentro de un archivo comprim
 
 Al abrir PSM Console por primera vez:
 
-1. La aplicación revisa la carpeta portable y las dependencias disponibles.
-2. Si SteamCMD no está instalado, muestra una confirmación antes de descargarlo desde el sitio oficial.
-3. Cuando SteamCMD esté listo, solicita confirmación para instalar Palworld Dedicated Server.
-4. Si falta `PalWorldSettings.ini`, crea una configuración inicial válida.
-5. La pantalla General queda disponible cuando termina la preparación.
+1. El logo aparece mientras se prepara la ventana principal.
+2. La aplicación revisa la carpeta portable y las dependencias disponibles.
+3. Si SteamCMD no está instalado, muestra una confirmación antes de descargarlo desde el sitio oficial.
+4. Cuando SteamCMD esté listo, solicita confirmación para instalar Palworld Dedicated Server.
+5. Si falta `PalWorldSettings.ini`, crea una configuración inicial válida.
+6. La pantalla General queda disponible cuando termina la preparación.
 
 Las descargas, instalaciones y modificaciones importantes siempre requieren confirmación visible.
 
@@ -78,11 +79,13 @@ General presenta el estado operativo sin obligarte a recorrer todas las seccione
 - **Configuración:** informa si el INI está disponible.
 - **Puerto:** muestra el puerto UDP configurado para los jugadores.
 - **Backups:** resume las copias disponibles.
+- **API web:** abre su configuración cuando todavía no tiene credenciales y muestra su dirección y disponibilidad una vez configurada.
 
 ### Copiar direcciones
 
 - Haz clic sobre **Juego local** para copiar `IP:puerto` cuando el estado sea correcto.
 - Haz clic sobre **Juego público** para copiar la dirección pública cuando esté disponible.
+- Haz clic sobre **API web** para copiar su dirección cuando el acceso esté confirmado.
 - Si aparece una advertencia, usa su icono para abrir Red y Firewall y revisar el diagnóstico.
 
 La disponibilidad pública no bloquea el inicio del servidor. Es posible jugar por LAN aunque el acceso desde Internet todavía necesite configuración.
@@ -348,17 +351,43 @@ Los cambios no se aplican hasta confirmar **Guardar**.
 
 ### API web
 
-Esta opción habilita el panel web administrativo y su API protegida.
+Esta opción habilita una única conexión web compartida por dos perfiles:
+
+- **API administrativa:** acceso completo a las funciones web.
+- **API cliente:** acceso limitado a las funciones que habilites desde PSM Console.
 
 ![Configuración de la API web](../../resources/screenshots/configuracion-api-web.png)
 
 1. Abre **Configuración > API web**.
 2. Elige **Solo este equipo** para pruebas locales o **Red local** para acceder desde otro equipo de la misma LAN.
 3. Define un puerto entre `1024` y `65535`.
-4. Configura el usuario y una contraseña de al menos ocho caracteres.
-5. Presiona **Guardar API** y confirma.
+4. Configura el usuario administrativo y una contraseña de al menos cinco caracteres.
+5. Activa la API administrativa.
 
-La contraseña se almacena como un hash con salt y nunca vuelve a mostrarse. Si ya existe una contraseña, deja el campo vacío para conservarla.
+La API administrativa y la API cliente utilizan el mismo puerto. Cada perfil conserva su propio usuario y contraseña.
+
+Los cambios comunes se guardan automáticamente. Para cambiar un usuario o una contraseña, completa el campo y presiona `Enter`. Si el campo de contraseña queda vacío, se conserva la contraseña actual sin reiniciar el servicio.
+
+La contraseña se almacena como un hash con salt y nunca vuelve a mostrarse. Tanto la contraseña administrativa como la del cliente deben tener entre cinco y 128 caracteres.
+
+### Permisos del cliente
+
+Al habilitar la API cliente, selecciona las acciones disponibles:
+
+- Consultar el estado general.
+- Consultar los logs.
+- Iniciar, reiniciar o detener el servidor de forma independiente.
+- Ver jugadores conectados.
+- Expulsar jugadores.
+- Banear jugadores.
+
+Los permisos se aplican en tiempo real. Si una función se deshabilita mientras el cliente conserva esa pantalla abierta, la siguiente operación devuelve **No permitido** y actualiza la vista.
+
+### Firewall y direcciones
+
+En **Solo este equipo**, la API escucha únicamente en `127.0.0.1` y no necesita una regla de entrada.
+
+En **Red local**, PSM Console comprueba el Firewall de Windows. Si falta la regla TCP del puerto compartido, solicita confirmación y muestra el cuadro de Control de cuentas de usuario para crearla.
 
 Cuando queda habilitada, PSM Console inicia la API automáticamente al abrir la aplicación. El estado muestra la URL base, por ejemplo:
 
@@ -366,18 +395,21 @@ Cuando queda habilitada, PSM Console inicia la API automáticamente al abrir la 
 http://192.0.2.100:8213/api/v1
 ```
 
-Abre la URL base en el navegador. PSM Console muestra una pantalla de acceso con el mismo usuario y contraseña definidos en la aplicación. Una vez autenticado puedes:
+La comprobación de direcciones se realiza progresivamente:
 
-- Consultar el estado de la aplicación y del servidor.
-- Iniciar, detener o reiniciar el servidor.
-- Revisar los jugadores conectados.
-- Consultar los logs de la instancia actual.
+1. **Este equipo:** confirma que la API responde localmente.
+2. **Red local:** confirma la dirección LAN cuando ese alcance está habilitado.
+3. **Internet:** detecta la dirección pública e intenta comprobar el puerto TCP.
 
-La sesión permanece solamente en la pestaña actual del navegador. Al cerrar sesión o cerrar la pestaña, el token temporal deja de estar disponible localmente.
+Haz clic sobre una dirección disponible para copiarla. El acceso por Internet requiere además reenviar el puerto TCP en el router; PSM Console no modifica el router.
+
+Abre la URL base en el navegador. PSM Console muestra una pantalla de acceso adaptada a escritorio y móvil. Las credenciales determinan automáticamente si la sesión corresponde al perfil administrativo o al cliente.
+
+La sesión no tiene un vencimiento por tiempo. Permanece disponible mientras PSM Console siga abierta y el token continúe guardado en la pestaña actual. Cerrar sesión, cerrar la pestaña o reiniciar la aplicación invalida su continuidad.
 
 El endpoint `/api/v1/health` permite comprobar que el servicio responde sin autenticación. El resto de los endpoints administrativos requiere una sesión válida.
 
-> La API utiliza HTTP en esta primera etapa. Usa **Red local** solamente en una red confiable y no reenvíes su puerto directamente desde el router hacia Internet.
+> La API utiliza HTTP, no HTTPS. El navegador puede identificar la conexión como no segura. Usa **Red local** solamente en una red confiable y evita exponer el puerto directamente a Internet sin una capa segura adicional.
 
 ## 11. Actualizaciones
 
@@ -415,6 +447,15 @@ La aplicación no puede modificar el router ni eliminar restricciones del provee
 - Acepta el cuadro de Control de cuentas de usuario.
 - Espera a que termine el diagnóstico.
 - Revisa que la regla corresponda al protocolo y puerto configurados.
+
+### Windows protege el equipo al abrir el portable
+
+Las versiones actuales pueden mostrar una advertencia de SmartScreen porque el ejecutable todavía no posee una firma Authenticode pública.
+
+- Descarga el portable únicamente desde los Releases oficiales del repositorio.
+- Comprueba que el nombre y la versión correspondan con la publicación.
+- No desactives SmartScreen de forma permanente.
+- La firma digital se incorporará cuando el proyecto disponga de una alternativa pública confiable.
 
 ### La administración no aparece
 

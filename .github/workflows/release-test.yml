@@ -5,6 +5,10 @@ on:
   push:
     branches:
       - test
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "resources/screenshots/**"
 
 permissions:
   contents: write
