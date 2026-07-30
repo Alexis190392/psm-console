@@ -1,4 +1,5 @@
 import { escapeHtml } from '../utils/text';
+import { renderIcon } from './icon';
 
 export type SummaryCardTone = 'ok' | 'error' | 'warning' | 'optional' | 'loading' | 'configuration';
 
@@ -47,7 +48,7 @@ export function renderSummaryCard(details: SummaryCardDetails): string {
         <small title="${escapeHtml(details.detail)}">${escapeHtml(details.detail)}</small>
       </span>
       <span class="${iconClass}" aria-label="${escapeHtml(iconTitle)}" title="${escapeHtml(iconTitle)}" data-summary-icon="${canOpenTargetFromIcon ? 'target' : 'state'}">
-        <span class="ui-icon ui-icon--${escapeHtml(details.icon)}" aria-hidden="true"></span>
+        ${renderIcon(details.icon)}
       </span>
     </button>
   `;

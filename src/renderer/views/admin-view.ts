@@ -257,7 +257,7 @@ function renderAdminPlayerRow(player: PalworldPlayersStatusDto['players'][number
         <input name="userId" type="hidden" value="${escapeHtml(actionId)}" />
         <input name="message" type="hidden" value="Accion aplicada desde PSM Console." />
         <button class="admin-icon-button secondary-button icon-button" type="submit" data-player-action="kick" ${actionId && allowKick ? '' : 'disabled'} aria-label="Expulsar jugador" title="${allowKick ? 'Expulsar jugador' : 'Solo disponible para jugadores conectados'}">
-          ${renderIcon('send')}
+          ${renderIcon('log-out')}
         </button>
         <button class="ban-toggle ${isBanned ? 'ban-toggle--active' : ''}" type="submit" data-player-action="${banAction}" ${actionId ? '' : 'disabled'} aria-pressed="${isBanned ? 'true' : 'false'}" aria-label="${isBanned ? 'Desbanear jugador' : 'Banear jugador'}" title="${isBanned ? 'Desbanear jugador' : 'Banear jugador'}">
           <span class="ban-toggle__track" aria-hidden="true"><span class="ban-toggle__thumb"></span></span>

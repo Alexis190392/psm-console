@@ -7,6 +7,7 @@ export default tseslint.config(
       'release/**',
       'node_modules/**',
       'design/**',
+      'local-references/**',
       'ejecucionPruebas/**',
       '.tmp-tests/**',
       'resources/remote-api-web/ui.js',

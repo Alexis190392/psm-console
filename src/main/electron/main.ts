@@ -8,6 +8,8 @@ import { registerIpcHandlers } from '../ipc/register-ipc-handlers';
 import { createMainWindowOptions, createSplashWindowOptions } from './window-options';
 
 const RENDERER_PROTOCOL = 'palcm';
+const MINIMUM_SPLASH_DURATION_MS = 3000;
+const WINDOW_TRANSITION_DURATION_MS = 320;
 const RENDERER_CSP = [
   "default-src 'self'",
   "script-src 'self'",
@@ -99,15 +101,61 @@ function registerRendererProtocol(): void {
   });
 }
 
-async function createSplashWindow(): Promise<BrowserWindow> {
+interface SplashSession {
+  window: BrowserWindow;
+  shownAt: number;
+}
+
+function wait(milliseconds: number): Promise<void> {
+  return new Promise((resolveWait) => {
+    setTimeout(resolveWait, milliseconds);
+  });
+}
+
+async function createSplashWindow(): Promise<SplashSession> {
   const window = new BrowserWindow(createSplashWindowOptions());
   window.setIgnoreMouseEvents(true);
   await window.loadURL(`${RENDERER_PROTOCOL}://app/splash.html`);
   window.show();
-  return window;
+  return {
+    window,
+    shownAt: Date.now()
+  };
 }
 
-async function createMainWindow(splashWindow?: BrowserWindow): Promise<BrowserWindow> {
+async function transitionToMainWindow(window: BrowserWindow, splashSession?: SplashSession): Promise<void> {
+  if (!splashSession || splashSession.window.isDestroyed()) {
+    window.show();
+    return;
+  }
+
+  const remainingSplashTime = Math.max(
+    0,
+    MINIMUM_SPLASH_DURATION_MS - (Date.now() - splashSession.shownAt)
+  );
+  if (remainingSplashTime > 0) {
+    await wait(remainingSplashTime);
+  }
+
+  await window.webContents.executeJavaScript(
+    "document.documentElement.classList.add('window-entering')"
+  );
+  window.show();
+
+  if (!splashSession.window.isDestroyed()) {
+    await splashSession.window.webContents.executeJavaScript(
+      "document.body.classList.add('splash-exit')"
+    );
+  }
+  await wait(WINDOW_TRANSITION_DURATION_MS);
+
+  if (!splashSession.window.isDestroyed()) {
+    splashSession.window.destroy();
+  }
+  window.focus();
+}
+
+async function createMainWindow(splashSession?: SplashSession): Promise<BrowserWindow> {
   const { workAreaSize } = screen.getPrimaryDisplay();
   const window = new BrowserWindow(
     {
@@ -125,10 +173,7 @@ async function createMainWindow(splashWindow?: BrowserWindow): Promise<BrowserWi
   await window.loadURL(`${RENDERER_PROTOCOL}://app/index.html`);
   await readyToShow;
 
-  if (splashWindow && !splashWindow.isDestroyed()) {
-    splashWindow.destroy();
-  }
-  window.show();
+  await transitionToMainWindow(window, splashSession);
 
   return window;
 }
@@ -142,7 +187,7 @@ async function bootstrap(): Promise<void> {
 
   await app.whenReady();
   registerRendererProtocol();
-  const splashWindow = await createSplashWindow();
+  const splashSession = await createSplashWindow();
 
   const nestContext = await createNestContext();
   registerIpcHandlers(ipcMain, nestContext);
@@ -150,7 +195,7 @@ async function bootstrap(): Promise<void> {
     void nestContext.close();
   });
 
-  await createMainWindow(splashWindow);
+  await createMainWindow(splashSession);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

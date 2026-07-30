@@ -70,6 +70,7 @@ import { SettingsViewState, type SettingsTab } from './state/settings-view-state
 import { resolveServerActionState } from './state/server-action-state';
 
 const palcmLogoUrl = new URL('./assets/palcm-logo.png', import.meta.url).href;
+const palcmSymbolUrl = new URL('./assets/palcm-symbol.png', import.meta.url).href;
 
 const appRoot = document.querySelector<HTMLDivElement>('#app');
 
@@ -83,7 +84,7 @@ rootElement.innerHTML = `
   <a class="skip-link" href="#content-view">Saltar al contenido</a>
   <header class="titlebar">
     <div class="titlebar__brand">
-      <img class="titlebar__logo" src="${palcmLogoUrl}" alt="" />
+      <img class="titlebar__logo" src="${palcmSymbolUrl}" alt="" />
       <span>${escapeHtml(APP_INFO.displayName)}</span>
     </div>
     <div class="titlebar__spacer"></div>
@@ -117,12 +118,15 @@ rootElement.innerHTML = `
         </a>
         <div class="sidebar__subnav" aria-label="Secciones de administracion">
           <a class="sidebar__sublink sidebar__link--locked" data-nav="admin" data-admin-sidebar-tab="general" href="#">
+            ${renderIcon('admin-server', 'sidebar__sublink-icon')}
             <span>Servidor</span>
           </a>
           <a class="sidebar__sublink sidebar__link--locked" data-nav="admin" data-admin-sidebar-tab="players" href="#">
+            ${renderIcon('users', 'sidebar__sublink-icon')}
             <span>Jugadores</span>
           </a>
           <a class="sidebar__sublink sidebar__link--locked" data-nav="admin" data-admin-sidebar-tab="map" href="#">
+            ${renderIcon('map', 'sidebar__sublink-icon')}
             <span>Mapa</span>
           </a>
         </div>
@@ -147,15 +151,19 @@ rootElement.innerHTML = `
         </a>
         <div class="sidebar__subnav" aria-label="Configuracion de la aplicacion">
           <a class="sidebar__sublink" data-nav="settings" data-settings-sidebar-tab="summary" href="#">
+            ${renderIcon('dashboard', 'sidebar__sublink-icon')}
             <span>Resumen</span>
           </a>
           <a class="sidebar__sublink" data-nav="settings" data-settings-sidebar-tab="application" href="#">
+            ${renderIcon('application', 'sidebar__sublink-icon')}
             <span>Aplicacion</span>
           </a>
           <a class="sidebar__sublink" data-nav="settings" data-settings-sidebar-tab="automation" href="#">
+            ${renderIcon('automation', 'sidebar__sublink-icon')}
             <span>Automatizaciones</span>
           </a>
           <a class="sidebar__sublink" data-nav="settings" data-settings-sidebar-tab="remote-api" href="#">
+            ${renderIcon('api', 'sidebar__sublink-icon')}
             <span>API web</span>
           </a>
         </div>
@@ -1095,6 +1103,7 @@ function updateStartServerButton(actions: AllowedActionsDto): void {
   const state = resolveServerActionState(latestStatus, actions);
   startServerAction.disabled = state.disabled;
   startServerAction.textContent = state.buttonLabel;
+  startServerAction.dataset.action = state.action;
   updateSidebarRuntimeStatus(state.runtimeTone, state.runtimeLabel);
 }
 
@@ -1198,21 +1207,29 @@ function isCurrentViewRender(renderId: number, view: NavigationState['current'])
   return activeViewRenderId === renderId && navigationState.is(view);
 }
 
-function renderViewLoading(title: string, detail: string): void {
-  setContent(`
-    <div class="view-stack">
-      <div class="view-header view-header--contained">
-        <h3>${escapeHtml(title)}</h3>
-      </div>
-      <section class="content-card players-loading view-loading" aria-busy="true" aria-live="polite">
-        <span class="inline-loader" aria-hidden="true"></span>
-        <div>
-          <strong>Cargando</strong>
-          <p>${escapeHtml(detail)}</p>
+function renderViewLoading(message: string): void {
+  if (!contentView) {
+    return;
+  }
+
+  contentView.querySelector('.view-loading-overlay')?.remove();
+  Array.from(contentView.children).forEach((child) => {
+    if (child instanceof HTMLElement) {
+      child.inert = true;
+    }
+  });
+  contentView.setAttribute('aria-busy', 'true');
+  contentView.insertAdjacentHTML(
+    'beforeend',
+    `
+      <section class="view-loading-overlay" role="status" aria-live="polite">
+        <div class="view-loading-overlay__loader">
+          <img src="${palcmLogoUrl}" alt="" />
+          <span>${escapeHtml(message)}</span>
         </div>
       </section>
-    </div>
-  `);
+    `
+  );
 }
 
 async function renderGeneralView(renderId: number): Promise<void> {
@@ -1225,7 +1242,7 @@ async function renderGeneralView(renderId: number): Promise<void> {
     return;
   }
 
-  renderViewLoading('General', 'Actualizando servidor, conexiones, jugadores y backups.');
+  renderViewLoading('ACTUALIZANDO ENTORNO');
   const [port, backupSummary, serverRuntime, playersSummary, remoteApiStatus] = await Promise.all([
     readConfiguredPort(),
     readBackupSummaryForGeneral(),
@@ -2007,7 +2024,7 @@ async function renderServerConfigurationView(renderId = ++activeViewRenderId): P
   }
 
   updateReadyChrome();
-  renderViewLoading('Configuracion', 'Leyendo el INI activo y preparando los parametros.');
+  renderViewLoading('LEYENDO CONFIGURACION');
 
   try {
     const file = await palcmApi.config.read();
@@ -2165,7 +2182,7 @@ async function renderBackupsView(renderId = ++activeViewRenderId): Promise<void>
   }
 
   updateReadyChrome();
-  renderViewLoading('Backups', 'Leyendo copias, integridad y politica de respaldo.');
+  renderViewLoading('LEYENDO BACKUPS');
 
   try {
     latestBackupSummary = await palcmApi.backup.getSummary();
@@ -2197,7 +2214,7 @@ async function renderAppSettings(renderId = ++activeViewRenderId): Promise<void>
     return;
   }
 
-  renderViewLoading('Configuracion', 'Leyendo preferencias y automatizaciones de PSM Console.');
+  renderViewLoading('LEYENDO PREFERENCIAS');
   try {
     await loadReleaseUpdateStatus();
     const [settingsStatus, backupSummary, idleStatus, remoteApiStatus] = await Promise.all([
@@ -2682,18 +2699,7 @@ async function renderAdminView(renderId = ++activeViewRenderId): Promise<void> {
 }
 
 function renderAdminLoading(): void {
-  setContent(`
-    <div class="view-stack admin-view">
-      <section class="content-card players-loading">
-        <span class="inline-loader" aria-hidden="true"></span>
-        <div>
-          <p class="eyebrow">ADMINISTRACION</p>
-          <h3>Panel del servidor</h3>
-          <p>Verificando REST API local y jugadores activos.</p>
-        </div>
-      </section>
-    </div>
-  `);
+  renderViewLoading('CONECTANDO AL SERVIDOR');
 }
 
 async function refreshAdminView(options: { force?: boolean } = {}, renderId?: number): Promise<void> {
@@ -3635,7 +3641,7 @@ async function renderFirewallView(forceRefresh = false, renderId = ++activeViewR
   }
 
   if (!forceRefresh && latestFirewallStatus) {
-    renderViewLoading('Red y Firewall', 'Actualizando el estado local de Steam Query.');
+    renderViewLoading('VERIFICANDO STEAM QUERY');
     const queryPortStatus = await palcmApi.server.getQueryPortStatus();
     if (!isCurrentViewRender(renderId, 'network')) {
       return;
@@ -4894,6 +4900,7 @@ function showToast(message: string, tone: 'info' | 'error' = 'info'): void {
 
 function setContent(html: string): void {
   if (contentView) {
+    contentView.removeAttribute('aria-busy');
     contentView.innerHTML = html;
   }
 }
