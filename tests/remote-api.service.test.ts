@@ -60,7 +60,8 @@ describe('RemoteApiService', () => {
     expect(cssResponse.headers.get('content-type')).toContain('text/css');
     expect(css).toContain('@media (max-width: 560px)');
     expect(css).toContain('100dvh');
-    expect(css).toContain('max-height: 60px');
+    expect(css).toContain('bottom: 0');
+    expect(css).toContain('env(safe-area-inset-bottom)');
     expect(css).toContain('display: block');
     expect(css).toContain('password-visibility-icon');
     expect(css).toContain('border: 0');

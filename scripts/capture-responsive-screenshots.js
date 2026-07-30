@@ -1,5 +1,5 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
-const { mkdirSync, writeFileSync } = require('node:fs');
+const { mkdirSync, renameSync, rmSync, writeFileSync } = require('node:fs');
 const { join } = require('node:path');
 
 const { createNestContext } = require('../dist/main/bootstrap/nest-bootstrap');
@@ -103,11 +103,58 @@ async function capture(window, viewport, view) {
     await waitForSelector(window, `${view.selector}.sidebar__link--active`);
     await wait(500);
   }
-  const image = await window.webContents.capturePage();
+  const image = await capturePageWithRetry(window);
   writeFileSync(
     join(outputDir, `${viewport.name}-${String(viewport.width)}x${String(viewport.height)}-${view.name}.png`),
     image.toPNG()
   );
+}
+
+async function waitForSelectorRemoved(window, selector, timeoutMs = 30000) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const exists = await window.webContents.executeJavaScript(
+      `Boolean(document.querySelector(${JSON.stringify(selector)}))`
+    );
+    if (!exists) {
+      return;
+    }
+    await wait(250);
+  }
+  throw new Error(`Selector did not disappear: ${selector}`);
+}
+
+async function capturePageWithRetry(window, attempts = 3) {
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await window.webContents.capturePage();
+    } catch (error) {
+      lastError = error;
+      await wait(attempt * 500);
+    }
+  }
+  throw lastError;
+}
+
+async function writeScreenshotWithRetry(targetPath, pngBuffer, attempts = 5) {
+  const temporaryPath = `${targetPath}.${String(process.pid)}.tmp`;
+  let lastError;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      writeFileSync(temporaryPath, pngBuffer);
+      rmSync(targetPath, { force: true });
+      renameSync(temporaryPath, targetPath);
+      return;
+    } catch (error) {
+      lastError = error;
+      rmSync(temporaryPath, { force: true });
+      await wait(attempt * 300);
+    }
+  }
+
+  throw lastError;
 }
 
 async function openManualView(window, view) {
@@ -281,10 +328,11 @@ async function waitForEnabledNavigation(window, nav, timeoutMs = 30000) {
 
 async function writeManualScreenshot(window, outputDir, view) {
   await openManualView(window, view);
+  await waitForSelectorRemoved(window, '.view-loading-overlay');
   await applySafeDocumentationData(window, Boolean(view.fixtureLogs));
   await wait(250);
-  const image = await window.webContents.capturePage();
-  writeFileSync(join(outputDir, `${view.name}.png`), image.toPNG());
+  const image = await capturePageWithRetry(window);
+  await writeScreenshotWithRetry(join(outputDir, `${view.name}.png`), image.toPNG());
 }
 
 async function captureManualScreenshots(window) {
@@ -323,6 +371,7 @@ async function captureManualScreenshots(window) {
 
 async function main() {
   mkdirSync(outputDir, { recursive: true });
+  app.disableHardwareAcceleration();
   const captureProfile = join(process.cwd(), '.tmp-tests', `electron-capture-${String(process.pid)}-${String(Date.now())}`);
   const captureSession = join(captureProfile, 'session');
   mkdirSync(captureSession, { recursive: true });

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PalworldAdminStatusDto } from '../src/shared/dto/palworld-admin.dto';
 import type { PalworldPlayersStatusDto } from '../src/shared/dto/palworld-players-status.dto';
-import { renderAdminStatus } from '../src/renderer/views/admin-view';
+import { hasAdminGeneralData, renderAdminStatus } from '../src/renderer/views/admin-view';
 
 const adminStatus: PalworldAdminStatusDto = {
   status: 'READY',
@@ -42,7 +42,14 @@ const playersStatus: PalworldPlayersStatusDto = {
 
 describe('admin view', () => {
   it('renders server administration actions in the general tab', () => {
-    const html = renderAdminStatus(adminStatus, playersStatus, 'general');
+    const html = renderAdminStatus({
+      ...adminStatus,
+      metrics: {
+        serverfps: 59,
+        serverfpsaverage: 59.439998626708984,
+        serverframetime: '16.82489585876465'
+      }
+    }, playersStatus, 'general');
 
     expect(html).toContain('<h3>Servidor</h3>');
     expect(html).toContain('data-admin-form="save"');
@@ -51,6 +58,17 @@ describe('admin view', () => {
     expect(html).toContain('class="input-with-unit"');
     expect(html).toContain('<small>s</small>');
     expect(html).toContain('Servidor de prueba');
+    expect(html).toContain('data-admin-live-region="status-message"');
+    expect(html).toContain('FPS actuales');
+    expect(html).toContain('FPS promedio');
+    expect(html).toContain('Tiempo por frame');
+    expect(html).toContain('<span>59.44</span>');
+    expect(html).toContain('<span>16.82</span>');
+    expect(html).toContain('<small>FPS</small>');
+    expect(html).toContain('<small>ms</small>');
+    expect(html).toContain('admin-snapshot-value--ok');
+    expect(html).toContain('Clave REST: serverfps');
+    expect(html).not.toContain('59.439998626708984');
   });
 
   it('renders current and previous players with safe actions', () => {
@@ -66,6 +84,7 @@ describe('admin view', () => {
     expect(html).toContain('player-row__identity');
     expect(html).toContain('player-row__details');
     expect(html).toContain('player-row__status');
+    expect(html).toContain('data-admin-live-region="players-list"');
     expect(html).toContain('Jugador &lt;Uno&gt;');
     expect(html).not.toContain('Jugador <Uno>');
   });
@@ -76,5 +95,15 @@ describe('admin view', () => {
     expect(html).toContain('<h3>Mapa</h3>');
     expect(html).toContain('admin-map-marker');
     expect(html).toContain('X 120 / Y -45');
+  });
+
+  it('detects when the complete server view still has pending data', () => {
+    const incompleteStatus = {
+      ...adminStatus,
+      metrics: {}
+    };
+
+    expect(hasAdminGeneralData(incompleteStatus)).toBe(false);
+    expect(hasAdminGeneralData(adminStatus)).toBe(true);
   });
 });

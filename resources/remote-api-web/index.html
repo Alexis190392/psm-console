@@ -2,21 +2,34 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#030a0f">
     <title>PSM Console Web</title>
     <link rel="icon" href="/api/v1/logo.png">
     <link rel="stylesheet" href="/api/v1/ui.css">
     <script src="/api/v1/ui.js" defer></script>
   </head>
   <body>
+    <svg class="icon-sprite" aria-hidden="true">
+      <symbol id="icon-home" viewBox="0 0 24 24"><path d="m3 11 9-8 9 8v9a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></symbol>
+      <symbol id="icon-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+      <symbol id="icon-terminal" viewBox="0 0 24 24"><path d="m4 17 6-5-6-5M12 19h8"/></symbol>
+      <symbol id="icon-refresh" viewBox="0 0 24 24"><path d="M20 7h-5V2"/><path d="M20 7a9 9 0 1 0 2 6"/></symbol>
+      <symbol id="icon-power" viewBox="0 0 24 24"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></symbol>
+      <symbol id="icon-restart" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></symbol>
+      <symbol id="icon-stop" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="1"/></symbol>
+      <symbol id="icon-logout" viewBox="0 0 24 24"><path d="M10 17l5-5-5-5M15 12H3"/><path d="M14 3h6a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1h-6"/></symbol>
+      <symbol id="icon-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+    </svg>
+
     <div class="app-shell">
       <header class="topbar">
         <div class="brand">
-          <img src="/api/v1/logo.png" alt="" width="36" height="36">
+          <img src="/api/v1/logo.png" alt="" width="44" height="44">
           <div>
             <strong>PSM Console</strong>
-            <span id="access-profile-label">Administracion web</span>
+            <span id="access-profile-label">Administración web</span>
           </div>
         </div>
         <div id="connection-state" class="connection-state" hidden>
@@ -27,66 +40,84 @@
 
       <main>
         <section id="login-view" class="login-layout" aria-labelledby="login-title">
-          <form id="login-form" class="login-panel">
-            <img class="login-logo" src="/api/v1/logo.png" alt="PSM Console" width="92" height="92">
-            <p class="eyebrow">ACCESO REMOTO</p>
-            <h1 id="login-title">Iniciar sesion</h1>
-            <p class="supporting-text">Usa las credenciales configuradas en PSM Console.</p>
+          <form id="login-form" class="login-panel hud-panel">
+            <div class="login-emblem">
+              <img class="login-logo" src="/api/v1/logo.png" alt="PSM Console" width="124" height="124">
+            </div>
+            <div class="login-heading">
+              <p class="eyebrow">ACCESO REMOTO</p>
+              <h1 id="login-title">Iniciar sesión</h1>
+              <p class="supporting-text">Ingresa con las credenciales configuradas en PSM Console.</p>
+            </div>
 
-            <label for="username">Usuario</label>
-            <input id="username" name="username" type="text" autocomplete="username" required>
+            <div class="field-group">
+              <label for="username">Usuario</label>
+              <input id="username" name="username" type="text" autocomplete="username" required>
+            </div>
 
-            <label for="password">Contrasena</label>
-            <div class="password-field">
-              <input id="password" name="password" type="password" autocomplete="current-password" required>
-              <button id="toggle-password" class="icon-button password-visibility-button" type="button" aria-label="Mostrar contrasena" title="Mostrar contrasena" aria-pressed="false">
-                <span class="password-visibility-icon" aria-hidden="true"></span>
-              </button>
+            <div class="field-group">
+              <label for="password">Contraseña</label>
+              <div class="password-field">
+                <input id="password" name="password" type="password" autocomplete="current-password" required>
+                <button id="toggle-password" class="icon-button password-visibility-button" type="button" aria-label="Mostrar contraseña" title="Mostrar contraseña" aria-pressed="false">
+                  <span class="password-visibility-icon" aria-hidden="true"></span>
+                </button>
+              </div>
             </div>
 
             <p id="login-error" class="form-error" role="alert" hidden></p>
             <button id="login-button" class="primary-button full-width" type="submit">
               <span>Ingresar</span>
-              <span aria-hidden="true">→</span>
+              <svg class="button-icon" aria-hidden="true"><use href="#icon-arrow"></use></svg>
             </button>
+            <p class="login-footnote">La sesión permanece activa mientras PSM Console esté disponible.</p>
           </form>
         </section>
 
         <section id="dashboard-view" class="dashboard" hidden>
-          <aside class="sidebar" aria-label="Navegacion principal">
+          <aside class="sidebar" aria-label="Navegación principal">
             <nav>
-              <button class="nav-button active" type="button" data-view="general" data-permission-any="GENERAL,SERVER_START,SERVER_RESTART,SERVER_STOP">General</button>
-              <button class="nav-button" type="button" data-view="players" data-permission-any="PLAYERS_VIEW,PLAYERS_KICK,PLAYERS_BAN">Jugadores</button>
-              <button class="nav-button" type="button" data-view="logs" data-permission="LOGS">Logs</button>
+              <button class="nav-button active" type="button" data-view="general" data-permission-any="GENERAL,SERVER_START,SERVER_RESTART,SERVER_STOP">
+                <svg aria-hidden="true"><use href="#icon-home"></use></svg><span>General</span>
+              </button>
+              <button class="nav-button" type="button" data-view="players" data-permission-any="PLAYERS_VIEW,PLAYERS_KICK,PLAYERS_BAN">
+                <svg aria-hidden="true"><use href="#icon-users"></use></svg><span>Jugadores</span>
+              </button>
+              <button class="nav-button" type="button" data-view="logs" data-permission="LOGS">
+                <svg aria-hidden="true"><use href="#icon-terminal"></use></svg><span>Logs</span>
+              </button>
             </nav>
-            <button id="logout-button" class="secondary-button" type="button">
-              <span class="logout-label">Cerrar sesion</span>
+            <button id="logout-button" class="secondary-button logout-button" type="button">
+              <svg aria-hidden="true"><use href="#icon-logout"></use></svg>
+              <span class="logout-label">Cerrar sesión</span>
               <span class="logout-short" aria-hidden="true">Salir</span>
             </button>
           </aside>
 
           <div class="workspace">
-            <section id="general-view" class="content-view" data-content-view="general">
+            <section id="general-view" class="content-view hud-panel" data-content-view="general">
               <div class="page-heading">
                 <div>
-                  <p class="eyebrow">GENERAL</p>
+                  <p class="eyebrow">CONTROL REMOTO</p>
                   <h1>Estado del servidor</h1>
                 </div>
-                <button class="icon-button refresh-button" type="button" data-refresh aria-label="Actualizar estado" title="Actualizar estado">↻</button>
+                <button class="icon-button refresh-button" type="button" data-refresh aria-label="Actualizar estado" title="Actualizar estado">
+                  <svg aria-hidden="true"><use href="#icon-refresh"></use></svg>
+                </button>
               </div>
 
               <div class="status-grid" data-permission-any="GENERAL,SERVER_START,SERVER_RESTART,SERVER_STOP">
-                <article class="status-card" data-permission="GENERAL">
-                  <span>Aplicacion</span>
+                <article class="status-card status-card--cyan" data-permission="GENERAL">
+                  <span>Aplicación</span>
                   <strong id="application-status">Consultando</strong>
                   <small id="application-message">Leyendo estado actual...</small>
                 </article>
-                <article class="status-card" data-permission-any="GENERAL,SERVER_START,SERVER_RESTART,SERVER_STOP">
+                <article class="status-card status-card--magenta" data-permission-any="GENERAL,SERVER_START,SERVER_RESTART,SERVER_STOP">
                   <span>Servidor</span>
                   <strong id="server-status">Consultando</strong>
                   <small id="server-message">Verificando proceso...</small>
                 </article>
-                <article class="status-card" data-permission-any="PLAYERS_VIEW,PLAYERS_KICK,PLAYERS_BAN">
+                <article class="status-card status-card--cyan" data-permission-any="PLAYERS_VIEW,PLAYERS_KICK,PLAYERS_BAN">
                   <span>Jugadores</span>
                   <strong id="player-count">--</strong>
                   <small>Conectados en esta instancia</small>
@@ -95,38 +126,48 @@
 
               <section class="action-panel" data-permission-any="SERVER_START,SERVER_RESTART,SERVER_STOP">
                 <div>
-                  <p class="eyebrow">CONTROL</p>
-                  <h2>Acciones del servidor</h2>
+                  <p class="eyebrow">ACCIONES</p>
+                  <h2>Control del servidor</h2>
                 </div>
                 <div class="action-buttons">
-                  <button id="start-button" class="primary-button" type="button" data-permission="SERVER_START">Iniciar</button>
-                  <button id="restart-button" class="secondary-button" type="button" data-permission="SERVER_RESTART">Reiniciar</button>
-                  <button id="stop-button" class="danger-button" type="button" data-permission="SERVER_STOP">Detener</button>
+                  <button id="start-button" class="primary-button" type="button" data-permission="SERVER_START">
+                    <svg aria-hidden="true"><use href="#icon-power"></use></svg><span>Iniciar</span>
+                  </button>
+                  <button id="restart-button" class="secondary-button" type="button" data-permission="SERVER_RESTART">
+                    <svg aria-hidden="true"><use href="#icon-restart"></use></svg><span>Reiniciar</span>
+                  </button>
+                  <button id="stop-button" class="danger-button" type="button" data-permission="SERVER_STOP">
+                    <svg aria-hidden="true"><use href="#icon-stop"></use></svg><span>Detener</span>
+                  </button>
                 </div>
               </section>
               <p id="operation-message" class="operation-message" aria-live="polite"></p>
             </section>
 
-            <section id="players-view" class="content-view" data-content-view="players" hidden>
+            <section id="players-view" class="content-view hud-panel" data-content-view="players" hidden>
               <div class="page-heading">
                 <div>
-                  <p class="eyebrow">JUGADORES</p>
-                  <h1>Conectados</h1>
+                  <p class="eyebrow">ADMINISTRACIÓN</p>
+                  <h1>Jugadores conectados</h1>
                 </div>
-                <button class="icon-button refresh-button" type="button" data-refresh aria-label="Actualizar jugadores" title="Actualizar jugadores">↻</button>
+                <button class="icon-button refresh-button" type="button" data-refresh aria-label="Actualizar jugadores" title="Actualizar jugadores">
+                  <svg aria-hidden="true"><use href="#icon-refresh"></use></svg>
+                </button>
               </div>
               <div id="players-list" class="data-list">
                 <p class="empty-state">Consultando jugadores...</p>
               </div>
             </section>
 
-            <section id="logs-view" class="content-view" data-content-view="logs" hidden>
+            <section id="logs-view" class="content-view hud-panel" data-content-view="logs" hidden>
               <div class="page-heading">
                 <div>
-                  <p class="eyebrow">LOGS</p>
+                  <p class="eyebrow">TELEMETRÍA</p>
                   <h1>Actividad actual</h1>
                 </div>
-                <button class="icon-button refresh-button" type="button" data-refresh aria-label="Actualizar logs" title="Actualizar logs">↻</button>
+                <button class="icon-button refresh-button" type="button" data-refresh aria-label="Actualizar logs" title="Actualizar logs">
+                  <svg aria-hidden="true"><use href="#icon-refresh"></use></svg>
+                </button>
               </div>
               <pre id="logs-console" class="logs-console" tabindex="0">Consultando logs...</pre>
             </section>

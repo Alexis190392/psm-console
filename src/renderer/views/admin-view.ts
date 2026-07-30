@@ -1,10 +1,21 @@
 import type { PalworldAdminStatusDto } from '../../shared/dto/palworld-admin.dto';
 import type { PalworldPlayersStatusDto } from '../../shared/dto/palworld-players-status.dto';
 import { renderIcon } from '../components/icon';
+import {
+  getAdminSnapshotFields,
+  type AdminSnapshotFieldDefinition,
+  type AdminSnapshotSection
+} from '../constants/admin-snapshot-catalog';
 import { formatDateTime } from '../utils/format';
 import { escapeHtml } from '../utils/text';
 
 export type AdminTab = 'general' | 'players' | 'map';
+
+export function hasAdminGeneralData(adminStatus: PalworldAdminStatusDto): boolean {
+  return [adminStatus.info, adminStatus.metrics, adminStatus.settings].every(
+    (snapshot) => snapshot !== undefined && Object.keys(snapshot).length > 0
+  );
+}
 
 export function renderAdminStatus(
   adminStatus: PalworldAdminStatusDto,
@@ -38,9 +49,9 @@ function renderAdminTabs(
   };
 
   return `
-    <div class="admin-toolbar">
+    <div class="admin-toolbar" data-admin-active-tab="${activeTab}">
       <h3>${tabLabel[activeTab]}</h3>
-      <span class="view-meta-pill">${escapeHtml(adminStatus.message)}</span>
+      <span class="view-meta-pill" data-admin-live-region="status-message">${escapeHtml(adminStatus.message)}</span>
     </div>
     ${renderAdminActiveTab(adminStatus, playersStatus, activeTab)}
   `;
@@ -69,9 +80,9 @@ function renderAdminGeneralTab(adminStatus: PalworldAdminStatusDto): string {
       </button>
     </div>
     <div class="admin-snapshot-grid">
-      ${renderAdminSnapshotCard('Servidor', 'Info oficial del servidor', adminStatus.info)}
-      ${renderAdminSnapshotCard('Metricas', 'Rendimiento reportado por REST', adminStatus.metrics)}
-      ${renderAdminSnapshotCard('Settings', 'Configuracion activa leida del servidor', adminStatus.settings)}
+      ${renderAdminSnapshotCard('Informacion', 'Info oficial del servidor', 'info', adminStatus.info)}
+      ${renderAdminSnapshotCard('Metricas', 'Rendimiento reportado por REST', 'metrics', adminStatus.metrics)}
+      ${renderAdminSnapshotCard('Configuracion activa', 'Configuracion leida del servidor', 'settings', adminStatus.settings)}
     </div>
     <div class="admin-grid">
       <form class="admin-card" data-admin-form="save">
@@ -125,15 +136,19 @@ function renderAdminPlayersTab(playersStatus: PalworldPlayersStatusDto): string 
       <section class="admin-players-panel admin-players-panel--wide">
         <div class="players-list-card__header">
           <h3>Jugadores conectados</h3>
-          <span>${renderPlayersHeaderMeta(playersStatus)}</span>
+          <span data-admin-live-region="players-meta">${renderPlayersHeaderMeta(playersStatus)}</span>
         </div>
-        ${renderAdminPlayersList(playersStatus)}
+        <div data-admin-live-region="players-list">${renderAdminPlayersList(playersStatus)}</div>
       </section>
     </div>
   `;
 }
 
 function renderAdminMapTab(playersStatus: PalworldPlayersStatusDto): string {
+  return `<div data-admin-live-region="map-content">${renderAdminMapContent(playersStatus)}</div>`;
+}
+
+function renderAdminMapContent(playersStatus: PalworldPlayersStatusDto): string {
   if (playersStatus.status !== 'READY') {
     return `<section class="admin-map-panel"><p class="empty-state">${escapeHtml(playersStatus.message)}</p></section>`;
   }
@@ -171,20 +186,135 @@ function renderAdminMapTab(playersStatus: PalworldPlayersStatusDto): string {
 function renderAdminSnapshotCard(
   title: string,
   detail: string,
+  section: AdminSnapshotSection,
   snapshot: PalworldAdminStatusDto['info']
 ): string {
-  const entries = Object.entries(snapshot ?? {}).slice(0, 6);
+  const entries = getAdminSnapshotFields(section, snapshot ?? {});
   return `
     <article class="admin-snapshot-card">
       <h4>${escapeHtml(title)}</h4>
       <span class="sr-only">${escapeHtml(detail)}</span>
       ${
         entries.length > 0
-          ? `<dl>${entries.map(([key, value]) => `<div><dt>${escapeHtml(key)}</dt><dd>${escapeHtml(String(value))}</dd></div>`).join('')}</dl>`
-          : '<small>Sin datos disponibles en este momento.</small>'
+          ? `<dl>${entries.map(([key, value, definition]) => renderAdminSnapshotEntry(section, key, value, definition)).join('')}</dl>`
+          : '<small>Datos del servidor pendientes.</small>'
       }
     </article>
   `;
+}
+
+function renderAdminSnapshotEntry(
+  section: AdminSnapshotSection,
+  key: string,
+  value: unknown,
+  definition: AdminSnapshotFieldDefinition | undefined
+): string {
+  const label = definition?.label ?? key;
+  const description = definition?.description ?? `Clave tecnica REST: ${key}`;
+  const formattedValue = formatAdminValue(value, definition);
+  const health = getAdminMetricHealth(value, definition);
+  const healthClass = health ? ` admin-snapshot-value--${health}` : '';
+  const healthLabel = health === 'ok'
+    ? 'Rendimiento normal'
+    : health === 'warning'
+      ? 'Rendimiento a revisar'
+      : health === 'critical'
+        ? 'Rendimiento critico'
+        : '';
+
+  return `
+    <div>
+      <dt title="${escapeHtml(description)} · Clave REST: ${escapeHtml(key)}">${escapeHtml(label)}</dt>
+      <dd
+        class="admin-snapshot-value${healthClass}"
+        data-admin-live-region="snapshot-${escapeHtml(section)}-${escapeHtml(key)}"
+        title="${escapeHtml(healthLabel || description)}"
+      >
+        <span>${escapeHtml(formattedValue)}</span>
+        ${definition?.unit ? `<small>${escapeHtml(definition.unit)}</small>` : ''}
+      </dd>
+    </div>
+  `;
+}
+
+function formatAdminValue(value: unknown, definition?: AdminSnapshotFieldDefinition): string {
+  if (definition?.format === 'boolean' || typeof value === 'boolean') {
+    return value === true || value === 'true' ? 'Si' : 'No';
+  }
+
+  if (definition?.format === 'duration') {
+    const seconds = toFiniteNumber(value);
+    return seconds === null ? String(value) : formatDuration(seconds);
+  }
+
+  if (definition?.format === 'multiplier') {
+    const multiplier = toFiniteNumber(value);
+    return multiplier === null ? String(value) : `${formatAdminNumber(multiplier)}x`;
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return formatAdminNumber(value);
+  }
+
+  if (typeof value === 'string' && /^-?\d+(?:\.\d+)?$/.test(value.trim())) {
+    const numericValue = Number(value);
+    if (Number.isFinite(numericValue)) {
+      return formatAdminNumber(numericValue);
+    }
+  }
+
+  return value === 'None' ? 'Ninguno' : String(value);
+}
+
+function formatAdminNumber(value: number): string {
+  return value.toFixed(2).replace(/\.?0+$/, '');
+}
+
+function formatDuration(totalSeconds: number): string {
+  const seconds = Math.max(0, Math.round(totalSeconds));
+  const days = Math.floor(seconds / 86_400);
+  const hours = Math.floor((seconds % 86_400) / 3_600);
+  const minutes = Math.floor((seconds % 3_600) / 60);
+
+  if (days > 0) {
+    return `${String(days)} d ${String(hours)} h`;
+  }
+  if (hours > 0) {
+    return `${String(hours)} h ${String(minutes)} min`;
+  }
+  if (minutes > 0) {
+    return `${String(minutes)} min`;
+  }
+  return `${String(seconds)} s`;
+}
+
+function getAdminMetricHealth(
+  value: unknown,
+  definition: AdminSnapshotFieldDefinition | undefined
+): 'ok' | 'warning' | 'critical' | null {
+  if (!definition?.health) {
+    return null;
+  }
+
+  const numericValue = toFiniteNumber(value);
+  if (numericValue === null) {
+    return null;
+  }
+
+  const { direction, warning, critical } = definition.health;
+  if (direction === 'minimum') {
+    return numericValue < critical ? 'critical' : numericValue < warning ? 'warning' : 'ok';
+  }
+  return numericValue > critical ? 'critical' : numericValue > warning ? 'warning' : 'ok';
+}
+
+function toFiniteNumber(value: unknown): number | null {
+  const numericValue = typeof value === 'number'
+    ? value
+    : typeof value === 'string' && value.trim() !== ''
+      ? Number(value)
+      : Number.NaN;
+  return Number.isFinite(numericValue) ? numericValue : null;
 }
 
 function renderPlayersHeaderMeta(summary: PalworldPlayersStatusDto): string {
@@ -257,7 +387,7 @@ function renderAdminPlayerRow(player: PalworldPlayersStatusDto['players'][number
         <input name="userId" type="hidden" value="${escapeHtml(actionId)}" />
         <input name="message" type="hidden" value="Accion aplicada desde PSM Console." />
         <button class="admin-icon-button secondary-button icon-button" type="submit" data-player-action="kick" ${actionId && allowKick ? '' : 'disabled'} aria-label="Expulsar jugador" title="${allowKick ? 'Expulsar jugador' : 'Solo disponible para jugadores conectados'}">
-          ${renderIcon('send')}
+          ${renderIcon('log-out')}
         </button>
         <button class="ban-toggle ${isBanned ? 'ban-toggle--active' : ''}" type="submit" data-player-action="${banAction}" ${actionId ? '' : 'disabled'} aria-pressed="${isBanned ? 'true' : 'false'}" aria-label="${isBanned ? 'Desbanear jugador' : 'Banear jugador'}" title="${isBanned ? 'Desbanear jugador' : 'Banear jugador'}">
           <span class="ban-toggle__track" aria-hidden="true"><span class="ban-toggle__thumb"></span></span>

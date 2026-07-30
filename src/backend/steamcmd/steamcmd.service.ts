@@ -4,7 +4,7 @@ import extract from 'extract-zip';
 import { createWriteStream, existsSync } from 'node:fs';
 import { mkdir, rm } from 'node:fs/promises';
 import { get } from 'node:https';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { OperationManagerService } from '../operations/operation-manager.service';
 import { PortablePathService } from '../portable-path/portable-path.service';
 import { PortableStateService } from '../portable-state/portable-state.service';
@@ -117,8 +117,20 @@ export class SteamCmdService {
         percent: 92,
         message: 'Inicializando SteamCMD.'
       });
-      await this.initializeSteamCmd(operationId, join(installDirectory, 'steamcmd.exe'));
-      this.portableStateService.rememberSteamCmd(installDirectory, join(installDirectory, 'steamcmd.exe'));
+      const executablePath = join(installDirectory, 'steamcmd.exe');
+      try {
+        await this.initializeSteamCmd(operationId, executablePath);
+      } catch (error) {
+        if (!isSteamCmdBootstrapExitError(error) || !isSteamCmdBootstrapReady(installDirectory)) {
+          throw error;
+        }
+
+        this.operationManagerService.appendLog(
+          operationId,
+          'SteamCMD devolvio un codigo de bootstrap no exitoso, pero sus binarios quedaron instalados y disponibles.'
+        );
+      }
+      this.portableStateService.rememberSteamCmd(installDirectory, executablePath);
 
       this.operationManagerService.update(operationId, {
         status: 'COMPLETED',
@@ -223,6 +235,7 @@ export class SteamCmdService {
     await new Promise<void>((resolve, reject) => {
       this.operationManagerService.appendLog(operationId, `"${executablePath}" +quit`);
       const child = spawn(executablePath, ['+quit'], {
+        cwd: dirname(executablePath),
         windowsHide: true,
         shell: false
       });
@@ -262,4 +275,15 @@ export class SteamCmdService {
       });
     });
   }
+}
+
+export function isSteamCmdBootstrapReady(installDirectory: string): boolean {
+  return (
+    existsSync(join(installDirectory, 'steamcmd.exe')) &&
+    existsSync(join(installDirectory, 'steamclient.dll'))
+  );
+}
+
+function isSteamCmdBootstrapExitError(error: unknown): error is Error {
+  return error instanceof Error && error.message.startsWith('SteamCMD no pudo inicializarse. Codigo ');
 }
