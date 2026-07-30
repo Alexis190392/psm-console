@@ -7,9 +7,17 @@ on:
       - dev
       - test
       - master
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "resources/screenshots/**"
   push:
     branches:
       - dev
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "resources/screenshots/**"
 
 permissions:
   contents: read

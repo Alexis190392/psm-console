@@ -5,6 +5,11 @@ on:
   push:
     branches:
       - master
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "resources/screenshots/**"
+      - ".github/workflows/**"
 
 permissions:
   contents: write
