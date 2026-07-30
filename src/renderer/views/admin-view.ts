@@ -13,7 +13,7 @@ export type AdminTab = 'general' | 'players' | 'map';
 
 export function hasAdminGeneralData(adminStatus: PalworldAdminStatusDto): boolean {
   return [adminStatus.info, adminStatus.metrics, adminStatus.settings].every(
-    (snapshot) => Object.keys(snapshot).length > 0
+    (snapshot) => snapshot !== undefined && Object.keys(snapshot).length > 0
   );
 }
 
