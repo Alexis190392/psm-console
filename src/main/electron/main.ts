@@ -6,6 +6,7 @@ import { APP_INFO } from '../../shared/constants/app-info';
 import { createNestContext } from '../bootstrap/nest-bootstrap';
 import { registerIpcHandlers } from '../ipc/register-ipc-handlers';
 import { createMainWindowOptions, createSplashWindowOptions } from './window-options';
+import { createTacticalWindowShape } from './window-shape';
 
 const RENDERER_PROTOCOL = 'palcm';
 const MINIMUM_SPLASH_DURATION_MS = 3000;
@@ -155,6 +156,50 @@ async function transitionToMainWindow(window: BrowserWindow, splashSession?: Spl
   window.focus();
 }
 
+function configureTacticalWindowShape(window: BrowserWindow): void {
+  if (process.platform !== 'win32') {
+    return;
+  }
+
+  let resizeTimer: NodeJS.Timeout | undefined;
+
+  const syncShape = (): void => {
+    if (window.isDestroyed()) {
+      return;
+    }
+
+    const maximized = window.isMaximized() || window.isFullScreen();
+    const [width = 1, height = 1] = window.getContentSize();
+    window.setShape(maximized ? [] : createTacticalWindowShape(width, height));
+
+    if (!window.webContents.isDestroyed()) {
+      void window.webContents.executeJavaScript(
+        `document.documentElement.classList.toggle('window-maximized', ${String(maximized)})`
+      ).catch(() => undefined);
+    }
+  };
+
+  const scheduleShapeSync = (): void => {
+    if (resizeTimer) {
+      clearTimeout(resizeTimer);
+    }
+    resizeTimer = setTimeout(syncShape, 16);
+  };
+
+  window.on('resize', scheduleShapeSync);
+  window.on('maximize', syncShape);
+  window.on('unmaximize', syncShape);
+  window.on('enter-full-screen', syncShape);
+  window.on('leave-full-screen', syncShape);
+  window.once('closed', () => {
+    if (resizeTimer) {
+      clearTimeout(resizeTimer);
+    }
+  });
+
+  syncShape();
+}
+
 async function createMainWindow(splashSession?: SplashSession): Promise<BrowserWindow> {
   const { workAreaSize } = screen.getPrimaryDisplay();
   const window = new BrowserWindow(
@@ -166,12 +211,17 @@ async function createMainWindow(splashSession?: SplashSession): Promise<BrowserW
       show: false
     }
   );
+  configureTacticalWindowShape(window);
 
   const readyToShow = new Promise<void>((resolveReady) => {
     window.once('ready-to-show', resolveReady);
   });
   await window.loadURL(`${RENDERER_PROTOCOL}://app/index.html`);
   await readyToShow;
+  if (process.platform === 'win32') {
+    const [width = 1, height = 1] = window.getContentSize();
+    window.setShape(window.isMaximized() ? [] : createTacticalWindowShape(width, height));
+  }
 
   await transitionToMainWindow(window, splashSession);
 

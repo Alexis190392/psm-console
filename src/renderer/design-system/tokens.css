@@ -1,9 +1,9 @@
 :root {
-  --color-background: #070a0f;
-  --color-surface: #0d1219;
-  --color-surface-panel: #111923;
-  --color-surface-high: #16212c;
-  --color-outline: #22303b;
+  --color-background: #05080d;
+  --color-surface: #091018;
+  --color-surface-panel: #0d1620;
+  --color-surface-high: #13212c;
+  --color-outline: #1b3442;
   --color-text: #ecf7fa;
   --color-text-muted: #8fa2ad;
   --color-primary: #08d9e8;
@@ -18,9 +18,13 @@
   --color-surface-muted: rgba(7, 10, 15, 0.48);
   --shadow-primary: 0 0 18px rgba(8, 217, 232, 0.14);
   --shadow-accent: 0 0 18px rgba(255, 43, 127, 0.14);
-  --radius-control: 7px;
-  --radius-panel: 8px;
-  --sidebar-width: 276px;
+  --radius-control: 3px;
+  --radius-panel: 2px;
+  --hud-cut-small: 7px;
+  --hud-cut-medium: 11px;
+  --hud-cut-large: 16px;
+  --titlebar-height: 48px;
+  --sidebar-width: 292px;
   font-family: Inter, "Segoe UI", Arial, sans-serif;
   color: var(--color-text);
   background: var(--color-background);

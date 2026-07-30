@@ -29,7 +29,12 @@ describe('Electron window security options', () => {
       height: 800,
       minWidth: 1100,
       minHeight: 700,
-      movable: true
+      movable: true,
+      frame: false,
+      thickFrame: false,
+      transparent: true,
+      hasShadow: false,
+      backgroundColor: '#00000000'
     });
   });
 

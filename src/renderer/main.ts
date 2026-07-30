@@ -46,7 +46,7 @@ import { formatBytes, formatLastVerification } from './utils/format';
 import { getOperationFailureMessage, isOperationSuccessful } from './utils/operation-result';
 import { cssEscape, escapeHtml, normalizeSearchText } from './utils/text';
 import { renderBackupsView as renderBackupsViewHtml } from './views/backups-view';
-import { renderAdminStatus } from './views/admin-view';
+import { hasAdminGeneralData, renderAdminStatus, type AdminTab } from './views/admin-view';
 import {
   renderAppSettingsView,
   renderRemoteApiConnectionStatus
@@ -82,10 +82,31 @@ const rootElement = appRoot;
 
 rootElement.innerHTML = `
   <a class="skip-link" href="#content-view">Saltar al contenido</a>
+  <svg
+    class="tactical-window-frame"
+    aria-hidden="true"
+    preserveAspectRatio="none"
+    focusable="false"
+  >
+    <defs>
+      <linearGradient id="tactical-window-frame-gradient" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="#08d9e8" />
+        <stop offset="48%" stop-color="#08d9e8" stop-opacity="0.78" />
+        <stop offset="76%" stop-color="#ff2b7f" stop-opacity="0.82" />
+        <stop offset="100%" stop-color="#ff2b7f" />
+      </linearGradient>
+    </defs>
+    <path class="tactical-window-frame__glow" />
+    <path class="tactical-window-frame__line" />
+  </svg>
   <header class="titlebar">
     <div class="titlebar__brand">
       <img class="titlebar__logo" src="${palcmSymbolUrl}" alt="" />
-      <span>${escapeHtml(APP_INFO.displayName)}</span>
+      <span class="titlebar__product">${escapeHtml(APP_INFO.displayName)}</span>
+      <span class="titlebar__version">${escapeHtml(APP_VERSION_LABEL)}</span>
+    </div>
+    <div class="titlebar__signal" aria-hidden="true">
+      <span></span><span></span><span></span>
     </div>
     <div class="titlebar__spacer"></div>
     <button id="window-minimize" class="window-button" aria-label="Minimizar">${renderIcon('minus')}</button>
@@ -100,6 +121,14 @@ rootElement.innerHTML = `
         <p>${escapeHtml(APP_VERSION_LABEL)}</p>
         <p class="sidebar__credit">by <strong>${escapeHtml(APP_INFO.authorAlias)}</strong></p>
       </div>
+      <button
+        id="sidebar-toggle"
+        class="sidebar-toggle"
+        type="button"
+        aria-label="Contraer menu lateral"
+        aria-expanded="true"
+        title="Contraer menu lateral"
+      >${renderIcon('sidebar-collapse')}</button>
     </section>
     <nav class="sidebar__nav" aria-label="Navegacion principal">
       <a class="sidebar__link sidebar__link--active" data-nav="home" href="#">
@@ -305,6 +334,7 @@ const viewAnnouncer = document.querySelector<HTMLElement>('#view-announcer');
 const toastRegion = document.querySelector<HTMLElement>('#toast-region');
 const sidebarRuntimeStatus = document.querySelector<HTMLElement>('#sidebar-runtime-status');
 const startServerAction = document.querySelector<HTMLButtonElement>('#start-server-action');
+const sidebarToggle = document.querySelector<HTMLButtonElement>('#sidebar-toggle');
 const navLinks = Array.from(document.querySelectorAll<HTMLAnchorElement>('[data-nav]'));
 const adminNavGroup = document.querySelector<HTMLElement>('[data-nav-group="admin"]');
 const settingsNavGroup = document.querySelector<HTMLElement>('[data-nav-group="settings"]');
@@ -369,6 +399,12 @@ let latestSummary: {
   configurationPath: string;
   serverPath: string;
 } | null = null;
+
+const SIDEBAR_COLLAPSED_STORAGE_KEY = 'palcm:sidebar-collapsed';
+let sidebarPreferenceExplicit = false;
+
+initializeSidebar();
+initializeTacticalWindowFrame();
 
 const FIREWALL_DIAGNOSTIC_ORDER: FirewallDiagnosticStepId[] = [
   'configuration',
@@ -500,6 +536,118 @@ function scheduleRuntimeStateRefresh(): void {
     runtimeStateRefreshTimer = null;
     void synchronizeRuntimeState();
   }, 50);
+}
+
+function initializeSidebar(): void {
+  const storedState = readStoredSidebarState();
+  sidebarPreferenceExplicit = storedState !== null;
+  const collapsed = storedState ?? window.innerWidth <= 1180;
+  setSidebarCollapsed(collapsed, false);
+
+  sidebarToggle?.addEventListener('click', () => {
+    sidebarPreferenceExplicit = true;
+    setSidebarCollapsed(!rootElement.classList.contains('app--sidebar-collapsed'));
+  });
+
+  window.addEventListener('resize', () => {
+    if (!sidebarPreferenceExplicit) {
+      setSidebarCollapsed(window.innerWidth <= 1180, false);
+    }
+  });
+
+  navLinks.forEach((link) => {
+    const label = link.querySelector<HTMLElement>('span:not(.sidebar__chevron)')?.textContent.trim();
+    if (label) {
+      link.title = label;
+    }
+  });
+}
+
+function initializeTacticalWindowFrame(): void {
+  const frame = rootElement.querySelector<SVGSVGElement>('.tactical-window-frame');
+  const paths = Array.from(
+    rootElement.querySelectorAll<SVGPathElement>(
+      '.tactical-window-frame__glow, .tactical-window-frame__line'
+    )
+  );
+
+  if (!frame || paths.length === 0) {
+    return;
+  }
+
+  const syncFrame = (): void => {
+    const width = Math.max(1, window.innerWidth);
+    const height = Math.max(1, window.innerHeight);
+    const edge = 1;
+    const cut = 18;
+    const topLeftWing = width * 0.28;
+    const topRightWing = width * 0.86;
+    const bottomLeftWing = width * 0.22;
+    const bottomRightWing = width * 0.86;
+    const points: Array<readonly [number, number]> = [
+      [cut, edge],
+      [topLeftWing, edge],
+      [topLeftWing + cut, cut],
+      [topRightWing - cut, cut],
+      [topRightWing, edge],
+      [width - cut, edge],
+      [width - edge, cut],
+      [width - edge, height - cut],
+      [width - cut, height - edge],
+      [bottomRightWing, height - edge],
+      [bottomRightWing - cut, height - cut],
+      [bottomLeftWing + cut, height - cut],
+      [bottomLeftWing, height - edge],
+      [cut, height - edge],
+      [edge, height - cut],
+      [edge, cut]
+    ];
+    const path = `M ${points
+      .map(([x, y]) => `${String(x)} ${String(y)}`)
+      .join(' L ')} Z`;
+
+    frame.setAttribute('viewBox', `0 0 ${String(width)} ${String(height)}`);
+    paths.forEach((framePath) => {
+      framePath.setAttribute('d', path);
+    });
+  };
+
+  syncFrame();
+  window.addEventListener('resize', syncFrame);
+}
+
+function readStoredSidebarState(): boolean | null {
+  try {
+    const storedValue = window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY);
+    if (storedValue === null) {
+      return null;
+    }
+    return storedValue === 'true';
+  } catch {
+    return null;
+  }
+}
+
+function setSidebarCollapsed(collapsed: boolean, persist = true): void {
+  rootElement.classList.toggle('app--sidebar-collapsed', collapsed);
+
+  if (sidebarToggle) {
+    const label = collapsed ? 'Expandir menu lateral' : 'Contraer menu lateral';
+    sidebarToggle.innerHTML = renderIcon(collapsed ? 'sidebar-expand' : 'sidebar-collapse');
+    sidebarToggle.setAttribute('aria-label', label);
+    sidebarToggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    sidebarToggle.title = label;
+  }
+
+  if (!persist) {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(collapsed));
+  } catch {
+    // The menu remains functional for the current session when storage is unavailable.
+  }
 }
 
 async function synchronizeRuntimeState(): Promise<void> {
@@ -1104,6 +1252,7 @@ function updateStartServerButton(actions: AllowedActionsDto): void {
   startServerAction.disabled = state.disabled;
   startServerAction.textContent = state.buttonLabel;
   startServerAction.dataset.action = state.action;
+  startServerAction.title = state.buttonLabel;
   updateSidebarRuntimeStatus(state.runtimeTone, state.runtimeLabel);
 }
 
@@ -1230,6 +1379,20 @@ function renderViewLoading(message: string): void {
       </section>
     `
   );
+}
+
+function clearViewLoadingOverlay(): void {
+  if (!contentView) {
+    return;
+  }
+
+  contentView.querySelector('.view-loading-overlay')?.remove();
+  Array.from(contentView.children).forEach((child) => {
+    if (child instanceof HTMLElement) {
+      child.inert = false;
+    }
+  });
+  contentView.removeAttribute('aria-busy');
 }
 
 async function renderGeneralView(renderId: number): Promise<void> {
@@ -2718,7 +2881,15 @@ async function refreshAdminView(options: { force?: boolean } = {}, renderId?: nu
 
     const belongsToCurrentView = renderId === undefined || isCurrentViewRender(renderId, 'admin');
     if (belongsToCurrentView && navigationState.is('admin') && (options.force || !isEditingAdminForm())) {
-      setContent(renderAdminStatus(adminStatus, playersStatus, adminViewState.getTab()));
+      const activeTab = adminViewState.getTab();
+      if (activeTab === 'general' && adminStatus.status === 'READY' && !hasAdminGeneralData(adminStatus)) {
+        renderViewLoading('CARGANDO DATOS DEL SERVIDOR');
+        return;
+      }
+      const html = renderAdminStatus(adminStatus, playersStatus, activeTab);
+      if (!updateAdminLiveRegions(html, activeTab)) {
+        setContent(html);
+      }
       bindAdminControls();
     }
   } catch (error) {
@@ -2727,6 +2898,49 @@ async function refreshAdminView(options: { force?: boolean } = {}, renderId?: nu
       renderSimpleView('Administracion', `No se pudo cargar el panel administrativo. ${message}`);
     }
   }
+}
+
+function updateAdminLiveRegions(html: string, activeTab: AdminTab): boolean {
+  if (!contentView?.querySelector(`[data-admin-active-tab="${activeTab}"]`)) {
+    return false;
+  }
+
+  const template = document.createElement('template');
+  template.innerHTML = html.trim();
+  const nextRegions = Array.from(template.content.querySelectorAll<HTMLElement>('[data-admin-live-region]'));
+  const currentRegions = new Map(
+    Array.from(contentView.querySelectorAll<HTMLElement>('[data-admin-live-region]')).map((region) => [
+      region.dataset['adminLiveRegion'] ?? '',
+      region
+    ])
+  );
+
+  if (nextRegions.length !== currentRegions.size) {
+    return false;
+  }
+
+  for (const nextRegion of nextRegions) {
+    const regionId = nextRegion.dataset['adminLiveRegion'] ?? '';
+    const currentRegion = currentRegions.get(regionId);
+    if (!currentRegion) {
+      return false;
+    }
+  }
+
+  for (const nextRegion of nextRegions) {
+    const regionId = nextRegion.dataset['adminLiveRegion'] ?? '';
+    const currentRegion = currentRegions.get(regionId);
+    if (currentRegion && currentRegion.innerHTML !== nextRegion.innerHTML) {
+      currentRegion.innerHTML = nextRegion.innerHTML;
+    }
+    if (currentRegion) {
+      currentRegion.className = nextRegion.className;
+      currentRegion.title = nextRegion.title;
+    }
+  }
+
+  clearViewLoadingOverlay();
+  return true;
 }
 
 function isEditingAdminForm(): boolean {
@@ -2746,8 +2960,16 @@ function startAdminAutoRefresh(): void {
 }
 
 function bindAdminControls(): void {
-  document.querySelector<HTMLButtonElement>('#restart-server')?.addEventListener('click', showServerRestartConfirmation);
+  const restartButton = document.querySelector<HTMLButtonElement>('#restart-server');
+  if (restartButton && restartButton.dataset['adminBound'] !== 'true') {
+    restartButton.dataset['adminBound'] = 'true';
+    restartButton.addEventListener('click', showServerRestartConfirmation);
+  }
   document.querySelectorAll<HTMLFormElement>('[data-admin-form]').forEach((form) => {
+    if (form.dataset['adminBound'] === 'true') {
+      return;
+    }
+    form.dataset['adminBound'] = 'true';
     form.addEventListener('submit', (event) => {
       event.preventDefault();
       if (!form.reportValidity()) {
