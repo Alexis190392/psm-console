@@ -3586,11 +3586,16 @@ function compareAppProcessMetrics(a: AppProcessMetricDto, b: AppProcessMetricDto
 }
 
 function renderProcessMetricCard(process: AppProcessMetricDto): string {
+  const iconName = getProcessMetricIcon(process);
+
   return `
     <article class="process-card process-card--${escapeHtml(process.kind)}">
-      <div>
-        <strong>PSMc ${escapeHtml(process.label)}</strong>
-        <span>PID ${String(process.pid)}</span>
+      <div class="process-card__identity">
+        <span class="process-card__icon">${renderIcon(iconName)}</span>
+        <div>
+          <strong>PSMc ${escapeHtml(process.label)}</strong>
+          <span>PID ${String(process.pid)}</span>
+        </div>
       </div>
       <p>${escapeHtml(process.detail)}</p>
       <dl>
@@ -3599,6 +3604,33 @@ function renderProcessMetricCard(process: AppProcessMetricDto): string {
       </dl>
     </article>
   `;
+}
+
+function getProcessMetricIcon(process: AppProcessMetricDto): string {
+  if (process.kind === 'main') {
+    return 'application';
+  }
+
+  if (process.kind === 'renderer') {
+    return 'dashboard';
+  }
+
+  if (process.kind === 'gpu') {
+    return 'cpu';
+  }
+
+  if (process.kind === 'utility') {
+    const service = `${process.serviceName ?? ''} ${process.label}`.toLowerCase();
+    if (service.includes('network') || service.includes('red')) {
+      return 'waypoints';
+    }
+    if (service.includes('storage') || service.includes('almacenamiento')) {
+      return 'hard-drive';
+    }
+    return 'settings';
+  }
+
+  return 'workflow';
 }
 
 function formatProcessCpu(value: number): string {

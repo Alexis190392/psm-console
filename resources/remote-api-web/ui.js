@@ -75,13 +75,13 @@
 
   function getErrorLabel(code) {
     var labels = {
-      REMOTE_API_INVALID_CREDENTIALS: 'Usuario o contrasena incorrectos.',
+      REMOTE_API_INVALID_CREDENTIALS: 'Usuario o contraseña incorrectos.',
       REMOTE_API_LOGIN_TEMPORARILY_LOCKED: 'Demasiados intentos. Espera unos segundos.',
-      SERVER_ALREADY_RUNNING: 'El servidor ya esta ejecutandose.',
-      SERVER_ALREADY_STOPPED: 'El servidor ya esta detenido.',
-      INTERNAL_SERVER_ERROR: 'La operacion no pudo completarse.'
+      SERVER_ALREADY_RUNNING: 'El servidor ya está ejecutándose.',
+      SERVER_ALREADY_STOPPED: 'El servidor ya está detenido.',
+      INTERNAL_SERVER_ERROR: 'La operación no pudo completarse.'
     };
-    return labels[code] || String(code || 'La operacion no pudo completarse.');
+    return labels[code] || String(code || 'La operación no pudo completarse.');
   }
 
   function showLogin(message) {
@@ -118,7 +118,7 @@
     };
     document.getElementById('access-profile-label').textContent = access.profile === 'CLIENT'
       ? 'Acceso cliente'
-      : 'Administracion web';
+      : 'Administración web';
     document.querySelectorAll('[data-permission]').forEach(function (element) {
       element.hidden = !hasPermission(element.dataset.permission);
     });
@@ -204,7 +204,7 @@
   function formatState(value) {
     var labels = {
       READY: 'Listo',
-      RUNNING: 'Ejecutandose',
+      RUNNING: 'Ejecutándose',
       STARTING: 'Iniciando',
       STOPPING: 'Deteniendo',
       STOPPED: 'Detenido',
@@ -261,11 +261,11 @@
 
       var details = document.createElement('div');
       var playerId = document.createElement('strong');
-      playerId.textContent = player.playerId ? 'PlayerUID ' + player.playerId : 'Sesion activa';
+      playerId.textContent = player.playerId ? 'PlayerUID ' + player.playerId : 'Sesión activa';
       var location = document.createElement('small');
       location.textContent = player.locationX !== undefined && player.locationY !== undefined
-        ? 'X ' + Math.round(player.locationX) + ' · Y ' + Math.round(player.locationY)
-        : 'Ubicacion no disponible';
+        ? 'X ' + Math.round(player.locationX) + ' / Y ' + Math.round(player.locationY)
+        : 'Ubicación no disponible';
       details.append(playerId, location);
 
       var controls = document.createElement('div');
@@ -316,7 +316,7 @@
         body: JSON.stringify({
           action: action,
           userId: userId,
-          message: 'Accion solicitada desde PSM Console Web.'
+          message: 'Acción solicitada desde PSM Console Web.'
         })
       });
       showToast(action === 'ban' ? 'Jugador baneado.' : 'Jugador expulsado.');
@@ -389,7 +389,7 @@
       }
       connectionLabel.textContent = 'Conectado';
       if (notify) {
-        showToast('Informacion actualizada.');
+        showToast('Información actualizada.');
       }
     } catch (error) {
       if (error.message !== 'AUTHENTICATION_REQUIRED') {
@@ -434,19 +434,19 @@
   async function pollOperation(operationId) {
     for (var attempt = 0; attempt < 120; attempt += 1) {
       var operation = await apiRequest('/operations/' + encodeURIComponent(operationId));
-      operationMessage.textContent = String(operation.percent || 0) + '% · ' + (operation.message || operation.title);
+      operationMessage.textContent = String(operation.percent || 0) + '% / ' + (operation.message || operation.title);
       if (['COMPLETED', 'FAILED', 'CANCELLED'].includes(operation.status)) {
         if (operation.status === 'FAILED') {
           throw new Error(operation.error || operation.message);
         }
-        showToast(operation.message || 'Operacion completada.');
+        showToast(operation.message || 'Operación completada.');
         return;
       }
       await new Promise(function (resolve) {
         setTimeout(resolve, 500);
       });
     }
-    throw new Error('La operacion continua en segundo plano.');
+    throw new Error('La operación continúa en segundo plano.');
   }
 
   function setActionButtonsDisabled(disabled) {
@@ -472,8 +472,8 @@
     passwordInput.type = visible ? 'password' : 'text';
     this.classList.toggle('is-visible', !visible);
     this.setAttribute('aria-pressed', String(!visible));
-    this.setAttribute('aria-label', visible ? 'Mostrar contrasena' : 'Ocultar contrasena');
-    this.setAttribute('title', visible ? 'Mostrar contrasena' : 'Ocultar contrasena');
+    this.setAttribute('aria-label', visible ? 'Mostrar contraseña' : 'Ocultar contraseña');
+    this.setAttribute('title', visible ? 'Mostrar contraseña' : 'Ocultar contraseña');
   });
   document.getElementById('logout-button').addEventListener('click', function () {
     void logout();

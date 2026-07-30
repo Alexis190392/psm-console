@@ -1342,6 +1342,41 @@ input[type="range"] {
   background: rgba(7, 11, 14, 0.58);
 }
 
+.process-card__identity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+}
+
+.process-card__identity > div {
+  min-width: 0;
+}
+
+.process-card__icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  place-items: center;
+  border: 1px solid rgba(16, 213, 228, 0.32);
+  color: var(--color-primary);
+  background: rgba(16, 213, 228, 0.08);
+  clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
+}
+
+.process-card__icon .ui-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.process-card--gpu .process-card__icon,
+.process-card--other .process-card__icon {
+  border-color: rgba(255, 36, 124, 0.38);
+  color: var(--color-accent);
+  background: rgba(255, 36, 124, 0.08);
+}
+
 .process-card strong,
 .process-card span,
 .process-card p,

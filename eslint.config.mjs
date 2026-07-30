@@ -12,6 +12,7 @@ export default tseslint.config(
       '.tmp-tests/**',
       'resources/remote-api-web/ui.js',
       'scripts/capture-screenshots.js',
+      'scripts/capture-remote-api-screenshots.js',
       'scripts/capture-responsive-screenshots.js',
       'eslint.config.mjs'
     ]

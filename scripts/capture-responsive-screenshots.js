@@ -1,5 +1,5 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
-const { mkdirSync, writeFileSync } = require('node:fs');
+const { mkdirSync, renameSync, rmSync, writeFileSync } = require('node:fs');
 const { join } = require('node:path');
 
 const { createNestContext } = require('../dist/main/bootstrap/nest-bootstrap');
@@ -110,6 +110,20 @@ async function capture(window, viewport, view) {
   );
 }
 
+async function waitForSelectorRemoved(window, selector, timeoutMs = 30000) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const exists = await window.webContents.executeJavaScript(
+      `Boolean(document.querySelector(${JSON.stringify(selector)}))`
+    );
+    if (!exists) {
+      return;
+    }
+    await wait(250);
+  }
+  throw new Error(`Selector did not disappear: ${selector}`);
+}
+
 async function capturePageWithRetry(window, attempts = 3) {
   let lastError;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
@@ -120,6 +134,26 @@ async function capturePageWithRetry(window, attempts = 3) {
       await wait(attempt * 500);
     }
   }
+  throw lastError;
+}
+
+async function writeScreenshotWithRetry(targetPath, pngBuffer, attempts = 5) {
+  const temporaryPath = `${targetPath}.${String(process.pid)}.tmp`;
+  let lastError;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      writeFileSync(temporaryPath, pngBuffer);
+      rmSync(targetPath, { force: true });
+      renameSync(temporaryPath, targetPath);
+      return;
+    } catch (error) {
+      lastError = error;
+      rmSync(temporaryPath, { force: true });
+      await wait(attempt * 300);
+    }
+  }
+
   throw lastError;
 }
 
@@ -294,10 +328,11 @@ async function waitForEnabledNavigation(window, nav, timeoutMs = 30000) {
 
 async function writeManualScreenshot(window, outputDir, view) {
   await openManualView(window, view);
+  await waitForSelectorRemoved(window, '.view-loading-overlay');
   await applySafeDocumentationData(window, Boolean(view.fixtureLogs));
   await wait(250);
   const image = await capturePageWithRetry(window);
-  writeFileSync(join(outputDir, `${view.name}.png`), image.toPNG());
+  await writeScreenshotWithRetry(join(outputDir, `${view.name}.png`), image.toPNG());
 }
 
 async function captureManualScreenshots(window) {

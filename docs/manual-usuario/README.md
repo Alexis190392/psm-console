@@ -299,6 +299,18 @@ Después de abrir uno anterior, usa **Volver al log actual** para retomar la ses
 
 El botón de exportación guarda el contenido visible en un archivo de texto. Antes de compartirlo, revisa si contiene rutas, direcciones o identificadores de jugadores.
 
+### Procesos de PSM Console
+
+El panel desplegable de procesos identifica cada componente con un nombre y un icono:
+
+- **PSMc Principal:** coordina la aplicación, el estado y la API.
+- **PSMc Interfaz:** dibuja la ventana y procesa los controles.
+- **PSMc Gráficos:** utiliza la aceleración gráfica de Electron.
+- **PSMc Red interna:** gestiona conexiones de la aplicación.
+- **PSMc Almacenamiento:** atiende tareas internas de archivos cuando Electron lo requiere.
+
+Es normal que Windows muestre varios subprocesos agrupados bajo PSM Console. Esta separación evita que un problema visual o de red detenga todo el programa. El panel permite reconocer cuál consume CPU o memoria sin exponer detalles técnicos innecesarios.
+
 ## 10. Configuración de la aplicación
 
 Este grupo contiene preferencias de PSM Console, separadas de la configuración de Palworld.
@@ -401,6 +413,10 @@ El perfil cliente muestra únicamente las secciones y acciones habilitadas. La i
   <img src="../../resources/screenshots/api-web-cliente.png" alt="Panel web con acceso cliente" width="68%" />
   <img src="../../resources/screenshots/api-web-cliente-movil.png" alt="Panel cliente adaptado a móvil" width="28%" />
 </p>
+
+En escritorio, las secciones aparecen en el lateral izquierdo. En teléfonos, la navegación se ubica en la parte inferior para mantener visibles los datos y controles. Los botones de **General**, **Jugadores**, **Logs** y **Salir** conservan un área táctil suficiente y no requieren ampliar la página.
+
+El indicador verde de la barra superior confirma que la sesión sigue comunicándose con PSM Console. Si cambia a **Sin respuesta**, verifica que la aplicación continúe abierta y que el equipo siga accesible.
 
 ### Firewall y direcciones
 

@@ -48,6 +48,8 @@ El manual explica la preparación inicial, configuración, administración, back
 
 ![Panel administrativo de PSM Console Web](resources/screenshots/api-web-administrativa.png)
 
+La misma interfaz se adapta a teléfonos y equipos de escritorio, conserva la identidad Tactical HUD de la aplicación y muestra solamente las funciones autorizadas para cada perfil.
+
 ## Requisitos
 
 ### Para usar el portable
@@ -79,6 +81,6 @@ npm.cmd run start:dev
 
 ## Estado del proyecto
 
-Versión actual: `0.16.18 Dev`.
+Versión actual: `0.17.1 Dev`.
 
 Palworld, Steam y SteamCMD son marcas de sus respectivos propietarios. Este proyecto es una herramienta independiente y no está afiliado con Pocketpair ni Valve.
