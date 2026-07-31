@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createSummaryCardState } from '../src/renderer/components/summary-card';
 import {
   createGeneralRemoteApiCard,
+  createGeneralServerUpdateCard,
   renderGeneralUpdateAction,
   renderGeneralView,
   shouldRefreshGeneralRemoteApi
@@ -38,6 +39,42 @@ describe('general view', () => {
     expect(html).toContain('Red: verificado hace 1 minuto');
     expect(html).toContain('summary-card--prominent');
     expect(html).toContain('summary-card--compact');
+  });
+
+  it('renders the requested General rows in their supplied order', () => {
+    const titles = ['Servidor', 'Servidor', 'Juego local', 'Juego publico', 'API web', 'Jugadores'];
+    const html = renderGeneralView({
+      networkFreshness: 'pendiente',
+      primaryCards: titles.map((title, index) => ({
+        id: `card-${String(index)}`,
+        title,
+        value: title,
+        detail: title,
+        target: 'home',
+        ...createSummaryCardState('ok')
+      })),
+      supportCards: []
+    });
+
+    const positions = titles.map((_title, index) => html.indexOf(`id="card-${String(index)}"`));
+    expect(positions).toEqual([...positions].sort((left, right) => left - right));
+  });
+
+  it('offers the existing safe update action when Steam reports a newer build', () => {
+    expect(createGeneralServerUpdateCard({
+      status: 'UPDATE_AVAILABLE',
+      appId: '2394010',
+      localBuildId: '24181105',
+      requiredBuildId: '24190000',
+      checkedAt: '2026-07-31T12:00:00.000Z',
+      message: 'Disponible.'
+    })).toEqual(expect.objectContaining({
+      title: 'Servidor',
+      value: 'Actualizar',
+      detail: 'Build 24181105 -> 24190000.',
+      action: 'server-update',
+      tone: 'warning'
+    }));
   });
 
   it('updates only the release action without rebuilding the complete view', () => {

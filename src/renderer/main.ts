@@ -18,6 +18,7 @@ import type { LogFileSummaryDto, LogModule } from '../shared/dto/log-status.dto'
 import type { OperationProgressDto } from '../shared/dto/operation-progress.dto';
 import type { PalworldAdminAction, PalworldAdminStatusDto } from '../shared/dto/palworld-admin.dto';
 import type { PalworldPlayersStatusDto } from '../shared/dto/palworld-players-status.dto';
+import type { PalworldUpdateStatusDto } from '../shared/dto/palworld-installation-status.dto';
 import type { PalworldQueryPortStatusDto, PalworldRuntimeStatusDto } from '../shared/dto/palworld-runtime-status.dto';
 import type {
   RemoteApiPermission,
@@ -58,6 +59,7 @@ import {
 } from './views/server-configuration-view';
 import {
   createGeneralRemoteApiCard,
+  createGeneralServerUpdateCard,
   renderGeneralRemoteApiCard,
   renderGeneralUpdateAction,
   renderGeneralView as renderGeneralViewHtml,
@@ -355,6 +357,7 @@ let publicNetworkRequestPort: string | null = null;
 let latestConfiguredPort: string | null = null;
 let latestBackupSummary: BackupSummaryDto | null = null;
 let latestUpdateStatus: AppUpdateStatusDto | null = null;
+let latestPalworldUpdateStatus: PalworldUpdateStatusDto | null = null;
 let updateStatusRequest: Promise<AppUpdateStatusDto> | null = null;
 let announcedUpdateVersion: string | null = null;
 let adminRefreshTimer: number | null = null;
@@ -1428,6 +1431,7 @@ async function renderGeneralView(renderId: number): Promise<void> {
   const serverState = createServerRuntimeSummary(serverRuntime);
   const playersState = createPlayersSummaryCard(playersSummary);
   const remoteApiCard = createGeneralRemoteApiCard(remoteApiStatus);
+  const serverUpdateCard = createGeneralServerUpdateCard(latestPalworldUpdateStatus);
   const networkFreshness = formatLastVerification(latestFirewallCheckedAt);
 
   setContent(renderGeneralViewHtml({
@@ -1441,6 +1445,7 @@ async function renderGeneralView(renderId: number): Promise<void> {
           target: serverState.state.tone === 'error' ? 'logs' : 'server',
           ...serverState.state
       },
+      serverUpdateCard,
       {
           id: 'general-local-play-card',
           title: 'Juego local',
@@ -1459,6 +1464,7 @@ async function renderGeneralView(renderId: number): Promise<void> {
           target: 'network',
           ...publicPlay.state
       },
+      remoteApiCard,
       {
           title: 'Jugadores',
           value: playersState.value,
@@ -1466,8 +1472,7 @@ async function renderGeneralView(renderId: number): Promise<void> {
           target: 'admin',
           adminTab: 'players',
           ...playersState.state
-      },
-      remoteApiCard
+      }
     ],
     supportCards: [
       {
@@ -1502,6 +1507,7 @@ async function renderGeneralView(renderId: number): Promise<void> {
   }));
   bindSummaryCards();
   bindReleaseUpdateAction();
+  void hydrateGeneralServerUpdate(renderId);
   void hydrateGeneralLocalPreview(port, renderId);
   void hydrateGeneralPublicPreview(port, renderId);
   void hydrateGeneralNetworkSummary(port, renderId);
@@ -2988,6 +2994,34 @@ function bindAdminControls(): void {
   });
 }
 
+async function hydrateGeneralServerUpdate(renderId: number): Promise<void> {
+  if (!palcmApi) {
+    return;
+  }
+
+  try {
+    latestPalworldUpdateStatus = await palcmApi.server.getUpdateStatus();
+  } catch (error) {
+    latestPalworldUpdateStatus = {
+      status: 'UNKNOWN',
+      appId: '2394010',
+      checkedAt: new Date().toISOString(),
+      message: 'No se pudo consultar la version publicada por Steam.'
+    };
+    appendConsoleLine(`No se pudo verificar la actualizacion del servidor: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  if (!isCurrentViewRender(renderId, 'home')) {
+    return;
+  }
+
+  replaceSummaryCard(
+    'general-server-update-card',
+    renderSummaryCard({ ...createGeneralServerUpdateCard(latestPalworldUpdateStatus), density: 'prominent' })
+  );
+  bindSummaryCards();
+}
+
 function showForceServerUpdateConfirmation(): void {
   if (!appFooter) {
     return;
@@ -2998,7 +3032,7 @@ function showForceServerUpdateConfirmation(): void {
   appFooter.classList.add('app-footer--confirm');
   appFooter.innerHTML = renderInlineConfirm({
     message:
-      'Se guardara el mundo, se detendra el servidor, se creara un respaldo y SteamCMD ejecutara force_install_dir con app_update 2394010 validate. Al finalizar se iniciara nuevamente.',
+      'Se guardara el mundo si esta activo, se detendra el servidor, se creara un respaldo y SteamCMD ejecutara force_install_dir con app_update 2394010 validate. Si estaba activo, al finalizar se iniciara nuevamente.',
     actions: [
       { id: 'confirm-force-server-update', label: 'Actualizar servidor', tone: 'warning' },
       { id: 'cancel-force-server-update', label: 'Cancelar', tone: 'secondary' }
@@ -3055,6 +3089,7 @@ async function forceUpdateRunningServer(): Promise<void> {
   }
 
   showToast('Servidor actualizado y datos validados');
+  latestPalworldUpdateStatus = await palcmApi.server.getUpdateStatus({ force: true });
   await refreshState();
 }
 
@@ -4666,6 +4701,11 @@ function bindSummaryCards(): void {
 
     card.dataset['summaryBound'] = 'true';
     card.addEventListener('click', (event) => {
+      if (card.dataset['summaryAction'] === 'server-update') {
+        showForceServerUpdateConfirmation();
+        return;
+      }
+
       const copyValue = card.dataset['copyValue'];
       const clickedElement = event.target instanceof Element ? event.target : null;
       const clickedTargetIcon = clickedElement

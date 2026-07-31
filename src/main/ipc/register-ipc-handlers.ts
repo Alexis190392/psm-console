@@ -25,6 +25,7 @@ import type { PalworldCreateDefaultConfigurationRequestDto } from '../../shared/
 import type {
   PalworldInstallRequestDto,
   PalworldRepairRequestDto,
+  PalworldUpdateStatusRequestDto,
   PalworldUpdateRequestDto
 } from '../../shared/dto/palworld-installation-status.dto';
 import type {
@@ -135,6 +136,12 @@ export function registerIpcHandlers(
 
   ipcMain.handle(ipcChannels.serverGetInstallationStatus, () =>
     palworldInstallationService.getStatus()
+  );
+
+  ipcMain.handle(
+    ipcChannels.serverGetUpdateStatus,
+    (_event, request: PalworldUpdateStatusRequestDto | undefined) =>
+      palworldInstallationService.getUpdateStatus(request)
   );
 
   ipcMain.handle(ipcChannels.serverInstall, (_event, request: PalworldInstallRequestDto) =>

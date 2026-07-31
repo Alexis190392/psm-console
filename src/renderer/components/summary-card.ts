@@ -19,6 +19,7 @@ export interface SummaryCardDetails extends SummaryCardState {
   adminTab?: string;
   settingsTab?: string;
   copyValue?: string;
+  action?: 'server-update';
 }
 
 export interface SummaryCardViewModel {
@@ -33,6 +34,7 @@ export function renderSummaryCard(details: SummaryCardDetails): string {
   const copyAttribute = details.copyValue ? ` data-copy-value="${escapeHtml(details.copyValue)}"` : '';
   const adminTabAttribute = details.adminTab ? ` data-admin-tab="${escapeHtml(details.adminTab)}"` : '';
   const settingsTabAttribute = details.settingsTab ? ` data-settings-tab="${escapeHtml(details.settingsTab)}"` : '';
+  const actionAttribute = details.action ? ` data-summary-action="${escapeHtml(details.action)}"` : '';
   const canOpenTargetFromIcon = Boolean(
     details.copyValue && ['warning', 'configuration', 'error'].includes(details.tone)
   );
@@ -41,7 +43,7 @@ export function renderSummaryCard(details: SummaryCardDetails): string {
   const densityClass = details.density ? ` summary-card--${details.density}` : '';
 
   return `
-    <button${idAttribute} class="summary-card summary-card--${details.tone}${densityClass}" data-target="${details.target}"${adminTabAttribute}${settingsTabAttribute}${copyAttribute} type="button">
+    <button${idAttribute} class="summary-card summary-card--${details.tone}${densityClass}" data-target="${details.target}"${adminTabAttribute}${settingsTabAttribute}${copyAttribute}${actionAttribute} type="button">
       <span class="summary-card__body">
         <span class="summary-card__title">${escapeHtml(details.title)}</span>
         <strong>${escapeHtml(details.value)}</strong>
