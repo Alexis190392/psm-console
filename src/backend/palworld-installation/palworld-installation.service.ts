@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { OperationManagerService } from '../operations/operation-manager.service';
 import { PortablePathService } from '../portable-path/portable-path.service';
 import { PortableStateService } from '../portable-state/portable-state.service';
@@ -294,6 +294,7 @@ export class PalworldInstallationService {
           '+quit'
         ],
         {
+          cwd: dirname(executablePath),
           windowsHide: true,
           shell: false
         }

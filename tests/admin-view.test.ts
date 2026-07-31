@@ -55,6 +55,8 @@ describe('admin view', () => {
     expect(html).toContain('data-admin-form="save"');
     expect(html).toContain('data-admin-form="shutdown"');
     expect(html).toContain('data-admin-form="stop"');
+    expect(html).toContain('id="force-update-server"');
+    expect(html).toContain('Forzar actualizacion');
     expect(html).toContain('class="input-with-unit"');
     expect(html).toContain('<small>s</small>');
     expect(html).toContain('Servidor de prueba');

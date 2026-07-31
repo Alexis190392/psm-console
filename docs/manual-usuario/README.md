@@ -133,7 +133,7 @@ Los cambios sin guardar permanecen disponibles al navegar por la aplicación dur
 ### Otras acciones
 
 - **Default:** prepara los valores iniciales del servidor. Requiere confirmación.
-- **Actualizar:** vuelve a leer el INI activo.
+- **Actualizar:** con el servidor detenido, crea un respaldo de mantenimiento y ejecuta SteamCMD con `force_install_dir` y validacion completa.
 - **Mantenimiento:** habilita acciones adicionales sobre la configuración.
 - **Descartar:** elimina los cambios pendientes del formulario.
 - **Ver INI avanzado:** muestra cómo quedará el contenido antes de guardarlo.
@@ -211,6 +211,7 @@ Permite:
 
 - Consultar información, métricas y configuración reportadas por el servidor.
 - Guardar el mundo manualmente.
+- Forzar una actualizacion segura: guarda el mundo, detiene el servidor, respalda los datos, actualiza con SteamCMD y vuelve a iniciarlo.
 - Programar un apagado con tiempo y mensaje.
 - Reiniciar el servidor.
 - Forzar la detención en una emergencia.

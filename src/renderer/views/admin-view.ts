@@ -74,6 +74,10 @@ function renderAdminActiveTab(
 function renderAdminGeneralTab(adminStatus: PalworldAdminStatusDto): string {
   return `
     <div class="admin-runtime-actions">
+      <button id="force-update-server" class="secondary-button button-with-icon" type="button">
+        ${renderIcon('download')}
+        <span>Forzar actualizacion</span>
+      </button>
       <button id="restart-server" class="secondary-button button-with-icon" type="button">
         ${renderIcon('refresh')}
         <span>Reiniciar servidor</span>

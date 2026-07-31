@@ -2960,6 +2960,11 @@ function startAdminAutoRefresh(): void {
 }
 
 function bindAdminControls(): void {
+  const forceUpdateButton = document.querySelector<HTMLButtonElement>('#force-update-server');
+  if (forceUpdateButton && forceUpdateButton.dataset['adminBound'] !== 'true') {
+    forceUpdateButton.dataset['adminBound'] = 'true';
+    forceUpdateButton.addEventListener('click', showForceServerUpdateConfirmation);
+  }
   const restartButton = document.querySelector<HTMLButtonElement>('#restart-server');
   if (restartButton && restartButton.dataset['adminBound'] !== 'true') {
     restartButton.dataset['adminBound'] = 'true';
@@ -2981,6 +2986,76 @@ function bindAdminControls(): void {
       showAdminConfirmation(form, submitter);
     });
   });
+}
+
+function showForceServerUpdateConfirmation(): void {
+  if (!appFooter) {
+    return;
+  }
+
+  rootElement.classList.add('app--footer-visible');
+  appFooter.classList.remove('hidden');
+  appFooter.classList.add('app-footer--confirm');
+  appFooter.innerHTML = renderInlineConfirm({
+    message:
+      'Se guardara el mundo, se detendra el servidor, se creara un respaldo y SteamCMD ejecutara force_install_dir con app_update 2394010 validate. Al finalizar se iniciara nuevamente.',
+    actions: [
+      { id: 'confirm-force-server-update', label: 'Actualizar servidor', tone: 'warning' },
+      { id: 'cancel-force-server-update', label: 'Cancelar', tone: 'secondary' }
+    ]
+  });
+  document.querySelector<HTMLButtonElement>('#confirm-force-server-update')?.addEventListener('click', () => {
+    runUiAction('No se pudo actualizar el servidor', forceUpdateRunningServer);
+  });
+  document.querySelector<HTMLButtonElement>('#cancel-force-server-update')?.addEventListener(
+    'click',
+    updateFooterChrome
+  );
+}
+
+async function forceUpdateRunningServer(): Promise<void> {
+  if (!palcmApi) {
+    return;
+  }
+
+  const runtimeStatus = await palcmApi.server.getRuntimeStatus();
+  if (runtimeStatus.state === 'STARTING' || runtimeStatus.state === 'STOPPING') {
+    throw new Error('PALWORLD_SERVER_TRANSITION_IN_PROGRESS');
+  }
+  const shouldRestart = runtimeStatus.state === 'RUNNING';
+  navigationState.set('logs');
+  renderActiveView();
+  appendConsoleLine('Actualizacion segura: solicitando guardado del mundo.');
+
+  if (shouldRestart) {
+    const saveResult = await palcmApi.admin.executeAction({
+      confirmed: true,
+      action: 'save'
+    });
+    appendConsoleLine(`Actualizacion segura: ${saveResult.message}`);
+
+    const stopAccepted = await palcmApi.server.stop({ confirmed: true });
+    if (!(await pollOperation(stopAccepted.operationId, { refreshStatusWhileRunning: true }))) {
+      return;
+    }
+  }
+
+  appendConsoleLine('Actualizacion segura: ejecutando SteamCMD con force_install_dir y validate.');
+  const updateAccepted = await palcmApi.server.update({ confirmed: true });
+  if (!(await pollOperation(updateAccepted.operationId))) {
+    return;
+  }
+
+  if (shouldRestart) {
+    appendConsoleLine('Actualizacion segura: iniciando nuevamente el servidor.');
+    const startAccepted = await palcmApi.server.start({ confirmed: true });
+    if (!(await pollOperation(startAccepted.operationId, { refreshStatusWhileRunning: true }))) {
+      return;
+    }
+  }
+
+  showToast('Servidor actualizado y datos validados');
+  await refreshState();
 }
 
 function showServerRestartConfirmation(): void {
