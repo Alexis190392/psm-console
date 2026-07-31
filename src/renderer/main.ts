@@ -953,6 +953,7 @@ function renderOperationCancellationFooter(operation: OperationProgressDto): voi
   }
 
   rootElement.classList.add('app--footer-visible');
+  appFooter.classList.remove('app-footer--server');
   appFooter.classList.remove('hidden', 'app-footer--confirm');
   appFooter.innerHTML = `
     <span class="app-footer__message">${escapeHtml(operation.message)}</span>
@@ -3259,7 +3260,7 @@ function renderBackupsFooter(): void {
     return;
   }
 
-  appFooter.classList.remove('hidden', 'app-footer--confirm');
+  appFooter.classList.remove('hidden', 'app-footer--confirm', 'app-footer--server');
   appFooter.innerHTML = `
     <span id="backup-footer-message" class="app-footer__message">Selecciona backups para enviarlos a la papelera de Windows.</span>
     <button id="create-config-backup" class="secondary-button button-with-icon" type="button">
@@ -3785,6 +3786,7 @@ function updateFooterChrome(): void {
 
   if (!shouldShowFooter && appFooter) {
     appFooter.classList.add('hidden');
+    appFooter.classList.remove('app-footer--server');
     appFooter.innerHTML = '';
   }
 }
@@ -3809,29 +3811,34 @@ function renderServerFooter(parsed: ParsedPalworldSettings): void {
     return;
   }
 
-  appFooter.classList.remove('hidden');
+  appFooter.classList.remove('hidden', 'app-footer--confirm');
+  appFooter.classList.add('app-footer--server');
   appFooter.innerHTML = `
+    <div class="server-footer__actions server-footer__actions--maintenance">
+      <button id="restore-default-config" class="secondary-button secondary-button--warning button-with-icon" type="button">
+        ${renderIcon('reset')}
+        <span>Default</span>
+      </button>
+      <button id="update-server" class="secondary-button button-with-icon" type="button" ${isServerUpdateBlocked() ? 'disabled' : ''}>
+        ${renderIcon('refresh')}
+        <span>Actualizar</span>
+      </button>
+      <button id="server-maintenance" class="secondary-button button-with-icon" type="button" ${isServerUpdateBlocked() ? 'disabled' : ''}>
+        ${renderIcon('settings')}
+        <span>Mantenimiento</span>
+      </button>
+    </div>
     <span id="server-footer-message" class="app-footer__message">Sin cambios pendientes.</span>
-    <button id="restore-default-config" class="secondary-button secondary-button--warning button-with-icon" type="button">
-      ${renderIcon('reset')}
-      <span>Default</span>
-    </button>
-    <button id="update-server" class="secondary-button button-with-icon" type="button" ${isServerUpdateBlocked() ? 'disabled' : ''}>
-      ${renderIcon('refresh')}
-      <span>Actualizar</span>
-    </button>
-    <button id="server-maintenance" class="secondary-button button-with-icon" type="button" ${isServerUpdateBlocked() ? 'disabled' : ''}>
-      ${renderIcon('settings')}
-      <span>Mantenimiento</span>
-    </button>
-    <button id="discard-config" class="secondary-button button-with-icon" type="button" disabled>
-      ${renderIcon('undo')}
-      <span>Descartar</span>
-    </button>
-    <button id="save-config" class="primary-button button-with-icon" type="button">
-      ${renderIcon('check')}
-      <span>Guardar</span>
-    </button>
+    <div class="server-footer__actions server-footer__actions--commit">
+      <button id="discard-config" class="secondary-button button-with-icon" type="button" disabled>
+        ${renderIcon('undo')}
+        <span>Descartar</span>
+      </button>
+      <button id="save-config" class="primary-button button-with-icon" type="button">
+        ${renderIcon('check')}
+        <span>Guardar</span>
+      </button>
+    </div>
   `;
   document.querySelector<HTMLButtonElement>('#save-config')?.addEventListener('click', () => {
     runUiAction('No se pudo guardar la configuracion', () => saveConfiguration(parsed));

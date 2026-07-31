@@ -329,6 +329,15 @@ async function waitForEnabledNavigation(window, nav, timeoutMs = 30000) {
 async function writeManualScreenshot(window, outputDir, view) {
   await openManualView(window, view);
   await waitForSelectorRemoved(window, '.view-loading-overlay');
+  if (view.name === 'servidor') {
+    await window.webContents.executeJavaScript(`
+      (() => {
+        const firstGroup = document.querySelector('.settings-group');
+        if (firstGroup instanceof HTMLDetailsElement) firstGroup.open = true;
+      })()
+    `);
+    await wait(200);
+  }
   await applySafeDocumentationData(window, Boolean(view.fixtureLogs));
   await wait(250);
   const image = await capturePageWithRetry(window);

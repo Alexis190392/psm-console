@@ -1,11 +1,11 @@
 const RUNTIME_BINDING_ATTRIBUTE = /^data-[a-z0-9-]+-bound$/;
 
-export function syncLiveElement(current: HTMLElement, next: HTMLElement): void {
+export function syncLiveElement(current: Element, next: Element): void {
   syncAttributes(current, next);
   syncChildren(current, next);
 }
 
-function syncAttributes(current: HTMLElement, next: HTMLElement): void {
+function syncAttributes(current: Element, next: Element): void {
   Array.from(current.attributes).forEach((attribute) => {
     if (!next.hasAttribute(attribute.name) && !RUNTIME_BINDING_ATTRIBUTE.test(attribute.name)) {
       current.removeAttribute(attribute.name);
@@ -27,7 +27,7 @@ function syncAttributes(current: HTMLElement, next: HTMLElement): void {
   }
 }
 
-function syncChildren(current: HTMLElement, next: HTMLElement): void {
+function syncChildren(current: Element, next: Element): void {
   let cursor: ChildNode | null = current.firstChild;
 
   Array.from(next.childNodes).forEach((nextChild) => {
@@ -63,7 +63,7 @@ function syncChildren(current: HTMLElement, next: HTMLElement): void {
 }
 
 function syncNode(current: ChildNode, next: ChildNode): void {
-  if (current instanceof HTMLElement && next instanceof HTMLElement) {
+  if (current instanceof Element && next instanceof Element) {
     syncLiveElement(current, next);
     return;
   }
@@ -77,7 +77,7 @@ function canSync(current: ChildNode, next: ChildNode): boolean {
   if (current.nodeType !== next.nodeType) {
     return false;
   }
-  if (current instanceof HTMLElement && next instanceof HTMLElement) {
+  if (current instanceof Element && next instanceof Element) {
     return current.tagName === next.tagName;
   }
   return true;

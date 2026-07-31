@@ -5805,6 +5805,150 @@ html.window-maximized .tactical-window-frame {
   transition: left 180ms ease;
 }
 
+.app-footer--server:not(.app-footer--confirm) {
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(150px, 1fr) minmax(0, auto);
+  gap: 16px;
+  padding-block: 8px;
+}
+
+.server-footer__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.server-footer__actions--maintenance {
+  justify-self: start;
+}
+
+.server-footer__actions--commit {
+  justify-self: end;
+}
+
+.app-footer--server .app-footer__message {
+  align-self: center;
+  justify-self: stretch;
+  padding-inline: 12px;
+  text-align: center;
+}
+
+.app-footer--server #save-config {
+  min-width: 160px;
+  min-height: 44px;
+  padding-inline: 28px;
+}
+
+.app-footer--server #discard-config {
+  min-width: 124px;
+}
+
+.setting-field input:not([type="range"]),
+.setting-field select,
+.settings-filter__search,
+.settings-filter__category select,
+.admin-card input,
+.admin-card select,
+.admin-card textarea,
+.config-editor {
+  border-radius: 0;
+  clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
+  background:
+    linear-gradient(135deg, rgba(8, 217, 232, 0.055), transparent 38%),
+    #081017;
+  box-shadow: inset 0 0 18px rgba(8, 217, 232, 0.025);
+}
+
+.setting-field input:not([type="range"]):hover,
+.setting-field select:hover,
+.settings-filter__search:hover,
+.settings-filter__category select:hover,
+.admin-card input:hover,
+.admin-card select:hover,
+.admin-card textarea:hover {
+  border-color: rgba(8, 217, 232, 0.34);
+}
+
+.setting-toggle {
+  min-height: 36px;
+  padding: 5px 10px 5px 6px;
+  border: 1px solid rgba(143, 162, 173, 0.18);
+  clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
+  background: rgba(8, 16, 23, 0.82);
+  transition: border-color 160ms ease, background 160ms ease;
+}
+
+.setting-toggle:hover {
+  border-color: rgba(8, 217, 232, 0.38);
+  background: rgba(8, 217, 232, 0.055);
+}
+
+.setting-toggle[aria-checked="true"] {
+  border-color: rgba(8, 217, 232, 0.44);
+  background: rgba(8, 217, 232, 0.08);
+}
+
+.setting-toggle__track,
+.toggle-control__track,
+.switch-control,
+.ban-toggle__track {
+  border-radius: 0;
+  clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
+}
+
+.setting-toggle__track span,
+.toggle-control__track span,
+.switch-control span,
+.ban-toggle__thumb {
+  border-radius: 2px;
+}
+
+.setting-field input[type="range"] {
+  height: 30px;
+  cursor: pointer;
+}
+
+.setting-field input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px;
+  border: 1px solid rgba(8, 217, 232, 0.3);
+  background: linear-gradient(90deg, rgba(8, 217, 232, 0.22), rgba(255, 43, 127, 0.12));
+}
+
+.setting-field input[type="range"]::-webkit-slider-thumb {
+  width: 16px;
+  height: 20px;
+  margin-top: -8px;
+  border: 1px solid rgba(8, 217, 232, 0.8);
+  border-radius: 2px;
+  appearance: none;
+  background: var(--color-primary);
+  box-shadow: 0 0 10px rgba(8, 217, 232, 0.38);
+}
+
+@media (max-width: 1280px) {
+  .app-footer--server:not(.app-footer--confirm) {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 6px;
+  }
+
+  .app-footer--server .app-footer__message {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    min-height: 18px;
+  }
+
+  .server-footer__actions--maintenance {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .server-footer__actions--commit {
+    grid-column: 2;
+    grid-row: 1;
+  }
+}
+
 .hero {
   position: relative;
   margin-bottom: 14px;
@@ -6214,6 +6358,16 @@ html.window-maximized .tactical-window-frame {
     linear-gradient(90deg, rgba(8, 217, 232, 0.035), transparent 42%, rgba(255, 43, 127, 0.025)),
     #070c12;
   transition: left 180ms ease;
+}
+
+@media (max-width: 1280px) {
+  #app.app--footer-visible .workspace {
+    bottom: 108px;
+  }
+
+  .app-footer--server:not(.app-footer--confirm) {
+    min-height: 108px;
+  }
 }
 
 .general-primary-grid > :last-child:nth-child(odd) {

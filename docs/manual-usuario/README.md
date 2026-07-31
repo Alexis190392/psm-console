@@ -107,6 +107,8 @@ Puedes localizar una opción mediante:
 
 El contador indica cuántos parámetros coinciden con el filtro actual.
 
+Las categorías permanecen plegadas para mantener una vista compacta. Presiona el encabezado de una categoría para mostrar sus parámetros; durante una búsqueda, las categorías con coincidencias se abren automáticamente.
+
 ### Tipos de controles
 
 - **Interruptor:** activa o desactiva una opción.
@@ -137,6 +139,8 @@ Los cambios sin guardar permanecen disponibles al navegar por la aplicación dur
 - **Mantenimiento:** habilita acciones adicionales sobre la configuración.
 - **Descartar:** elimina los cambios pendientes del formulario.
 - **Ver INI avanzado:** muestra cómo quedará el contenido antes de guardarlo.
+
+La barra inferior mantiene **Default**, **Actualizar** y **Mantenimiento** a la izquierda, muestra el estado de los cambios en el centro y reserva la derecha para **Descartar** y **Guardar**. En ventanas estrechas se reorganiza automáticamente sin ocultar acciones.
 
 Si el servidor está ejecutándose, algunos cambios pueden requerir reiniciarlo para entrar en vigor.
 
