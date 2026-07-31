@@ -15,7 +15,8 @@ export interface SummaryCardDetails extends SummaryCardState {
   title: string;
   value: string;
   detail: string;
-  target: string;
+  target?: string;
+  disabled?: boolean;
   adminTab?: string;
   settingsTab?: string;
   copyValue?: string;
@@ -35,6 +36,8 @@ export function renderSummaryCard(details: SummaryCardDetails): string {
   const adminTabAttribute = details.adminTab ? ` data-admin-tab="${escapeHtml(details.adminTab)}"` : '';
   const settingsTabAttribute = details.settingsTab ? ` data-settings-tab="${escapeHtml(details.settingsTab)}"` : '';
   const actionAttribute = details.action ? ` data-summary-action="${escapeHtml(details.action)}"` : '';
+  const targetAttribute = details.target ? ` data-target="${escapeHtml(details.target)}"` : '';
+  const disabledAttribute = details.disabled ? ' disabled aria-disabled="true"' : '';
   const canOpenTargetFromIcon = Boolean(
     details.copyValue && ['warning', 'configuration', 'error'].includes(details.tone)
   );
@@ -43,7 +46,7 @@ export function renderSummaryCard(details: SummaryCardDetails): string {
   const densityClass = details.density ? ` summary-card--${details.density}` : '';
 
   return `
-    <button${idAttribute} class="summary-card summary-card--${details.tone}${densityClass}" data-target="${details.target}"${adminTabAttribute}${settingsTabAttribute}${copyAttribute}${actionAttribute} type="button">
+    <button${idAttribute} class="summary-card summary-card--${details.tone}${densityClass}"${targetAttribute}${adminTabAttribute}${settingsTabAttribute}${copyAttribute}${actionAttribute}${disabledAttribute} type="button">
       <span class="summary-card__body">
         <span class="summary-card__title">${escapeHtml(details.title)}</span>
         <strong>${escapeHtml(details.value)}</strong>

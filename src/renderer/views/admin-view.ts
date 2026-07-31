@@ -350,8 +350,9 @@ function renderPlayersSection(
   emptyMessage: string,
   allowKick: boolean
 ): string {
+  const sectionKey = allowKick ? 'current' : 'previous';
   return `
-    <section class="players-section">
+    <section class="players-section" data-live-key="players-${sectionKey}">
       <div class="players-section__header"><h4>${escapeHtml(title)}</h4><span>${String(players.length)}</span></div>
       ${
         players.length > 0
@@ -381,9 +382,10 @@ function renderAdminPlayerRow(player: PalworldPlayersStatusDto['players'][number
     : player.lastSeenAt
       ? `Visto ${formatDateTime(player.lastSeenAt)}`
       : 'Visto anteriormente';
+  const rowKey = `${allowKick ? 'current' : 'previous'}-${identity}`;
 
   return `
-    <article class="player-row ${player.online ? 'player-row--online' : 'player-row--previous'}">
+    <article class="player-row ${player.online ? 'player-row--online' : 'player-row--previous'}" data-live-key="player-${escapeHtml(rowKey)}">
       <div class="player-row__identity"><strong>${escapeHtml(player.name)}</strong><span>${escapeHtml(identity)}</span></div>
       <small class="player-row__details">${escapeHtml(secondary.join(' - ') || 'Sin identificadores adicionales')}</small>
       <em class="player-row__status">${player.online && typeof player.ping === 'number' ? `${formatPing(player.ping)} ms` : escapeHtml(statusText)}</em>

@@ -44,6 +44,7 @@ import {
   type ParsedPalworldSettings
 } from './config/palworld-settings-parser';
 import { formatBytes, formatLastVerification } from './utils/format';
+import { syncLiveElement } from './utils/dom-sync';
 import { getOperationFailureMessage, isOperationSuccessful } from './utils/operation-result';
 import { cssEscape, escapeHtml, normalizeSearchText } from './utils/text';
 import { renderBackupsView as renderBackupsViewHtml } from './views/backups-view';
@@ -1469,8 +1470,9 @@ async function renderGeneralView(renderId: number): Promise<void> {
           title: 'Jugadores',
           value: playersState.value,
           detail: playersState.detail,
-          target: 'admin',
-          adminTab: 'players',
+          target: playersSummary?.status === 'SERVER_STOPPED' ? undefined : 'admin',
+          adminTab: playersSummary?.status === 'SERVER_STOPPED' ? undefined : 'players',
+          disabled: playersSummary?.status === 'SERVER_STOPPED',
           ...playersState.state
       }
     ],
@@ -2602,8 +2604,8 @@ async function refreshRemoteApiConnectionStatus(): Promise<void> {
     const template = document.createElement('template');
     template.innerHTML = renderRemoteApiConnectionStatus(status).trim();
     const next = template.content.firstElementChild;
-    if (next) {
-      current.replaceWith(next);
+    if (next instanceof HTMLElement) {
+      syncLiveElement(current, next);
       bindRemoteApiAddressCopies();
     }
   }
@@ -2936,12 +2938,8 @@ function updateAdminLiveRegions(html: string, activeTab: AdminTab): boolean {
   for (const nextRegion of nextRegions) {
     const regionId = nextRegion.dataset['adminLiveRegion'] ?? '';
     const currentRegion = currentRegions.get(regionId);
-    if (currentRegion && currentRegion.innerHTML !== nextRegion.innerHTML) {
-      currentRegion.innerHTML = nextRegion.innerHTML;
-    }
     if (currentRegion) {
-      currentRegion.className = nextRegion.className;
-      currentRegion.title = nextRegion.title;
+      syncLiveElement(currentRegion, nextRegion);
     }
   }
 
@@ -4688,8 +4686,8 @@ function replaceSummaryCard(id: string, html: string): void {
   const nextCard = template.content.firstElementChild;
   const currentCard = document.querySelector(`#${cssEscape(id)}`);
 
-  if (currentCard && nextCard) {
-    currentCard.replaceWith(nextCard);
+  if (currentCard instanceof HTMLElement && nextCard instanceof HTMLElement) {
+    syncLiveElement(currentCard, nextCard);
   }
 }
 

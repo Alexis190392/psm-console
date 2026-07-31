@@ -19,4 +19,17 @@ describe('summary card renderer', () => {
     expect(html).toContain('Juego &lt;local&gt;');
     expect(html).toContain('summary-card--ok');
   });
+
+  it('renders an informational card without navigation when disabled', () => {
+    const html = renderSummaryCard({
+      title: 'Jugadores',
+      value: 'Servidor detenido',
+      detail: 'Inicia el servidor para consultar jugadores.',
+      disabled: true,
+      ...createSummaryCardState('optional')
+    });
+
+    expect(html).toContain('disabled aria-disabled="true"');
+    expect(html).not.toContain('data-target=');
+  });
 });

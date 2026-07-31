@@ -87,6 +87,9 @@ describe('admin view', () => {
     expect(html).toContain('player-row__details');
     expect(html).toContain('player-row__status');
     expect(html).toContain('data-admin-live-region="players-list"');
+    expect(html).toContain('data-live-key="players-current"');
+    expect(html).toContain('data-live-key="player-current-steam_1"');
+    expect(html).toContain('data-live-key="player-previous-steam_2"');
     expect(html).toContain('Jugador &lt;Uno&gt;');
     expect(html).not.toContain('Jugador <Uno>');
   });
