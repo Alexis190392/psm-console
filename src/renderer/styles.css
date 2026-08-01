@@ -5808,15 +5808,20 @@ html.window-maximized .tactical-window-frame {
 .app-footer--server:not(.app-footer--confirm) {
   display: grid;
   grid-template-columns: minmax(0, auto) minmax(150px, 1fr) minmax(0, auto);
-  gap: 16px;
-  padding-block: 8px;
+  gap: 18px;
+  min-height: 82px;
+  padding: 10px clamp(22px, 3vw, 34px) 18px;
 }
 
 .server-footer__actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
+}
+
+.app-footer--server .server-footer__actions .secondary-button {
+  min-height: 42px;
 }
 
 .server-footer__actions--maintenance {
@@ -5835,13 +5840,24 @@ html.window-maximized .tactical-window-frame {
 }
 
 .app-footer--server #save-config {
-  min-width: 160px;
-  min-height: 44px;
-  padding-inline: 28px;
+  min-width: 180px;
+  min-height: 48px;
+  padding-inline: 34px;
 }
 
 .app-footer--server #discard-config {
   min-width: 124px;
+}
+
+.app-footer--server .primary-button::after,
+.app-footer--server .secondary-button::after {
+  right: 10px;
+  bottom: 7px;
+  width: 24px;
+}
+
+#app.app--footer-visible:has(.app-footer--server:not(.hidden)) .workspace {
+  bottom: 82px;
 }
 
 .setting-field input:not([type="range"]),
@@ -6362,11 +6378,11 @@ html.window-maximized .tactical-window-frame {
 
 @media (max-width: 1280px) {
   #app.app--footer-visible .workspace {
-    bottom: 108px;
+    bottom: 120px;
   }
 
   .app-footer--server:not(.app-footer--confirm) {
-    min-height: 108px;
+    min-height: 120px;
   }
 }
 

@@ -13,8 +13,8 @@ const viewports = [
   { name: 'vertical', width: 1100, height: 1200 }
 ];
 const views = [
-  { name: 'general', nav: 'home' },
-  { name: 'servidor', nav: 'server' },
+  { name: 'general', nav: 'home', readySelector: '.general-primary-grid' },
+  { name: 'servidor', nav: 'server', readySelector: '.settings-group' },
   { name: 'red-firewall', nav: 'network' },
   { name: 'backups', nav: 'backups' },
   { name: 'logs', nav: 'logs' },
@@ -31,8 +31,8 @@ const views = [
   }
 ];
 const manualViews = [
-  { name: 'general', selector: '.sidebar__link[data-nav="home"]', waitMs: 1200 },
-  { name: 'servidor', selector: '.sidebar__link[data-nav="server"]', waitMs: 1200 },
+  { name: 'general', selector: '.sidebar__link[data-nav="home"]', readySelector: '.general-primary-grid', waitMs: 1200 },
+  { name: 'servidor', selector: '.sidebar__link[data-nav="server"]', readySelector: '.settings-group', waitMs: 1200 },
   { name: 'red-firewall', selector: '.sidebar__link[data-nav="network"]', waitMs: 5500 },
   { name: 'backups', selector: '.sidebar__link[data-nav="backups"]', waitMs: 1200 },
   { name: 'logs', selector: '.sidebar__link[data-nav="logs"]', waitMs: 900, fixtureLogs: true },
@@ -102,6 +102,9 @@ async function capture(window, viewport, view) {
     `);
     await waitForSelector(window, `${view.selector}.sidebar__link--active`);
     await wait(500);
+  }
+  if (view.readySelector) {
+    await waitForSelector(window, view.readySelector, 30000);
   }
   const image = await capturePageWithRetry(window);
   writeFileSync(
@@ -329,6 +332,9 @@ async function waitForEnabledNavigation(window, nav, timeoutMs = 30000) {
 async function writeManualScreenshot(window, outputDir, view) {
   await openManualView(window, view);
   await waitForSelectorRemoved(window, '.view-loading-overlay');
+  if (view.readySelector) {
+    await waitForSelector(window, view.readySelector, 30000);
+  }
   if (view.name === 'servidor') {
     await window.webContents.executeJavaScript(`
       (() => {
@@ -356,6 +362,15 @@ async function captureManualScreenshots(window) {
   mkdirSync(manualOutputDir, { recursive: true });
   window.setSize(1440, 900);
   await wait(400);
+
+  if (requestedView && requestedView !== 'general') {
+    const generalView = manualViews.find((view) => view.name === 'general');
+    if (generalView) {
+      await openManualView(window, generalView);
+      await waitForSelectorRemoved(window, '.view-loading-overlay');
+      await waitForSelector(window, generalView.readySelector, 30000);
+    }
+  }
 
   for (const view of selectedViews) {
     await writeManualScreenshot(window, manualOutputDir, view);

@@ -81,6 +81,6 @@ npm.cmd run start:dev
 
 ## Estado del proyecto
 
-Versión actual: `0.17.6 Dev`.
+Versión actual: `0.17.7 Dev`.
 
 Palworld, Steam y SteamCMD son marcas de sus respectivos propietarios. Este proyecto es una herramienta independiente y no está afiliado con Pocketpair ni Valve.
