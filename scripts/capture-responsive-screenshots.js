@@ -9,8 +9,11 @@ const { createMainWindowOptions } = require('../dist/main/electron/window-option
 const outputDir = join(process.cwd(), 'docs', 'implementation', 'visual-comparison');
 const viewports = [
   { name: 'desktop', width: 1440, height: 900 },
-  { name: 'minimum', width: 1100, height: 700 },
-  { name: 'vertical', width: 1100, height: 1200 }
+  { name: 'portrait-half', width: 1080, height: 900 },
+  { name: 'medium', width: 900, height: 800 },
+  { name: 'compact', width: 640, height: 700 },
+  { name: 'minimum', width: 500, height: 600 },
+  { name: 'vertical', width: 1080, height: 1200 }
 ];
 const views = [
   { name: 'general', nav: 'home', readySelector: '.general-primary-grid' },

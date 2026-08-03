@@ -55,17 +55,64 @@
 }
 
 body {
+  --native-controls-width: 138px;
+  --native-titlebar-height: 48px;
+  position: relative;
+  isolation: isolate;
   margin: 0;
   width: 100vw;
   height: 100vh;
   overflow: hidden;
   background:
-    radial-gradient(circle at 2px 2px, rgba(0, 229, 255, 0.028) 1px, transparent 0),
-    var(--color-background);
-  background-size: 24px 24px;
+    radial-gradient(ellipse at 0 0, rgba(8, 217, 232, 0.22), transparent 28%),
+    radial-gradient(ellipse at 100% 100%, rgba(255, 43, 127, 0.18), transparent 26%),
+    repeating-linear-gradient(
+      135deg,
+      rgba(8, 217, 232, 0.11) 0 1px,
+      transparent 1px 8px
+    ),
+    #02070c;
+  background-size: auto, auto, 18px 18px, auto;
+}
+
+body::before,
+body::after {
+  position: fixed;
+  z-index: 0;
+  inset: 0;
+  content: "";
+  pointer-events: none;
+}
+
+body::before {
+  background:
+    linear-gradient(90deg, transparent 0 8%, rgba(8, 217, 232, 0.22) 8% 8.2%, transparent 8.2% 100%),
+    linear-gradient(90deg, transparent 0 82%, rgba(255, 43, 127, 0.2) 82% 82.2%, transparent 82.2% 100%),
+    repeating-linear-gradient(90deg, rgba(143, 162, 173, 0.08) 0 1px, transparent 1px 26px);
+  opacity: 0.78;
+  animation: outer-chassis-pulse 4.6s ease-in-out infinite;
+}
+
+body::after {
+  width: 36%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(8, 217, 232, 0.1) 35%,
+    rgba(255, 43, 127, 0.12) 65%,
+    transparent
+  );
+  filter: blur(6px);
+  opacity: 0.62;
+  transform: translateX(-120%);
+  animation: outer-chassis-scan 6.5s ease-in-out infinite;
 }
 
 #app {
+  --native-controls-width: 138px;
+  --native-titlebar-height: 48px;
+  position: relative;
+  z-index: 1;
   width: 100vw;
   height: 100vh;
   overflow: hidden;
@@ -90,10 +137,11 @@ input[type="range"] {
 
 .titlebar {
   position: fixed;
-  inset: 0 0 auto 0;
+  inset: 0 auto auto env(titlebar-area-x, 0px);
   z-index: 20;
   display: flex;
   align-items: center;
+  width: env(titlebar-area-width, 100%);
   height: 40px;
   padding: 0 0 0 14px;
   background: #181c20;
@@ -5189,6 +5237,10 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  body::after {
+    animation: none;
+  }
+
   .inline-loader,
   .loading-diagnostic__spinner,
   .inline-loader::after,
@@ -5403,29 +5455,39 @@ html.window-entering #app {
 /* Tactical HUD window system */
 
 body {
-  background: transparent;
+  background:
+    radial-gradient(ellipse at 4% 8%, rgba(8, 217, 232, 0.3), transparent 25%),
+    radial-gradient(ellipse at 96% 92%, rgba(255, 43, 127, 0.24), transparent 24%),
+    repeating-linear-gradient(
+      135deg,
+      rgba(8, 217, 232, 0.12) 0 1px,
+      transparent 1px 9px
+    ),
+    #02070c;
+  background-size: auto, auto, 18px 18px, auto;
 }
 
 #app {
   position: relative;
   border: 0;
   clip-path: polygon(
-    18px 0,
+    28px 0,
     28% 0,
-    calc(28% + 18px) 18px,
-    calc(86% - 18px) 18px,
-    86% 0,
-    calc(100% - 18px) 0,
-    100% 18px,
-    100% calc(100% - 18px),
-    calc(100% - 18px) 100%,
+    calc(28% + 28px) 28px,
+    calc(100% - var(--native-controls-width) - 40px) 28px,
+    calc(100% - var(--native-controls-width) - 12px) 0,
+    calc(100% - var(--native-controls-width)) 0,
+    calc(100% - var(--native-controls-width)) var(--native-titlebar-height),
+    100% var(--native-titlebar-height),
+    100% calc(100% - 28px),
+    calc(100% - 28px) 100%,
     86% 100%,
-    calc(86% - 18px) calc(100% - 18px),
-    calc(22% + 18px) calc(100% - 18px),
+    calc(86% - 28px) calc(100% - 28px),
+    calc(22% + 28px) calc(100% - 28px),
     22% 100%,
-    18px 100%,
-    0 calc(100% - 18px),
-    0 18px
+    28px 100%,
+    0 calc(100% - 28px),
+    0 28px
   );
   background:
     linear-gradient(rgba(8, 217, 232, 0.028) 1px, transparent 1px),
@@ -5542,6 +5604,19 @@ html.window-maximized .tactical-window-frame {
     linear-gradient(90deg, rgba(8, 217, 232, 0.08), transparent 28%),
     #070c12;
   box-shadow: 0 5px 22px rgba(0, 0, 0, 0.34);
+}
+
+.titlebar::before {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 46px;
+  height: var(--native-titlebar-height);
+  clip-path: polygon(0 0, 100% 0, 100% 2px, 24px 2px, 10px 16px, 10px 32px, 24px 46px, 100% 46px, 100% 48px, 22px 48px, 7px 33px, 7px 15px, 22px 0);
+  background: linear-gradient(180deg, var(--color-primary), rgba(8, 217, 232, 0.58) 62%, var(--color-accent));
+  box-shadow: 0 0 9px rgba(8, 217, 232, 0.42);
+  content: "";
+  pointer-events: none;
 }
 
 .titlebar::after {
@@ -6717,9 +6792,417 @@ html.window-maximized .tactical-window-frame {
   }
 }
 
+/* Window-responsive shell: follows the available Electron window, not the monitor resolution. */
+#app.app--responsive-compact {
+  --sidebar-width: 82px;
+}
+
+#app.app--responsive-compact .sidebar {
+  width: var(--sidebar-width);
+  z-index: 26;
+}
+
+#app.app--responsive-compact.app--sidebar-overlay-open .sidebar {
+  width: 230px;
+  box-shadow: 18px 0 38px rgba(0, 0, 0, 0.68), 1px 0 0 rgba(8, 217, 232, 0.34);
+}
+
+#app.app--responsive-compact.app--sidebar-overlay-open .sidebar-toggle {
+  right: -14px;
+}
+
+#app.app--responsive-compact .titlebar__brand {
+  min-width: 0;
+}
+
+#app.app--responsive-compact .titlebar__signal {
+  display: none;
+}
+
+#app.app--responsive-compact .workspace {
+  padding: 18px 18px 16px;
+}
+
+#app.app--responsive-compact .hero {
+  margin-bottom: 12px;
+}
+
+#app.app--responsive-compact .hero h2,
+#app.app--responsive-compact.app--wide .hero h2 {
+  font-size: 28px;
+}
+
+#app.app--responsive-compact .panel,
+#app.app--responsive-compact.app--wide .panel {
+  padding: 16px;
+}
+
+#app.app--responsive-compact .summary-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+#app.app--responsive-compact .app-footer {
+  padding-inline: 18px;
+}
+
+#app.app--responsive-compact .app-footer--server:not(.app-footer--confirm) {
+  column-gap: 12px;
+}
+
+#app.app--responsive-compact .server-footer__actions {
+  gap: 7px;
+}
+
+#app.app--responsive-compact .app-footer--server .server-footer__actions .primary-button,
+#app.app--responsive-compact .app-footer--server .server-footer__actions .secondary-button {
+  min-width: 0;
+  min-height: 38px;
+  padding: 8px 12px;
+}
+
+#app.app--responsive-compact .app-footer--server #save-config {
+  min-width: 140px;
+  min-height: 42px;
+  padding-inline: 22px;
+}
+
+#app.app--responsive-small {
+  --sidebar-width: 64px;
+}
+
+#app.app--responsive-small.app--sidebar-overlay-open .sidebar {
+  width: min(230px, calc(100vw - 48px));
+}
+
+#app.app--responsive-small.app--sidebar-collapsed .sidebar__identity {
+  min-height: 72px;
+  padding: 12px 7px;
+}
+
+#app.app--responsive-small.app--sidebar-collapsed .sidebar__logo {
+  width: 40px;
+  height: 40px;
+}
+
+#app.app--responsive-small.app--sidebar-collapsed .sidebar__nav {
+  padding: 10px 6px;
+}
+
+#app.app--responsive-small.app--sidebar-collapsed .sidebar__link {
+  width: 44px;
+  min-height: 42px;
+  grid-template-columns: 22px;
+  padding: 9px 11px;
+}
+
+#app.app--responsive-small.app--sidebar-collapsed .sidebar-status,
+#app.app--responsive-small.app--sidebar-collapsed .primary-action {
+  width: 44px;
+}
+
+#app.app--responsive-small .titlebar {
+  padding-left: 10px;
+}
+
+#app.app--responsive-small .titlebar__version,
+#app.app--responsive-small .titlebar__signal {
+  display: none;
+}
+
+#app.app--responsive-small .titlebar__brand {
+  gap: 6px;
+  overflow: hidden;
+}
+
+#app.app--responsive-small .titlebar__product {
+  overflow: hidden;
+  max-width: 190px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#app.app--responsive-small .window-button {
+  width: 40px;
+}
+
+#app.app--responsive-small .workspace {
+  padding: 12px 12px 10px;
+}
+
+#app.app--responsive-small .hero {
+  padding-left: 11px;
+}
+
+#app.app--responsive-small .hero h2,
+#app.app--responsive-small.app--wide .hero h2 {
+  font-size: 24px;
+}
+
+#app.app--responsive-small .hero p {
+  margin: 5px 0 0;
+  font-size: 13px;
+}
+
+#app.app--responsive-small .panel,
+#app.app--responsive-small.app--wide .panel {
+  padding: 12px;
+}
+
+#app.app--responsive-small .general-primary-grid,
+#app.app--responsive-small .general-support-strip,
+#app.app--responsive-small .summary-grid,
+#app.app--responsive-small .summary-grid--ready,
+#app.app--responsive-small .settings-grid,
+#app.app--responsive-small .admin-grid,
+#app.app--responsive-small .admin-snapshot-grid,
+#app.app--responsive-small .firewall-port-grid,
+#app.app--responsive-small .backup-policy,
+#app.app--responsive-small .admin-map-layout,
+#app.app--responsive-small .admin-broadcast-bar__row {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+#app.app--responsive-small .view-header,
+#app.app--responsive-small .admin-toolbar,
+#app.app--responsive-small .inline-confirm {
+  align-items: stretch;
+  flex-direction: column;
+}
+
+#app.app--responsive-small .view-header__meta {
+  align-self: flex-start;
+}
+
+#app.app--responsive-small .view-actions {
+  width: 100%;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+#app.app--responsive-small .player-row {
+  grid-template-areas:
+    "identity status"
+    "details details"
+    "actions actions";
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+#app.app--responsive-small .player-row__actions {
+  width: 100%;
+  justify-self: stretch;
+  flex-wrap: wrap;
+}
+
+#app.app--responsive-small .confirmation-panel__details div {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 3px;
+}
+
+#app.app--responsive-small .toast-region {
+  right: 10px;
+  bottom: 10px;
+  width: min(320px, calc(100vw - var(--sidebar-width) - 20px));
+}
+
+#app.app--responsive-small.app--footer-visible .workspace,
+#app.app--responsive-small.app--footer-visible:has(.app-footer--server:not(.hidden)) .workspace {
+  bottom: 176px;
+}
+
+#app.app--responsive-small .app-footer--server:not(.app-footer--confirm) {
+  display: grid;
+  max-height: 176px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+  min-height: 0;
+  padding: 8px 12px 14px;
+  overflow-y: auto;
+}
+
+#app.app--responsive-small .server-footer__actions--maintenance,
+#app.app--responsive-small .server-footer__actions--commit,
+#app.app--responsive-small .app-footer--server .app-footer__message {
+  grid-column: 1;
+  grid-row: auto;
+}
+
+#app.app--responsive-small .server-footer__actions {
+  display: grid;
+  width: 100%;
+  gap: 6px;
+  overflow: visible;
+}
+
+#app.app--responsive-small .server-footer__actions--maintenance {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+#app.app--responsive-small .server-footer__actions--maintenance > :nth-child(3) {
+  grid-column: 1 / -1;
+}
+
+#app.app--responsive-small .server-footer__actions--commit {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+#app.app--responsive-small .server-footer__actions > button,
+#app.app--responsive-small .app-footer--server #save-config,
+#app.app--responsive-small .app-footer--server #discard-config {
+  width: 100%;
+  min-width: 0;
+  padding-inline: 8px;
+}
+
+#app.app--responsive-small .app-footer--server .app-footer__message {
+  order: -1;
+  min-height: 16px;
+  padding-inline: 0;
+  text-align: left;
+}
+
+#app.app--responsive-small.app--footer-visible:has(.app-footer #create-config-backup) .workspace {
+  bottom: 132px;
+}
+
+#app.app--responsive-small .app-footer:has(#create-config-backup) {
+  display: grid;
+  max-height: 132px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  min-height: 0;
+  padding: 8px 12px 14px;
+  overflow-y: auto;
+}
+
+#app.app--responsive-small .app-footer:has(#create-config-backup) .app-footer__message {
+  grid-column: 1 / -1;
+  min-height: 16px;
+  text-align: left;
+}
+
+#app.app--responsive-small .app-footer:has(#create-config-backup) button {
+  width: 100%;
+  min-width: 0;
+  padding-inline: 8px;
+}
+
+@media (max-height: 850px) {
+  .titlebar,
+  .window-button {
+    height: var(--titlebar-height);
+  }
+
+  .sidebar__identity {
+    min-height: 88px;
+    padding-block: 13px;
+  }
+
+  .sidebar__logo {
+    width: 46px;
+    height: 46px;
+  }
+
+  .sidebar__nav {
+    gap: 4px;
+    padding-block: 10px;
+  }
+
+  .sidebar__link {
+    min-height: 40px;
+    padding-block: 8px;
+  }
+
+  .sidebar-status {
+    margin-bottom: 7px;
+    padding-block: 9px;
+  }
+
+  .primary-action {
+    min-height: 42px;
+    margin-bottom: 12px;
+  }
+
+  .workspace {
+    padding-top: 12px;
+    padding-bottom: 10px;
+  }
+
+  .hero {
+    margin-bottom: 9px;
+  }
+
+  .hero h2,
+  #app.app--wide .hero h2 {
+    font-size: 25px;
+  }
+
+  .hero p {
+    margin: 4px 0 0;
+    font-size: 13px;
+  }
+
+  .panel,
+  #app.app--wide .panel {
+    padding-top: 13px;
+    padding-bottom: 13px;
+  }
+
+  #app.app--footer-visible .workspace,
+  #app.app--footer-visible:has(.app-footer--server:not(.hidden)) .workspace {
+    bottom: 96px;
+  }
+
+  .app-footer--server:not(.app-footer--confirm) {
+    min-height: 96px;
+    padding-top: 7px;
+    padding-bottom: 12px;
+  }
+}
+
+@media (max-width: 640px) and (max-height: 850px) {
+  #app.app--footer-visible .workspace,
+  #app.app--footer-visible:has(.app-footer--server:not(.hidden)) .workspace {
+    bottom: 176px;
+  }
+
+  #app .app-footer--server:not(.app-footer--confirm) {
+    max-height: 176px;
+    min-height: 0;
+  }
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes outer-chassis-scan {
+  0%,
+  44% {
+    opacity: 0;
+    transform: translateX(-120%);
+  }
+
+  56% {
+    opacity: 0.62;
+  }
+
+  88%,
+  100% {
+    opacity: 0;
+    transform: translateX(380%);
+  }
+}
+
+@keyframes outer-chassis-pulse {
+  0%,
+  100% {
+    opacity: 0.66;
+  }
+
+  50% {
+    opacity: 0.9;
   }
 }
 

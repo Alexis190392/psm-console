@@ -32,7 +32,6 @@ import {
 } from './components/summary-card';
 import { renderInlineConfirm } from './components/inline-confirm';
 import { renderIcon } from './components/icon';
-import { bindWindowControls } from './components/window-controls';
 import { CONFIGURATION_PRESETS } from './config/configuration-presets';
 import { hasConfigurationChangedExternally } from './config/configuration-change-guard';
 import { getSettingDefinition } from './config/setting-definition-resolver';
@@ -112,9 +111,6 @@ rootElement.innerHTML = `
       <span></span><span></span><span></span>
     </div>
     <div class="titlebar__spacer"></div>
-    <button id="window-minimize" class="window-button" aria-label="Minimizar">${renderIcon('minus')}</button>
-    <button id="window-maximize" class="window-button" aria-label="Maximizar">${renderIcon('maximize')}</button>
-    <button id="window-close" class="window-button window-button--close" aria-label="Cerrar">${renderIcon('x')}</button>
   </header>
   <aside class="sidebar">
     <section class="sidebar__identity">
@@ -300,8 +296,6 @@ rootElement.innerHTML = `
 
 const palcmApi = window.palcm;
 
-bindWindowControls();
-
 const statusLabel = document.querySelector('#status-label');
 const portableRoot = document.querySelector('#portable-root');
 const heroEyebrow = document.querySelector('.eyebrow');
@@ -405,7 +399,11 @@ let latestSummary: {
 } | null = null;
 
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'palcm:sidebar-collapsed';
-let sidebarPreferenceExplicit = false;
+const SIDEBAR_COMPACT_BREAKPOINT = 1007;
+const SIDEBAR_SMALL_BREAKPOINT = 640;
+const SHORT_WINDOW_BREAKPOINT = 850;
+let sidebarPreference: boolean | null = null;
+let sidebarOverlayOpen = false;
 
 initializeSidebar();
 initializeTacticalWindowFrame();
@@ -543,20 +541,22 @@ function scheduleRuntimeStateRefresh(): void {
 }
 
 function initializeSidebar(): void {
-  const storedState = readStoredSidebarState();
-  sidebarPreferenceExplicit = storedState !== null;
-  const collapsed = storedState ?? window.innerWidth <= 1180;
-  setSidebarCollapsed(collapsed, false);
+  sidebarPreference = readStoredSidebarState();
+  synchronizeResponsiveLayout();
 
   sidebarToggle?.addEventListener('click', () => {
-    sidebarPreferenceExplicit = true;
-    setSidebarCollapsed(!rootElement.classList.contains('app--sidebar-collapsed'));
+    if (isCompactWindow()) {
+      sidebarOverlayOpen = !sidebarOverlayOpen;
+      synchronizeResponsiveLayout();
+      return;
+    }
+
+    sidebarPreference = !rootElement.classList.contains('app--sidebar-collapsed');
+    setSidebarCollapsed(sidebarPreference);
   });
 
   window.addEventListener('resize', () => {
-    if (!sidebarPreferenceExplicit) {
-      setSidebarCollapsed(window.innerWidth <= 1180, false);
-    }
+    synchronizeResponsiveLayout();
   });
 
   navLinks.forEach((link) => {
@@ -564,7 +564,41 @@ function initializeSidebar(): void {
     if (label) {
       link.title = label;
     }
+    link.addEventListener('click', () => {
+      if (link.hasAttribute('data-admin-group-toggle') || link.hasAttribute('data-settings-group-toggle')) {
+        return;
+      }
+      if (!isCompactWindow() || !sidebarOverlayOpen) {
+        return;
+      }
+      sidebarOverlayOpen = false;
+      synchronizeResponsiveLayout();
+    });
   });
+}
+
+function isCompactWindow(): boolean {
+  return window.innerWidth <= SIDEBAR_COMPACT_BREAKPOINT;
+}
+
+function synchronizeResponsiveLayout(): void {
+  const compactWidth = isCompactWindow();
+  const smallWidth = window.innerWidth <= SIDEBAR_SMALL_BREAKPOINT;
+  const shortHeight = window.innerHeight <= SHORT_WINDOW_BREAKPOINT;
+
+  rootElement.classList.toggle('app--responsive-compact', compactWidth);
+  rootElement.classList.toggle('app--responsive-small', smallWidth);
+  rootElement.classList.toggle('app--responsive-short', shortHeight);
+
+  if (!compactWidth) {
+    sidebarOverlayOpen = false;
+  }
+
+  rootElement.classList.toggle('app--sidebar-overlay-open', compactWidth && sidebarOverlayOpen);
+  const collapsed = compactWidth
+    ? !sidebarOverlayOpen
+    : (sidebarPreference ?? window.innerWidth <= 1180);
+  setSidebarCollapsed(collapsed, false);
 }
 
 function initializeTacticalWindowFrame(): void {
@@ -582,20 +616,34 @@ function initializeTacticalWindowFrame(): void {
   const syncFrame = (): void => {
     const width = Math.max(1, window.innerWidth);
     const height = Math.max(1, window.innerHeight);
+    const titlebar = rootElement.querySelector<HTMLElement>('.titlebar');
+    const titlebarRect = titlebar?.getBoundingClientRect();
     const edge = 1;
-    const cut = 18;
+    const cut = 28;
+    const nativeControlsWidth = Math.max(
+      0,
+      Math.round(width - (titlebarRect?.right ?? width - 138))
+    );
+    const titlebarHeight = Math.max(48, Math.round(titlebarRect?.height ?? 48));
     const topLeftWing = width * 0.28;
-    const topRightWing = width * 0.86;
     const bottomLeftWing = width * 0.22;
     const bottomRightWing = width * 0.86;
+    const controlDockStart = width - nativeControlsWidth;
+
+    rootElement.style.setProperty('--native-controls-width', `${String(nativeControlsWidth)}px`);
+    rootElement.style.setProperty('--native-titlebar-height', `${String(titlebarHeight)}px`);
+    document.body.style.setProperty('--native-controls-width', `${String(nativeControlsWidth)}px`);
+    document.body.style.setProperty('--native-titlebar-height', `${String(titlebarHeight)}px`);
+
     const points: Array<readonly [number, number]> = [
       [cut, edge],
       [topLeftWing, edge],
       [topLeftWing + cut, cut],
-      [topRightWing - cut, cut],
-      [topRightWing, edge],
-      [width - cut, edge],
-      [width - edge, cut],
+      [controlDockStart - 40, cut],
+      [controlDockStart - 12, edge],
+      [controlDockStart, edge],
+      [controlDockStart, titlebarHeight],
+      [width - edge, titlebarHeight],
       [width - edge, height - cut],
       [width - cut, height - edge],
       [bottomRightWing, height - edge],
