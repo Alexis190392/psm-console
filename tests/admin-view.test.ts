@@ -20,6 +20,7 @@ const playersStatus: PalworldPlayersStatusDto = {
     {
       name: 'Jugador <Uno>',
       userId: 'steam_1',
+      playerId: 'AFAFD830000000000000000000000000',
       ping: 24.28,
       online: true,
       locationX: 120,
@@ -32,6 +33,13 @@ const playersStatus: PalworldPlayersStatusDto = {
     {
       name: 'Anterior',
       userId: 'steam_2',
+      online: false,
+      banState: 'NOT_BANNED'
+    },
+    {
+      name: 'Baneado',
+      userId: 'steam_3',
+      playerId: 'A0B1C2D3000000000000000000000000',
       online: false,
       banState: 'BANNED'
     }
@@ -79,17 +87,29 @@ describe('admin view', () => {
     expect(html).toContain('<h3>Jugadores</h3>');
     expect(html).toContain('En curso');
     expect(html).toContain('Vistos anteriormente');
+    expect(html).toContain('>Ban<');
     expect(html).toContain('data-player-action="kick"');
+    expect(html).toContain('data-player-action="ban"');
     expect(html).toContain('data-player-action="unban"');
     expect(html).toContain('data-admin-form="announce"');
+    expect(html).toContain('placeholder="Escribe el mensaje y presiona Enter"');
+    expect(html).not.toContain('aria-label="Enviar anuncio"');
     expect(html).toContain('data-admin-form="player"');
     expect(html).toContain('player-row__identity');
     expect(html).toContain('player-row__details');
     expect(html).toContain('player-row__status');
     expect(html).toContain('data-admin-live-region="players-list"');
     expect(html).toContain('data-live-key="players-current"');
+    expect(html).toContain('data-live-key="players-previous"');
+    expect(html).toContain('data-live-key="players-banned"');
     expect(html).toContain('data-live-key="player-current-steam_1"');
     expect(html).toContain('data-live-key="player-previous-steam_2"');
+    expect(html).toContain('data-live-key="player-banned-steam_3"');
+    expect(html).toContain('PlayerUID AFAFD830');
+    expect(html).not.toContain('AFAFD830000000000000000000000000');
+    expect(html).toContain('<span>Kick</span>');
+    expect(html).toContain('<span>Ban</span>');
+    expect(html).toContain('<span>Unban</span>');
     expect(html).toContain('Jugador &lt;Uno&gt;');
     expect(html).not.toContain('Jugador <Uno>');
   });

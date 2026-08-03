@@ -3033,6 +3033,10 @@ function bindAdminControls(): void {
       if (!form.reportValidity()) {
         return;
       }
+      if (form.dataset['adminForm'] === 'announce') {
+        void executeAdminAction(form, 'announce');
+        return;
+      }
       const submitter = event instanceof SubmitEvent && event.submitter instanceof HTMLButtonElement
         ? event.submitter
         : null;
@@ -3286,6 +3290,9 @@ async function executeAdminAction(form: HTMLFormElement, action: PalworldAdminAc
     });
     appendConsoleLine(`Administracion: ${result.message}`);
     showToast(result.message);
+    if (action === 'announce') {
+      form.reset();
+    }
     updateFooterChrome();
     await refreshAdminView({ force: true });
     await refreshStatusChrome();

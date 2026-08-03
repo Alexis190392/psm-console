@@ -127,23 +127,20 @@ function renderAdminGeneralTab(adminStatus: PalworldAdminStatusDto): string {
 
 function renderAdminPlayersTab(playersStatus: PalworldPlayersStatusDto): string {
   return `
-    <form class="admin-broadcast-bar" data-admin-form="announce">
-      <span class="view-kicker">ANUNCIO GLOBAL</span>
-      <div class="admin-broadcast-bar__row">
-        <input name="message" type="text" placeholder="Mensaje para todos los jugadores" required />
-        <button class="primary-button icon-button" type="submit" aria-label="Enviar anuncio" title="Enviar anuncio">
-          ${renderIcon('send')}
-        </button>
+    <div class="admin-players-tab">
+      <form class="admin-broadcast-bar" data-admin-form="announce">
+        <span class="view-kicker">ANUNCIO GLOBAL</span>
+        <input name="message" type="text" placeholder="Escribe el mensaje y presiona Enter" aria-label="Mensaje para todos los jugadores" required />
+      </form>
+      <div class="admin-players-layout">
+        <section class="admin-players-panel admin-players-panel--wide">
+          <div class="players-list-card__header">
+            <h3>Jugadores conectados</h3>
+            <span data-admin-live-region="players-meta">${renderPlayersHeaderMeta(playersStatus)}</span>
+          </div>
+          <div data-admin-live-region="players-list">${renderAdminPlayersList(playersStatus)}</div>
+        </section>
       </div>
-    </form>
-    <div class="admin-players-layout">
-      <section class="admin-players-panel admin-players-panel--wide">
-        <div class="players-list-card__header">
-          <h3>Jugadores conectados</h3>
-          <span data-admin-live-region="players-meta">${renderPlayersHeaderMeta(playersStatus)}</span>
-        </div>
-        <div data-admin-live-region="players-list">${renderAdminPlayersList(playersStatus)}</div>
-      </section>
     </div>
   `;
 }
@@ -336,10 +333,16 @@ function renderAdminPlayersList(summary: PalworldPlayersStatusDto): string {
   if (summary.players.length === 0 && previousPlayers.length === 0) {
     return '<p class="empty-state">No hay jugadores detectados todavia.</p>';
   }
+  const currentPlayers = summary.players.filter((player) => player.banState !== 'BANNED');
+  const seenPlayers = previousPlayers.filter((player) => player.banState !== 'BANNED');
+  const bannedPlayers = [...summary.players, ...previousPlayers]
+    .filter((player) => player.banState === 'BANNED');
+
   return `
     <div class="players-sections">
-      ${renderPlayersSection('En curso', summary.players, 'No hay jugadores conectados en este momento.', true)}
-      ${renderPlayersSection('Vistos anteriormente', previousPlayers, 'Todavia no hay jugadores anteriores.', false)}
+      ${renderPlayersSection('En curso', currentPlayers, 'No hay jugadores conectados en este momento.', 'current')}
+      ${renderPlayersSection('Vistos anteriormente', seenPlayers, 'Todavia no hay jugadores anteriores.', 'previous')}
+      ${renderPlayersSection('Ban', bannedPlayers, 'No hay jugadores baneados.', 'banned')}
     </div>
   `;
 }
@@ -348,33 +351,34 @@ function renderPlayersSection(
   title: string,
   players: PalworldPlayersStatusDto['players'],
   emptyMessage: string,
-  allowKick: boolean
+  section: 'current' | 'previous' | 'banned'
 ): string {
-  const sectionKey = allowKick ? 'current' : 'previous';
   return `
-    <section class="players-section" data-live-key="players-${sectionKey}">
+    <section class="players-section players-section--${section}" data-live-key="players-${section}">
       <div class="players-section__header"><h4>${escapeHtml(title)}</h4><span>${String(players.length)}</span></div>
       ${
         players.length > 0
-          ? `<div class="players-list">${players.map((player) => renderAdminPlayerRow(player, allowKick)).join('')}</div>`
+          ? `<div class="players-list">${players.map((player) => renderAdminPlayerRow(player, section)).join('')}</div>`
           : `<p class="empty-state empty-state--compact">${escapeHtml(emptyMessage)}</p>`
       }
     </section>
   `;
 }
 
-function renderAdminPlayerRow(player: PalworldPlayersStatusDto['players'][number], allowKick: boolean): string {
+function renderAdminPlayerRow(
+  player: PalworldPlayersStatusDto['players'][number],
+  section: 'current' | 'previous' | 'banned'
+): string {
   const actionId = player.userId ?? player.steamId ?? player.playerId ?? '';
   const identity = actionId || 'ID no informado';
   const isBanned = player.banState === 'BANNED';
+  const allowKick = section === 'current' && player.online && !isBanned;
   const banAction = isBanned ? 'unban' : 'ban';
   const locationText = hasPlayerLocation(player)
     ? `X ${formatCoordinate(player.locationX)}, Y ${formatCoordinate(player.locationY)}`
     : null;
   const secondary = [
-    player.playerId ? `PlayerUID ${player.playerId}` : null,
-    player.userId ? `UserID ${player.userId}` : null,
-    player.steamId ? `SteamID ${player.steamId}` : null,
+    player.playerId ? `PlayerUID ${formatPlayerUid(player.playerId)}` : null,
     locationText
   ].filter((value): value is string => value !== null);
   const statusText = player.online
@@ -382,26 +386,31 @@ function renderAdminPlayerRow(player: PalworldPlayersStatusDto['players'][number
     : player.lastSeenAt
       ? `Visto ${formatDateTime(player.lastSeenAt)}`
       : 'Visto anteriormente';
-  const rowKey = `${allowKick ? 'current' : 'previous'}-${identity}`;
+  const rowKey = `${section}-${identity}`;
 
   return `
     <article class="player-row ${player.online ? 'player-row--online' : 'player-row--previous'}" data-live-key="player-${escapeHtml(rowKey)}">
       <div class="player-row__identity"><strong>${escapeHtml(player.name)}</strong><span>${escapeHtml(identity)}</span></div>
-      <small class="player-row__details">${escapeHtml(secondary.join(' - ') || 'Sin identificadores adicionales')}</small>
+      <small class="player-row__details">${escapeHtml(secondary.join(' - ') || 'Sin datos adicionales')}</small>
       <em class="player-row__status">${player.online && typeof player.ping === 'number' ? `${formatPing(player.ping)} ms` : escapeHtml(statusText)}</em>
       <form class="player-row__actions" data-admin-form="player">
         <input name="userId" type="hidden" value="${escapeHtml(actionId)}" />
         <input name="message" type="hidden" value="Accion aplicada desde PSM Console." />
-        <button class="admin-icon-button secondary-button icon-button" type="submit" data-player-action="kick" ${actionId && allowKick ? '' : 'disabled'} aria-label="Expulsar jugador" title="${allowKick ? 'Expulsar jugador' : 'Solo disponible para jugadores conectados'}">
+        <button class="player-action-button player-action-button--kick" type="submit" data-player-action="kick" ${actionId && allowKick ? '' : 'disabled'} title="${allowKick ? 'Expulsar jugador' : 'Solo disponible para jugadores conectados no baneados'}">
           ${renderIcon('log-out')}
+          <span>Kick</span>
         </button>
-        <button class="ban-toggle ${isBanned ? 'ban-toggle--active' : ''}" type="submit" data-player-action="${banAction}" ${actionId ? '' : 'disabled'} aria-pressed="${isBanned ? 'true' : 'false'}" aria-label="${isBanned ? 'Desbanear jugador' : 'Banear jugador'}" title="${isBanned ? 'Desbanear jugador' : 'Banear jugador'}">
-          <span class="ban-toggle__track" aria-hidden="true"><span class="ban-toggle__thumb"></span></span>
-          <span>${isBanned ? 'Baneado' : 'Permitido'}</span>
+        <button class="player-action-button ${isBanned ? 'player-action-button--unban' : 'player-action-button--ban'}" type="submit" data-player-action="${banAction}" ${actionId ? '' : 'disabled'} title="${isBanned ? 'Desbanear jugador' : 'Banear jugador'}">
+          ${renderIcon(isBanned ? 'undo' : 'admin')}
+          <span>${isBanned ? 'Unban' : 'Ban'}</span>
         </button>
       </form>
     </article>
   `;
+}
+
+function formatPlayerUid(playerId: string): string {
+  return playerId.slice(0, 8);
 }
 
 interface PlayerMapBounds {

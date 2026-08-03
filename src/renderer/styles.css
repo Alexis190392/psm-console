@@ -2101,17 +2101,46 @@ input[type="range"] {
 
 .players-list {
   display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
+}
+
+.admin-players-tab {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  padding: 4px 12px 20px;
 }
 
 .players-sections {
   display: grid;
-  gap: 16px;
+  gap: 14px;
 }
 
 .players-section {
   display: grid;
-  gap: 10px;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid rgba(8, 217, 232, 0.18);
+  background:
+    linear-gradient(135deg, rgba(8, 217, 232, 0.045), transparent 34%),
+    rgba(5, 13, 20, 0.72);
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+}
+
+.players-section--previous {
+  border-color: rgba(143, 162, 173, 0.2);
+  background:
+    linear-gradient(135deg, rgba(143, 162, 173, 0.035), transparent 34%),
+    rgba(5, 12, 18, 0.64);
+}
+
+.players-section--banned {
+  border-color: rgba(255, 43, 127, 0.25);
+  background:
+    linear-gradient(135deg, rgba(255, 43, 127, 0.06), transparent 34%),
+    rgba(13, 7, 17, 0.7);
 }
 
 .players-section__header {
@@ -2131,6 +2160,10 @@ input[type="range"] {
   text-transform: uppercase;
 }
 
+.players-section--banned .players-section__header h4 {
+  color: #ff7bad;
+}
+
 .players-section__header span {
   display: inline-flex;
   align-items: center;
@@ -2148,15 +2181,20 @@ input[type="range"] {
 
 .player-row {
   display: grid;
-  grid-template-areas: "identity details status actions";
-  grid-template-columns: minmax(170px, 1fr) minmax(220px, 1.3fr) minmax(118px, auto) minmax(214px, auto);
-  gap: 14px;
-  align-items: center;
-  min-height: 74px;
-  padding: 14px;
+  grid-template-areas:
+    "identity status"
+    "details details"
+    "actions actions";
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 9px 12px;
+  align-content: start;
+  min-width: 0;
+  min-height: 148px;
+  padding: 12px;
   border: 1px solid var(--color-border-subtle);
-  border-radius: 8px;
-  background: rgba(11, 15, 19, 0.45);
+  border-radius: 0;
+  background: rgba(7, 15, 22, 0.78);
+  clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
 }
 
 .player-row__identity {
@@ -2166,6 +2204,8 @@ input[type="range"] {
 
 .player-row__details {
   grid-area: details;
+  min-height: 34px;
+  line-height: 1.45;
   overflow-wrap: anywhere;
 }
 
@@ -2175,7 +2215,7 @@ input[type="range"] {
 
 .player-row--previous {
   border-color: rgba(186, 201, 204, 0.12);
-  background: rgba(11, 15, 19, 0.28);
+  background: rgba(7, 13, 19, 0.64);
 }
 
 .player-row strong,
@@ -3385,19 +3425,77 @@ button.settings-api-address:not(:disabled):focus-visible {
 
 .player-row__actions {
   grid-area: actions;
-  display: flex;
-  justify-content: flex-end;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   min-width: 0;
+  width: 100%;
+  align-self: end;
 }
 
-.player-row__actions .admin-icon-button {
-  width: 36px;
-  min-width: 36px;
-  height: 36px;
+.player-action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+  min-width: 0;
   min-height: 36px;
-  padding: 0;
-  border-radius: 50%;
+  padding: 7px 10px;
+  border: 1px solid rgba(8, 217, 232, 0.28);
+  background: rgba(8, 217, 232, 0.08);
+  color: var(--color-primary-soft);
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  transition:
+    border-color 0.16s ease,
+    background 0.16s ease,
+    color 0.16s ease,
+    opacity 0.16s ease;
+}
+
+.player-action-button .ui-icon {
+  width: 15px;
+  height: 15px;
+}
+
+.player-action-button:not(:disabled) {
+  cursor: pointer;
+}
+
+.player-action-button--kick:not(:disabled):hover {
+  border-color: rgba(8, 217, 232, 0.65);
+  background: rgba(8, 217, 232, 0.16);
+}
+
+.player-action-button--ban {
+  border-color: rgba(255, 43, 127, 0.38);
+  background: rgba(255, 43, 127, 0.09);
+  color: #ff91ba;
+}
+
+.player-action-button--ban:not(:disabled):hover {
+  border-color: rgba(255, 43, 127, 0.72);
+  background: rgba(255, 43, 127, 0.18);
+}
+
+.player-action-button--unban {
+  border-color: rgba(65, 236, 176, 0.4);
+  background: rgba(65, 236, 176, 0.1);
+  color: #8fffd5;
+}
+
+.player-action-button--unban:not(:disabled):hover {
+  border-color: rgba(65, 236, 176, 0.7);
+  background: rgba(65, 236, 176, 0.18);
+}
+
+.player-action-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.38;
+  filter: saturate(0.35);
 }
 
 .ban-toggle {
@@ -6631,6 +6729,16 @@ html.window-maximized .tactical-window-frame {
   .player-row__actions {
     justify-self: start;
   }
+
+  .players-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@container (min-width: 761px) and (max-width: 1080px) {
+  .players-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @container (max-width: 520px) {
@@ -6990,7 +7098,14 @@ html.window-maximized .tactical-window-frame {
 #app.app--responsive-small .player-row__actions {
   width: 100%;
   justify-self: stretch;
-  flex-wrap: wrap;
+}
+
+#app.app--responsive-small .players-list {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+#app.app--responsive-small .admin-players-tab {
+  padding-inline: 4px;
 }
 
 #app.app--responsive-small .confirmation-panel__details div {
