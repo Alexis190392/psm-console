@@ -720,6 +720,134 @@ input:focus {
   overflow-wrap: anywhere;
 }
 
+.content-view--map {
+  display: flex;
+  height: calc(100dvh - 129px);
+  min-height: 520px;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.map-heading {
+  flex: 0 0 auto;
+}
+
+.web-map-tabs {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 7px;
+  margin-bottom: 12px;
+}
+
+.web-map-tab {
+  min-height: 36px;
+  padding: 0 15px;
+  border: 1px solid var(--border-strong);
+  background: rgba(3, 10, 15, 0.8);
+  color: var(--muted);
+  font: 700 11px Consolas, "Courier New", monospace;
+  clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
+}
+
+.web-map-tab:hover,
+.web-map-tab:focus-visible,
+.web-map-tab--active {
+  border-color: var(--cyan);
+  color: var(--cyan-soft);
+}
+
+.web-map-tab--active {
+  background: rgba(17, 212, 229, 0.12);
+  box-shadow: inset 0 -2px var(--magenta);
+}
+
+.web-map-viewport {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+  border: 1px solid rgba(17, 212, 229, 0.34);
+  background: #03080c;
+  cursor: grab;
+  overscroll-behavior: contain;
+  touch-action: none;
+}
+
+.web-map-viewport--dragging {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.web-map-stage {
+  position: relative;
+  margin-inline: auto;
+  overflow: hidden;
+  background: #071015;
+}
+
+.web-map-canvas,
+.web-map-markers {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.web-map-canvas {
+  display: block;
+}
+
+.web-map-marker {
+  position: absolute;
+  z-index: 2;
+  transform: translate(-50%, -50%);
+}
+
+.web-map-marker__pin {
+  display: grid;
+  width: 31px;
+  height: 31px;
+  place-items: center;
+  border: 2px solid var(--cyan);
+  border-radius: 50%;
+  background: #071920;
+  box-shadow: 0 0 14px rgba(17, 212, 229, 0.55);
+  color: var(--cyan-soft);
+  font: 700 10px Consolas, "Courier New", monospace;
+}
+
+.web-map-marker__label {
+  position: absolute;
+  top: 35px;
+  left: 50%;
+  max-width: 150px;
+  padding: 3px 7px;
+  overflow: hidden;
+  border: 1px solid rgba(17, 212, 229, 0.35);
+  background: rgba(3, 10, 15, 0.92);
+  color: var(--text);
+  font: 10px Consolas, "Courier New", monospace;
+  text-overflow: ellipsis;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.web-map-empty {
+  position: absolute;
+  z-index: 3;
+  right: 50%;
+  bottom: 18px;
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--border-strong);
+  background: rgba(3, 10, 15, 0.9);
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+  transform: translateX(50%);
+}
+
 .toast {
   position: fixed;
   z-index: 30;
@@ -794,7 +922,7 @@ input:focus {
     display: grid;
     min-width: 0;
     flex: 1 1 auto;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 4px;
   }
 
@@ -869,6 +997,11 @@ input:focus {
     height: calc(100dvh - 232px);
     min-height: 300px;
   }
+
+  .content-view--map {
+    height: calc(100dvh - 92px);
+    min-height: 460px;
+  }
 }
 
 @media (max-width: 560px) {
@@ -927,6 +1060,26 @@ input:focus {
 
   .content-view {
     padding: 16px 13px;
+  }
+
+  .content-view--map {
+    height: calc(100dvh - 82px);
+    min-height: 420px;
+  }
+
+  .web-map-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .web-map-tab {
+    padding-inline: 8px;
+  }
+
+  .web-map-marker__label {
+    right: 0;
+    left: auto;
+    transform: none;
   }
 
   .page-heading {

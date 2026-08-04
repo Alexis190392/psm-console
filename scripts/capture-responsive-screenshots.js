@@ -9,12 +9,16 @@ const { createMainWindowOptions } = require('../dist/main/electron/window-option
 const outputDir = join(process.cwd(), 'docs', 'implementation', 'visual-comparison');
 const viewports = [
   { name: 'desktop', width: 1440, height: 900 },
-  { name: 'minimum', width: 1100, height: 700 },
-  { name: 'vertical', width: 1100, height: 1200 }
+  { name: 'vertical-third', width: 1080, height: 600 },
+  { name: 'portrait-half', width: 1080, height: 900 },
+  { name: 'medium', width: 900, height: 800 },
+  { name: 'compact', width: 640, height: 700 },
+  { name: 'minimum', width: 500, height: 600 },
+  { name: 'vertical', width: 1080, height: 1200 }
 ];
 const views = [
-  { name: 'general', nav: 'home' },
-  { name: 'servidor', nav: 'server' },
+  { name: 'general', nav: 'home', readySelector: '.general-primary-grid' },
+  { name: 'servidor', nav: 'server', readySelector: '.settings-group' },
   { name: 'red-firewall', nav: 'network' },
   { name: 'backups', nav: 'backups' },
   { name: 'logs', nav: 'logs' },
@@ -31,8 +35,8 @@ const views = [
   }
 ];
 const manualViews = [
-  { name: 'general', selector: '.sidebar__link[data-nav="home"]', waitMs: 1200 },
-  { name: 'servidor', selector: '.sidebar__link[data-nav="server"]', waitMs: 1200 },
+  { name: 'general', selector: '.sidebar__link[data-nav="home"]', readySelector: '.general-primary-grid', waitMs: 1200 },
+  { name: 'servidor', selector: '.sidebar__link[data-nav="server"]', readySelector: '.settings-group', waitMs: 1200 },
   { name: 'red-firewall', selector: '.sidebar__link[data-nav="network"]', waitMs: 5500 },
   { name: 'backups', selector: '.sidebar__link[data-nav="backups"]', waitMs: 1200 },
   { name: 'logs', selector: '.sidebar__link[data-nav="logs"]', waitMs: 900, fixtureLogs: true },
@@ -44,7 +48,12 @@ const manualViews = [
 const manualRuntimeViews = [
   { name: 'administracion-servidor', selector: '[data-admin-sidebar-tab="general"]', waitMs: 5000 },
   { name: 'administracion-jugadores', selector: '[data-admin-sidebar-tab="players"]', waitMs: 2500 },
-  { name: 'administracion-mapa', selector: '[data-admin-sidebar-tab="map"]', waitMs: 1500 },
+  {
+    name: 'administracion-mapa',
+    selector: '[data-admin-sidebar-tab="map"]',
+    readySelector: '.admin-map-stage',
+    waitMs: 600
+  },
   { name: 'general-servidor-activo', selector: '.sidebar__link[data-nav="home"]', waitMs: 1500 }
 ];
 
@@ -103,11 +112,52 @@ async function capture(window, viewport, view) {
     await waitForSelector(window, `${view.selector}.sidebar__link--active`);
     await wait(500);
   }
+  if (view.readySelector) {
+    await waitForSelector(window, view.readySelector, 30000);
+  }
+  await waitForSelectorRemoved(window, '.view-loading-overlay');
+  await wait(300);
+  if (viewport.name === 'vertical-third' && view.name === 'general') {
+    await assertGeneralScroll(window);
+  }
   const image = await capturePageWithRetry(window);
   writeFileSync(
     join(outputDir, `${viewport.name}-${String(viewport.width)}x${String(viewport.height)}-${view.name}.png`),
     image.toPNG()
   );
+}
+
+async function assertGeneralScroll(window) {
+  const result = await window.webContents.executeJavaScript(`
+    (() => {
+      const element = document.querySelector('.general-view');
+      if (!(element instanceof HTMLElement)) {
+        return { found: false, maxScrollTop: 0, moved: false };
+      }
+      const firstChild = element.firstElementChild;
+      const style = getComputedStyle(element);
+      const maxScrollTop = element.scrollHeight - element.clientHeight;
+      element.scrollTop = maxScrollTop;
+      const moved = element.scrollTop > 0;
+      element.scrollTop = 0;
+      return {
+        found: true,
+        maxScrollTop,
+        moved,
+        clientHeight: element.clientHeight,
+        scrollHeight: element.scrollHeight,
+        childCount: element.children.length,
+        textLength: element.innerText.length,
+        display: style.display,
+        visibility: style.visibility,
+        opacity: style.opacity,
+        firstChildRect: firstChild?.getBoundingClientRect().toJSON()
+      };
+    })()
+  `);
+  if (!result.found || result.maxScrollTop <= 0 || !result.moved) {
+    throw new Error(`General view is not scrollable at 1080x600: ${JSON.stringify(result)}`);
+  }
 }
 
 async function waitForSelectorRemoved(window, selector, timeoutMs = 30000) {
@@ -160,13 +210,23 @@ async function writeScreenshotWithRetry(targetPath, pngBuffer, attempts = 5) {
 async function openManualView(window, view) {
   if (view.selector.includes('data-settings-sidebar-tab')) {
     await window.webContents.executeJavaScript(`
-      document.querySelector('[data-settings-group-toggle]')?.click()
+      (() => {
+        const group = document.querySelector('[data-nav-group="settings"]');
+        if (group?.classList.contains('sidebar__group--collapsed')) {
+          document.querySelector('[data-settings-group-toggle]')?.click();
+        }
+      })()
     `);
     await waitForSelector(window, view.selector);
   }
   if (view.selector.includes('data-admin-sidebar-tab')) {
     await window.webContents.executeJavaScript(`
-      document.querySelector('[data-admin-group-toggle]')?.click()
+      (() => {
+        const group = document.querySelector('[data-nav-group="admin"]');
+        if (group?.classList.contains('sidebar__group--collapsed')) {
+          document.querySelector('[data-admin-group-toggle]')?.click();
+        }
+      })()
     `);
     await waitForSelector(window, view.selector);
   }
@@ -181,6 +241,10 @@ async function openManualView(window, view) {
   `);
   if (!clicked) {
     throw new Error(`Manual view is not available: ${view.name}`);
+  }
+  const adminTab = view.selector.match(/data-admin-sidebar-tab="([^"]+)"/)?.[1];
+  if (adminTab) {
+    await waitForSelector(window, `[data-admin-active-tab="${adminTab}"]`);
   }
   await wait(view.waitMs);
 }
@@ -329,6 +393,18 @@ async function waitForEnabledNavigation(window, nav, timeoutMs = 30000) {
 async function writeManualScreenshot(window, outputDir, view) {
   await openManualView(window, view);
   await waitForSelectorRemoved(window, '.view-loading-overlay');
+  if (view.readySelector) {
+    await waitForSelector(window, view.readySelector, 30000);
+  }
+  if (view.name === 'servidor') {
+    await window.webContents.executeJavaScript(`
+      (() => {
+        const firstGroup = document.querySelector('.settings-group');
+        if (firstGroup instanceof HTMLDetailsElement) firstGroup.open = true;
+      })()
+    `);
+    await wait(200);
+  }
   await applySafeDocumentationData(window, Boolean(view.fixtureLogs));
   await wait(250);
   const image = await capturePageWithRetry(window);
@@ -338,15 +414,40 @@ async function writeManualScreenshot(window, outputDir, view) {
 async function captureManualScreenshots(window) {
   const manualOutputDir = join(process.cwd(), 'resources', 'screenshots');
   const requestedView = process.env.PALCM_CAPTURE_VIEW;
+  const requestedRuntimeView = requestedView
+    ? manualRuntimeViews.find((view) => view.name === requestedView)
+    : undefined;
   const selectedViews = requestedView
     ? manualViews.filter((view) => view.name === requestedView)
     : manualViews;
-  if (requestedView && selectedViews.length === 0) {
+  if (requestedView && selectedViews.length === 0 && !requestedRuntimeView) {
     throw new Error(`Unknown manual capture view: ${requestedView}`);
   }
   mkdirSync(manualOutputDir, { recursive: true });
   window.setSize(1440, 900);
   await wait(400);
+
+  if (requestedRuntimeView) {
+    await ensureServerRunning(window);
+    try {
+      window.webContents.reload();
+      await waitForSelector(window, '.sidebar__link[data-nav="home"]');
+      await waitForEnabledNavigation(window, 'admin');
+      await writeManualScreenshot(window, manualOutputDir, requestedRuntimeView);
+    } finally {
+      await ensureServerStopped(window);
+    }
+    return;
+  }
+
+  if (requestedView && requestedView !== 'general') {
+    const generalView = manualViews.find((view) => view.name === 'general');
+    if (generalView) {
+      await openManualView(window, generalView);
+      await waitForSelectorRemoved(window, '.view-loading-overlay');
+      await waitForSelector(window, generalView.readySelector, 30000);
+    }
+  }
 
   for (const view of selectedViews) {
     await writeManualScreenshot(window, manualOutputDir, view);

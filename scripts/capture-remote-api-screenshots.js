@@ -7,6 +7,8 @@ const apiRoot = '/api/v1';
 const outputDir = join(process.cwd(), 'resources', 'screenshots');
 const webRoot = join(process.cwd(), 'resources', 'remote-api-web');
 const logoPath = join(process.cwd(), 'src', 'renderer', 'assets', 'palcm-logo.png');
+const worldMapPath = join(process.cwd(), 'src', 'renderer', 'assets', 'palworld-world-map-1.0.webp');
+const treeMapPath = join(process.cwd(), 'src', 'renderer', 'assets', 'palworld-tree-map-1.0.webp');
 const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 const sessions = new Map();
@@ -26,7 +28,8 @@ function sendAsset(response, path) {
     '.html': 'text/html; charset=utf-8',
     '.css': 'text/css; charset=utf-8',
     '.js': 'text/javascript; charset=utf-8',
-    '.png': 'image/png'
+    '.png': 'image/png',
+    '.webp': 'image/webp'
   };
   response.writeHead(200, {
     'content-type': contentTypes[extension] || 'application/octet-stream',
@@ -90,6 +93,14 @@ function createFixtureServer() {
       sendAsset(response, logoPath);
       return;
     }
+    if (url.pathname === `${apiRoot}/map/world.webp`) {
+      sendAsset(response, worldMapPath);
+      return;
+    }
+    if (url.pathname === `${apiRoot}/map/tree.webp`) {
+      sendAsset(response, treeMapPath);
+      return;
+    }
     if (url.pathname === `${apiRoot}/auth/login` && request.method === 'POST') {
       const body = await readBody(request);
       const profile = body.username === 'cliente' ? 'CLIENT' : 'ADMIN';
@@ -128,6 +139,41 @@ function createFixtureServer() {
           ping: 24.3,
           locationX: 305821,
           locationY: 230422
+        }]
+      });
+      return;
+    }
+    if (url.pathname === `${apiRoot}/map`) {
+      sendJson(response, 200, {
+        status: 'READY',
+        message: 'Un jugador conectado.',
+        updatedAt: new Date().toISOString(),
+        layers: [
+          {
+            id: 'world',
+            label: 'Palpagos',
+            imageUrl: `${apiRoot}/map/world.webp`,
+            imageWidth: 8192,
+            imageHeight: 8192,
+            imageToWorld: { a: 0.375711236, b: -0.0156508073, c: -1823.80271, d: -0.00463658188, e: -0.385279301, f: 1056.84169 },
+            bounds: { minX: -1952.01, maxX: 1253.83, minY: -2137.25, maxY: 1056.84 }
+          },
+          {
+            id: 'tree',
+            label: 'Arbol del Mundo',
+            imageUrl: `${apiRoot}/map/tree.webp`,
+            imageWidth: 8192,
+            imageHeight: 8192,
+            imageToWorld: { a: 0.0862548982233, b: 0.00221230612851, c: -2123.2121, d: -0.0005399869936045, e: -0.08862828935115, f: 1769.06075 },
+            bounds: { minX: -2123.21, maxX: -1398.52, minY: 1038.64, maxY: 1769.06 }
+          }
+        ],
+        players: [{
+          key: 'steam_00000000000000001',
+          name: 'Jugador de ejemplo',
+          mapId: 'world',
+          left: '59.25',
+          top: '43.80'
         }]
       });
       return;
@@ -174,8 +220,11 @@ async function waitForSelector(window, selector, timeoutMs = 15_000) {
   throw new Error(`Selector not found: ${selector}`);
 }
 
-async function capture(window, filename) {
+async function capture(window, filename, expectedView) {
   await wait(350);
+  if (expectedView) {
+    await assertWebView(window, expectedView);
+  }
   const image = await window.webContents.capturePage();
   writeFileSync(join(outputDir, filename), image.toPNG());
 }
@@ -195,6 +244,36 @@ async function login(window, username) {
 async function logout(window) {
   await window.webContents.executeJavaScript(`document.querySelector('#logout-button')?.click()`);
   await waitForSelector(window, '#login-view:not([hidden])');
+}
+
+async function selectWebView(window, view) {
+  const state = await window.webContents.executeJavaScript(`
+    (() => {
+      const button = document.querySelector('.nav-button[data-view="${view}"]');
+      button?.click();
+      return {
+        active: document.querySelector('.nav-button.active')?.dataset.view,
+        visible: document.querySelector('[data-content-view]:not([hidden])')?.dataset.contentView
+      };
+    })()
+  `);
+  if (state.active !== view || state.visible !== view) {
+    throw new Error(`No se pudo abrir la vista ${view}: ${JSON.stringify(state)}`);
+  }
+}
+
+async function assertWebView(window, view) {
+  const state = await window.webContents.executeJavaScript(`
+    (() => ({
+      active: document.querySelector('.nav-button.active')?.dataset.view,
+      displayed: Array.from(document.querySelectorAll('[data-content-view]'))
+        .filter((element) => getComputedStyle(element).display !== 'none')
+        .map((element) => element.dataset.contentView)
+    }))()
+  `);
+  if (state.active !== view || state.displayed.length !== 1 || state.displayed[0] !== view) {
+    throw new Error(`Vista inconsistente ${view}: ${JSON.stringify(state)}`);
+  }
 }
 
 async function main() {
@@ -229,13 +308,21 @@ async function main() {
     await login(window, 'cliente');
     await capture(window, 'api-web-cliente.png');
 
+    await selectWebView(window, 'map');
+    await waitForSelector(window, '#map-view:not([hidden])');
+    await wait(700);
+    await assertWebView(window, 'map');
+    await capture(window, 'api-web-mapa.png', 'map');
+
     window.setSize(390, 844);
     await wait(500);
-    await window.webContents.executeJavaScript(`
-      document.querySelector('[data-view="players"]')?.click()
-    `);
+    await assertWebView(window, 'map');
+    await capture(window, 'api-web-mapa-movil.png', 'map');
+
+    await selectWebView(window, 'players');
     await wait(450);
-    await capture(window, 'api-web-cliente-movil.png');
+    await assertWebView(window, 'players');
+    await capture(window, 'api-web-cliente-movil.png', 'players');
   } finally {
     window.destroy();
     await new Promise((resolve) => fixtureServer.close(resolve));

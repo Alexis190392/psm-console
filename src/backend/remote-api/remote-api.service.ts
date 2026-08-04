@@ -11,6 +11,13 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { APP_INFO } from '../../shared/constants/app-info';
+import {
+  getPalworldMapPosition,
+  isPalworldPositionInMap,
+  PALWORLD_MAP_LAYER_BOUNDS,
+  PALWORLD_MAP_LAYERS,
+  type PalworldMapId
+} from '../../shared/constants/palworld-map';
 import type {
   RemoteApiConnectionDto,
   RemoteApiLoginResultDto,
@@ -55,6 +62,10 @@ const WEB_ASSETS = {
     filename: 'ui.js',
     contentType: 'text/javascript; charset=utf-8'
   }
+} as const;
+const MAP_ASSETS = {
+  [`${API_PREFIX}/map/world.webp`]: 'palworld-world-map-1.0.webp',
+  [`${API_PREFIX}/map/tree.webp`]: 'palworld-tree-map-1.0.webp'
 } as const;
 
 interface ApiSession {
@@ -259,6 +270,13 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
         return;
       }
 
+      if (method === 'GET' && requestUrl.pathname in MAP_ASSETS) {
+        const filename = MAP_ASSETS[requestUrl.pathname as keyof typeof MAP_ASSETS];
+        const body = await readFile(resolveMapAssetPath(filename));
+        sendAsset(response, 200, 'image/webp', body, false);
+        return;
+      }
+
       if (method === 'GET' && requestUrl.pathname === `${API_PREFIX}/health`) {
         sendJson(response, 200, {
           status: 'ok',
@@ -379,6 +397,27 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
         'PLAYERS_BAN'
       ]);
       sendJson(response, 200, await this.palworldPlayersService.getStatus());
+      return;
+    }
+    if (method === 'GET' && path === `${API_PREFIX}/map`) {
+      this.requireAnyPermission(session, [
+        'PLAYERS_VIEW',
+        'PLAYERS_KICK',
+        'PLAYERS_BAN'
+      ]);
+      const playersStatus = await this.palworldPlayersService.getStatus();
+      sendJson(response, 200, {
+        status: playersStatus.status,
+        message: playersStatus.message,
+        updatedAt: playersStatus.updatedAt,
+        layers: PALWORLD_MAP_LAYERS.map((layer) => ({
+          ...layer,
+          label: layer.id === 'world' ? 'Palpagos' : 'Arbol del Mundo',
+          imageUrl: `${API_PREFIX}/map/${layer.id}.webp`,
+          bounds: PALWORLD_MAP_LAYER_BOUNDS[layer.id]
+        })),
+        players: createRemoteMapPlayers(playersStatus.players)
+      });
       return;
     }
     if (method === 'GET' && path === `${API_PREFIX}/admin`) {
@@ -1084,6 +1123,50 @@ function resolveLogoPath(): string {
     return packagedPath;
   }
   return join(process.cwd(), 'src', 'renderer', 'assets', 'palcm-logo.png');
+}
+
+function resolveMapAssetPath(filename: string): string {
+  const packagedPath = typeof process.resourcesPath === 'string'
+    ? join(process.resourcesPath, 'remote-api-web', filename)
+    : '';
+  if (packagedPath && existsSync(packagedPath)) {
+    return packagedPath;
+  }
+  return join(process.cwd(), 'src', 'renderer', 'assets', filename);
+}
+
+function createRemoteMapPlayers(
+  players: Awaited<ReturnType<PalworldPlayersService['getStatus']>>['players']
+): Array<{
+  key: string;
+  name: string;
+  mapId: PalworldMapId;
+  left: string;
+  top: string;
+}> {
+  return players.flatMap((player) => {
+    if (
+      typeof player.locationX !== 'number'
+      || !Number.isFinite(player.locationX)
+      || typeof player.locationY !== 'number'
+      || !Number.isFinite(player.locationY)
+    ) {
+      return [];
+    }
+    const mapId = (['world', 'tree'] as const).find((candidate) =>
+      isPalworldPositionInMap(player.locationX as number, player.locationY as number, candidate)
+    );
+    if (!mapId) {
+      return [];
+    }
+    const position = getPalworldMapPosition(player.locationX, player.locationY, mapId);
+    return [{
+      key: player.userId ?? player.playerId ?? player.name,
+      name: player.name,
+      mapId,
+      ...position
+    }];
+  });
 }
 
 async function readJsonBody(request: IncomingMessage): Promise<Record<string, unknown>> {

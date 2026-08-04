@@ -24,17 +24,26 @@ describe('Electron window security options', () => {
   it('keeps the approved minimum size and accepts display-aware initial size', () => {
     const options = createMainWindowOptions({ width: 1200, height: 800 });
 
+    expect(options.frame).not.toBe(false);
     expect(options).toMatchObject({
       width: 1200,
       height: 800,
-      minWidth: 1100,
-      minHeight: 700,
+      minWidth: 500,
+      minHeight: 600,
+      resizable: true,
+      maximizable: true,
       movable: true,
-      frame: false,
-      thickFrame: false,
-      transparent: true,
-      hasShadow: false,
-      backgroundColor: '#00000000'
+      thickFrame: true,
+      roundedCorners: false,
+      transparent: false,
+      hasShadow: true,
+      titleBarStyle: 'hidden',
+      titleBarOverlay: {
+        color: '#061018',
+        symbolColor: '#79e8f0',
+        height: 48
+      },
+      backgroundColor: '#050a10'
     });
   });
 

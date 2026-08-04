@@ -21,6 +21,7 @@ describe('IPC channel surface', () => {
 
   it('keeps server maintenance actions behind concrete domain channels', () => {
     expect(ipcChannels.serverUpdate).toBe('server:update');
+    expect(ipcChannels.serverGetUpdateStatus).toBe('server:get-update-status');
     expect(ipcChannels.serverRepair).toBe('server:repair');
     expect(ipcChannels.serverRestart).toBe('server:restart');
     expect(ipcChannels.serverRuntimeChanged).toBe('server:runtime-changed');

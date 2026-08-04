@@ -2,7 +2,13 @@ import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { OperationManagerService } from '../src/backend/operations/operation-manager.service';
-import { PALWORLD_DEDICATED_SERVER_APP_ID, PalworldInstallationService } from '../src/backend/palworld-installation/palworld-installation.service';
+import {
+  extractManifestBuildId,
+  extractSteamCmdPublicBuildId,
+  PALWORLD_DEDICATED_SERVER_APP_ID,
+  PalworldInstallationService,
+  resolvePalworldUpdateStatus
+} from '../src/backend/palworld-installation/palworld-installation.service';
 import { PortablePathService } from '../src/backend/portable-path/portable-path.service';
 import { PortableStateService } from '../src/backend/portable-state/portable-state.service';
 import { PalworldMaintenanceSnapshotService } from '../src/backend/palworld-maintenance/palworld-maintenance-snapshot.service';
@@ -122,5 +128,45 @@ describe('PalworldInstallationService', () => {
     expect(() => service.update({ confirmed: true }, () => 'RUNNING')).toThrow(
       'PALWORLD_UPDATE_REQUIRES_SERVER_STOPPED'
     );
+  });
+
+  it('reads the installed build from the Steam app manifest', () => {
+    expect(extractManifestBuildId(`"AppState"\n{\n  "buildid"  "24181105"\n}`)).toBe('24181105');
+    expect(extractManifestBuildId('"AppState" {}')).toBeNull();
+  });
+
+  it('reports an available server update with the required build', () => {
+    expect(resolvePalworldUpdateStatus('24181105', '24190000')).toMatchObject({
+      status: 'UPDATE_AVAILABLE',
+      localBuildId: '24181105',
+      requiredBuildId: '24190000'
+    });
+  });
+
+  it('reports the installed server build as current', () => {
+    expect(resolvePalworldUpdateStatus('24181105', '24181105')).toMatchObject({
+      status: 'UP_TO_DATE',
+      localBuildId: '24181105'
+    });
+  });
+
+  it('reads the public branch build returned by SteamCMD', () => {
+    expect(extractSteamCmdPublicBuildId(`
+      "depots"
+      {
+        "branches"
+        {
+          "public"
+          {
+            "buildid" "24466863"
+            "timeupdated" "1785531637"
+          }
+          "previous"
+          {
+            "buildid" "24181105"
+          }
+        }
+      }
+    `)).toBe('24466863');
   });
 });

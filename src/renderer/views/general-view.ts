@@ -4,6 +4,7 @@ import {
   type SummaryCardDetails
 } from '../components/summary-card';
 import type { AppUpdateStatusDto } from '../../shared/dto/app-update-status.dto';
+import type { PalworldUpdateStatusDto } from '../../shared/dto/palworld-installation-status.dto';
 import type { RemoteApiStatusDto } from '../../shared/dto/remote-api.dto';
 import { escapeHtml } from '../utils/text';
 
@@ -16,7 +17,7 @@ export interface GeneralViewModel {
 
 export function renderGeneralView(model: GeneralViewModel): string {
   return `
-    <div class="view-stack">
+    <div class="view-stack view-stack--scroll general-view">
       <div class="view-header view-header--contained">
         <h3>General</h3>
         <div class="view-actions">
@@ -99,6 +100,51 @@ export function createGeneralRemoteApiCard(status: RemoteApiStatusDto | null): S
 
 export function renderGeneralRemoteApiCard(status: RemoteApiStatusDto | null): string {
   return renderSummaryCard({ ...createGeneralRemoteApiCard(status), density: 'prominent' });
+}
+
+export function createGeneralServerUpdateCard(status: PalworldUpdateStatusDto | null): SummaryCardDetails {
+  const base = {
+    id: 'general-server-update-card',
+    title: 'Servidor',
+    target: 'server'
+  };
+
+  if (!status) {
+    return {
+      ...base,
+      value: 'Verificando',
+      detail: 'Consultando la version instalada y la publicada por Steam.',
+      ...createSummaryCardState('loading')
+    };
+  }
+
+  if (status.status === 'UPDATE_AVAILABLE') {
+    return {
+      ...base,
+      value: 'Actualizar',
+      detail: status.requiredBuildId
+        ? `Build ${status.localBuildId ?? 'actual'} -> ${status.requiredBuildId}.`
+        : `Build ${status.localBuildId ?? 'actual'}. Hay una actualizacion disponible.`,
+      action: 'server-update',
+      ...createSummaryCardState('warning')
+    };
+  }
+
+  if (status.status === 'UP_TO_DATE') {
+    return {
+      ...base,
+      value: 'Actualizado',
+      detail: status.localBuildId ? `Build ${status.localBuildId}.` : status.message,
+      ...createSummaryCardState('ok')
+    };
+  }
+
+  return {
+    ...base,
+    value: status.status === 'NOT_INSTALLED' ? 'No instalado' : 'Sin verificar',
+    detail: status.message,
+    ...createSummaryCardState(status.status === 'NOT_INSTALLED' ? 'configuration' : 'optional')
+  };
 }
 
 export function shouldRefreshGeneralRemoteApi(status: RemoteApiStatusDto | null): boolean {

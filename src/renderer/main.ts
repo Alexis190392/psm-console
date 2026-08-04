@@ -18,6 +18,7 @@ import type { LogFileSummaryDto, LogModule } from '../shared/dto/log-status.dto'
 import type { OperationProgressDto } from '../shared/dto/operation-progress.dto';
 import type { PalworldAdminAction, PalworldAdminStatusDto } from '../shared/dto/palworld-admin.dto';
 import type { PalworldPlayersStatusDto } from '../shared/dto/palworld-players-status.dto';
+import type { PalworldUpdateStatusDto } from '../shared/dto/palworld-installation-status.dto';
 import type { PalworldQueryPortStatusDto, PalworldRuntimeStatusDto } from '../shared/dto/palworld-runtime-status.dto';
 import type {
   RemoteApiPermission,
@@ -31,10 +32,14 @@ import {
 } from './components/summary-card';
 import { renderInlineConfirm } from './components/inline-confirm';
 import { renderIcon } from './components/icon';
-import { bindWindowControls } from './components/window-controls';
 import { CONFIGURATION_PRESETS } from './config/configuration-presets';
 import { hasConfigurationChangedExternally } from './config/configuration-change-guard';
 import { getSettingDefinition } from './config/setting-definition-resolver';
+import {
+  PALWORLD_MAP_LAYER_BOUNDS,
+  PALWORLD_MAP_LAYERS,
+  type PalworldMapId
+} from './constants/palworld-map';
 import {
   formatSettingValue,
   parsePalworldSettings,
@@ -43,6 +48,9 @@ import {
   type ParsedPalworldSettings
 } from './config/palworld-settings-parser';
 import { formatBytes, formatLastVerification } from './utils/format';
+import { syncLiveElement } from './utils/dom-sync';
+import { calculateMapCanvasSize } from './utils/map-canvas-size';
+import { calculateAnchoredMapScroll } from './utils/map-zoom';
 import { getOperationFailureMessage, isOperationSuccessful } from './utils/operation-result';
 import { cssEscape, escapeHtml, normalizeSearchText } from './utils/text';
 import { renderBackupsView as renderBackupsViewHtml } from './views/backups-view';
@@ -58,6 +66,7 @@ import {
 } from './views/server-configuration-view';
 import {
   createGeneralRemoteApiCard,
+  createGeneralServerUpdateCard,
   renderGeneralRemoteApiCard,
   renderGeneralUpdateAction,
   renderGeneralView as renderGeneralViewHtml,
@@ -109,9 +118,6 @@ rootElement.innerHTML = `
       <span></span><span></span><span></span>
     </div>
     <div class="titlebar__spacer"></div>
-    <button id="window-minimize" class="window-button" aria-label="Minimizar">${renderIcon('minus')}</button>
-    <button id="window-maximize" class="window-button" aria-label="Maximizar">${renderIcon('maximize')}</button>
-    <button id="window-close" class="window-button window-button--close" aria-label="Cerrar">${renderIcon('x')}</button>
   </header>
   <aside class="sidebar">
     <section class="sidebar__identity">
@@ -297,8 +303,6 @@ rootElement.innerHTML = `
 
 const palcmApi = window.palcm;
 
-bindWindowControls();
-
 const statusLabel = document.querySelector('#status-label');
 const portableRoot = document.querySelector('#portable-root');
 const heroEyebrow = document.querySelector('.eyebrow');
@@ -355,9 +359,25 @@ let publicNetworkRequestPort: string | null = null;
 let latestConfiguredPort: string | null = null;
 let latestBackupSummary: BackupSummaryDto | null = null;
 let latestUpdateStatus: AppUpdateStatusDto | null = null;
+let latestPalworldUpdateStatus: PalworldUpdateStatusDto | null = null;
 let updateStatusRequest: Promise<AppUpdateStatusDto> | null = null;
 let announcedUpdateVersion: string | null = null;
 let adminRefreshTimer: number | null = null;
+let adminMapZoom = 1;
+let activeAdminMap: PalworldMapId = 'world';
+const adminMapViewStates: Record<PalworldMapId, { zoom: number; scrollX: number; scrollY: number }> = {
+  world: { zoom: 1, scrollX: 0, scrollY: 0 },
+  tree: { zoom: 1, scrollX: 0, scrollY: 0 }
+};
+let adminMapDrag: {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  scrollLeft: number;
+  scrollTop: number;
+} | null = null;
+let adminMapViewportResizeObserver: ResizeObserver | null = null;
+let adminMapImageCache: { url: string; image: HTMLImageElement } | null = null;
 let remoteApiConnectionRefreshTimer: number | null = null;
 let generalRemoteApiRefreshTimer: number | null = null;
 let remoteApiSaveStatusTimer: number | null = null;
@@ -368,6 +388,8 @@ const remoteApiAutosaveTimers: Record<'ADMIN' | 'CLIENT', number | null> = {
   CLIENT: null
 };
 let adminStatusRequest: Promise<[PalworldAdminStatusDto, PalworldPlayersStatusDto]> | null = null;
+let latestAdminStatus: PalworldAdminStatusDto | null = null;
+let latestAdminPlayersStatus: PalworldPlayersStatusDto | null = null;
 const adminViewState = new AdminViewState();
 const settingsViewState = new SettingsViewState();
 let consoleSearchTerm = '';
@@ -401,7 +423,11 @@ let latestSummary: {
 } | null = null;
 
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'palcm:sidebar-collapsed';
-let sidebarPreferenceExplicit = false;
+const SIDEBAR_COMPACT_BREAKPOINT = 1007;
+const SIDEBAR_SMALL_BREAKPOINT = 640;
+const SHORT_WINDOW_BREAKPOINT = 850;
+let sidebarPreference: boolean | null = null;
+let sidebarOverlayOpen = false;
 
 initializeSidebar();
 initializeTacticalWindowFrame();
@@ -539,20 +565,22 @@ function scheduleRuntimeStateRefresh(): void {
 }
 
 function initializeSidebar(): void {
-  const storedState = readStoredSidebarState();
-  sidebarPreferenceExplicit = storedState !== null;
-  const collapsed = storedState ?? window.innerWidth <= 1180;
-  setSidebarCollapsed(collapsed, false);
+  sidebarPreference = readStoredSidebarState();
+  synchronizeResponsiveLayout();
 
   sidebarToggle?.addEventListener('click', () => {
-    sidebarPreferenceExplicit = true;
-    setSidebarCollapsed(!rootElement.classList.contains('app--sidebar-collapsed'));
+    if (isCompactWindow()) {
+      sidebarOverlayOpen = !sidebarOverlayOpen;
+      synchronizeResponsiveLayout();
+      return;
+    }
+
+    sidebarPreference = !rootElement.classList.contains('app--sidebar-collapsed');
+    setSidebarCollapsed(sidebarPreference);
   });
 
   window.addEventListener('resize', () => {
-    if (!sidebarPreferenceExplicit) {
-      setSidebarCollapsed(window.innerWidth <= 1180, false);
-    }
+    synchronizeResponsiveLayout();
   });
 
   navLinks.forEach((link) => {
@@ -560,7 +588,41 @@ function initializeSidebar(): void {
     if (label) {
       link.title = label;
     }
+    link.addEventListener('click', () => {
+      if (link.hasAttribute('data-admin-group-toggle') || link.hasAttribute('data-settings-group-toggle')) {
+        return;
+      }
+      if (!isCompactWindow() || !sidebarOverlayOpen) {
+        return;
+      }
+      sidebarOverlayOpen = false;
+      synchronizeResponsiveLayout();
+    });
   });
+}
+
+function isCompactWindow(): boolean {
+  return window.innerWidth <= SIDEBAR_COMPACT_BREAKPOINT;
+}
+
+function synchronizeResponsiveLayout(): void {
+  const compactWidth = isCompactWindow();
+  const smallWidth = window.innerWidth <= SIDEBAR_SMALL_BREAKPOINT;
+  const shortHeight = window.innerHeight <= SHORT_WINDOW_BREAKPOINT;
+
+  rootElement.classList.toggle('app--responsive-compact', compactWidth);
+  rootElement.classList.toggle('app--responsive-small', smallWidth);
+  rootElement.classList.toggle('app--responsive-short', shortHeight);
+
+  if (!compactWidth) {
+    sidebarOverlayOpen = false;
+  }
+
+  rootElement.classList.toggle('app--sidebar-overlay-open', compactWidth && sidebarOverlayOpen);
+  const collapsed = compactWidth
+    ? !sidebarOverlayOpen
+    : (sidebarPreference ?? window.innerWidth <= 1180);
+  setSidebarCollapsed(collapsed, false);
 }
 
 function initializeTacticalWindowFrame(): void {
@@ -578,20 +640,34 @@ function initializeTacticalWindowFrame(): void {
   const syncFrame = (): void => {
     const width = Math.max(1, window.innerWidth);
     const height = Math.max(1, window.innerHeight);
+    const titlebar = rootElement.querySelector<HTMLElement>('.titlebar');
+    const titlebarRect = titlebar?.getBoundingClientRect();
     const edge = 1;
-    const cut = 18;
+    const cut = 28;
+    const nativeControlsWidth = Math.max(
+      0,
+      Math.round(width - (titlebarRect?.right ?? width - 138))
+    );
+    const titlebarHeight = Math.max(48, Math.round(titlebarRect?.height ?? 48));
     const topLeftWing = width * 0.28;
-    const topRightWing = width * 0.86;
     const bottomLeftWing = width * 0.22;
     const bottomRightWing = width * 0.86;
+    const controlDockStart = width - nativeControlsWidth;
+
+    rootElement.style.setProperty('--native-controls-width', `${String(nativeControlsWidth)}px`);
+    rootElement.style.setProperty('--native-titlebar-height', `${String(titlebarHeight)}px`);
+    document.body.style.setProperty('--native-controls-width', `${String(nativeControlsWidth)}px`);
+    document.body.style.setProperty('--native-titlebar-height', `${String(titlebarHeight)}px`);
+
     const points: Array<readonly [number, number]> = [
       [cut, edge],
       [topLeftWing, edge],
       [topLeftWing + cut, cut],
-      [topRightWing - cut, cut],
-      [topRightWing, edge],
-      [width - cut, edge],
-      [width - edge, cut],
+      [controlDockStart - 40, cut],
+      [controlDockStart - 12, edge],
+      [controlDockStart, edge],
+      [controlDockStart, titlebarHeight],
+      [width - edge, titlebarHeight],
       [width - edge, height - cut],
       [width - cut, height - edge],
       [bottomRightWing, height - edge],
@@ -949,6 +1025,7 @@ function renderOperationCancellationFooter(operation: OperationProgressDto): voi
   }
 
   rootElement.classList.add('app--footer-visible');
+  appFooter.classList.remove('app-footer--server');
   appFooter.classList.remove('hidden', 'app-footer--confirm');
   appFooter.innerHTML = `
     <span class="app-footer__message">${escapeHtml(operation.message)}</span>
@@ -1428,6 +1505,7 @@ async function renderGeneralView(renderId: number): Promise<void> {
   const serverState = createServerRuntimeSummary(serverRuntime);
   const playersState = createPlayersSummaryCard(playersSummary);
   const remoteApiCard = createGeneralRemoteApiCard(remoteApiStatus);
+  const serverUpdateCard = createGeneralServerUpdateCard(latestPalworldUpdateStatus);
   const networkFreshness = formatLastVerification(latestFirewallCheckedAt);
 
   setContent(renderGeneralViewHtml({
@@ -1441,6 +1519,7 @@ async function renderGeneralView(renderId: number): Promise<void> {
           target: serverState.state.tone === 'error' ? 'logs' : 'server',
           ...serverState.state
       },
+      serverUpdateCard,
       {
           id: 'general-local-play-card',
           title: 'Juego local',
@@ -1459,15 +1538,16 @@ async function renderGeneralView(renderId: number): Promise<void> {
           target: 'network',
           ...publicPlay.state
       },
+      remoteApiCard,
       {
           title: 'Jugadores',
           value: playersState.value,
           detail: playersState.detail,
-          target: 'admin',
-          adminTab: 'players',
+          target: playersSummary?.status === 'SERVER_STOPPED' ? undefined : 'admin',
+          adminTab: playersSummary?.status === 'SERVER_STOPPED' ? undefined : 'players',
+          disabled: playersSummary?.status === 'SERVER_STOPPED',
           ...playersState.state
-      },
-      remoteApiCard
+      }
     ],
     supportCards: [
       {
@@ -1502,6 +1582,7 @@ async function renderGeneralView(renderId: number): Promise<void> {
   }));
   bindSummaryCards();
   bindReleaseUpdateAction();
+  void hydrateGeneralServerUpdate(renderId);
   void hydrateGeneralLocalPreview(port, renderId);
   void hydrateGeneralPublicPreview(port, renderId);
   void hydrateGeneralNetworkSummary(port, renderId);
@@ -2596,8 +2677,8 @@ async function refreshRemoteApiConnectionStatus(): Promise<void> {
     const template = document.createElement('template');
     template.innerHTML = renderRemoteApiConnectionStatus(status).trim();
     const next = template.content.firstElementChild;
-    if (next) {
-      current.replaceWith(next);
+    if (next instanceof HTMLElement) {
+      syncLiveElement(current, next);
       bindRemoteApiAddressCopies();
     }
   }
@@ -2847,6 +2928,7 @@ function stopRuntimeViewRefreshers(): void {
     window.clearTimeout(generalRemoteApiRefreshTimer);
     generalRemoteApiRefreshTimer = null;
   }
+  releaseAdminMapResources();
 }
 
 async function renderAdminView(renderId = ++activeViewRenderId): Promise<void> {
@@ -2878,6 +2960,8 @@ async function refreshAdminView(options: { force?: boolean } = {}, renderId?: nu
       adminStatusRequest = null;
     });
     const [adminStatus, playersStatus] = await adminStatusRequest;
+    latestAdminStatus = adminStatus;
+    latestAdminPlayersStatus = playersStatus;
 
     const belongsToCurrentView = renderId === undefined || isCurrentViewRender(renderId, 'admin');
     if (belongsToCurrentView && navigationState.is('admin') && (options.force || !isEditingAdminForm())) {
@@ -2886,8 +2970,11 @@ async function refreshAdminView(options: { force?: boolean } = {}, renderId?: nu
         renderViewLoading('CARGANDO DATOS DEL SERVIDOR');
         return;
       }
-      const html = renderAdminStatus(adminStatus, playersStatus, activeTab);
+      const html = renderAdminStatus(adminStatus, playersStatus, activeTab, activeAdminMap);
       if (!updateAdminLiveRegions(html, activeTab)) {
+        if (activeTab === 'map') {
+          releaseAdminMapResources();
+        }
         setContent(html);
       }
       bindAdminControls();
@@ -2930,12 +3017,8 @@ function updateAdminLiveRegions(html: string, activeTab: AdminTab): boolean {
   for (const nextRegion of nextRegions) {
     const regionId = nextRegion.dataset['adminLiveRegion'] ?? '';
     const currentRegion = currentRegions.get(regionId);
-    if (currentRegion && currentRegion.innerHTML !== nextRegion.innerHTML) {
-      currentRegion.innerHTML = nextRegion.innerHTML;
-    }
     if (currentRegion) {
-      currentRegion.className = nextRegion.className;
-      currentRegion.title = nextRegion.title;
+      syncLiveElement(currentRegion, nextRegion);
     }
   }
 
@@ -2960,6 +3043,12 @@ function startAdminAutoRefresh(): void {
 }
 
 function bindAdminControls(): void {
+  bindAdminMapControls();
+  const forceUpdateButton = document.querySelector<HTMLButtonElement>('#force-update-server');
+  if (forceUpdateButton && forceUpdateButton.dataset['adminBound'] !== 'true') {
+    forceUpdateButton.dataset['adminBound'] = 'true';
+    forceUpdateButton.addEventListener('click', showForceServerUpdateConfirmation);
+  }
   const restartButton = document.querySelector<HTMLButtonElement>('#restart-server');
   if (restartButton && restartButton.dataset['adminBound'] !== 'true') {
     restartButton.dataset['adminBound'] = 'true';
@@ -2975,12 +3064,421 @@ function bindAdminControls(): void {
       if (!form.reportValidity()) {
         return;
       }
+      if (form.dataset['adminForm'] === 'announce') {
+        void executeAdminAction(form, 'announce');
+        return;
+      }
       const submitter = event instanceof SubmitEvent && event.submitter instanceof HTMLButtonElement
         ? event.submitter
         : null;
       showAdminConfirmation(form, submitter);
     });
   });
+}
+
+function bindAdminMapControls(): void {
+  const viewport = document.querySelector<HTMLElement>('[data-admin-map-viewport]');
+  const stage = document.querySelector<HTMLElement>('[data-admin-map-stage]');
+  if (!viewport || !stage) {
+    return;
+  }
+
+  const renderedMap = parsePalworldMapId(stage.dataset['mapLayer']);
+  if (renderedMap) {
+    activeAdminMap = renderedMap;
+  }
+  adminMapZoom = adminMapViewStates[activeAdminMap].zoom;
+  if (stage.dataset['adminMapInitialized'] !== 'true') {
+    stage.dataset['adminMapInitialized'] = 'true';
+    applyAdminMapZoom(viewport, stage, { restorePosition: true });
+  }
+  bindAdminMapCanvas(stage);
+
+  document.querySelectorAll<HTMLButtonElement>('[data-admin-map-layer-action]').forEach((button) => {
+    if (button.dataset['adminMapBound'] === 'true') {
+      return;
+    }
+    button.dataset['adminMapBound'] = 'true';
+    button.addEventListener('click', () => {
+      const nextMap = parsePalworldMapId(button.dataset['adminMapLayerAction']);
+      if (!nextMap || nextMap === activeAdminMap) {
+        return;
+      }
+      saveAdminMapViewState(viewport);
+      activeAdminMap = nextMap;
+      adminMapZoom = adminMapViewStates[nextMap].zoom;
+      renderCachedAdminMapView();
+    });
+  });
+
+  if (viewport.dataset['adminMapBound'] === 'true') {
+    return;
+  }
+  viewport.dataset['adminMapBound'] = 'true';
+  viewport.addEventListener('wheel', (event) => {
+    event.preventDefault();
+    const direction = event.deltaY < 0 ? 1 : -1;
+    const currentZoom = adminMapZoom;
+    const nextZoom = Math.min(4, Math.max(1, currentZoom + direction * 0.25));
+    if (nextZoom === currentZoom) {
+      return;
+    }
+    const viewportBounds = viewport.getBoundingClientRect();
+    const pointerX = event.clientX - viewportBounds.left;
+    const pointerY = event.clientY - viewportBounds.top;
+    const nextScrollLeft = calculateAnchoredMapScroll(
+      viewport.scrollLeft,
+      pointerX,
+      currentZoom,
+      nextZoom
+    );
+    const nextScrollTop = calculateAnchoredMapScroll(
+      viewport.scrollTop,
+      pointerY,
+      currentZoom,
+      nextZoom
+    );
+
+    adminMapZoom = nextZoom;
+    adminMapViewStates[activeAdminMap].zoom = nextZoom;
+    sizeAdminMapStage(viewport, stage);
+    viewport.scrollLeft = nextScrollLeft;
+    viewport.scrollTop = nextScrollTop;
+    saveAdminMapViewState(viewport);
+  }, { passive: false });
+  viewport.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0 || (event.target instanceof Element && event.target.closest('button'))) {
+      return;
+    }
+    adminMapDrag = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      scrollLeft: viewport.scrollLeft,
+      scrollTop: viewport.scrollTop
+    };
+    viewport.setPointerCapture(event.pointerId);
+    viewport.classList.add('admin-map-viewport--dragging');
+  });
+  viewport.addEventListener('pointermove', (event) => {
+    if (!adminMapDrag || adminMapDrag.pointerId !== event.pointerId) {
+      return;
+    }
+    viewport.scrollLeft = adminMapDrag.scrollLeft - (event.clientX - adminMapDrag.startX);
+    viewport.scrollTop = adminMapDrag.scrollTop - (event.clientY - adminMapDrag.startY);
+    saveAdminMapViewState(viewport);
+  });
+  const stopDragging = (event: PointerEvent): void => {
+    if (!adminMapDrag || adminMapDrag.pointerId !== event.pointerId) {
+      return;
+    }
+    adminMapDrag = null;
+    viewport.classList.remove('admin-map-viewport--dragging');
+    if (viewport.hasPointerCapture(event.pointerId)) {
+      viewport.releasePointerCapture(event.pointerId);
+    }
+  };
+  viewport.addEventListener('pointerup', stopDragging);
+  viewport.addEventListener('pointercancel', stopDragging);
+
+  const viewportResizeObserver = new ResizeObserver(() => {
+    sizeAdminMapStage(viewport, stage, { recalculateBase: true });
+    drawAdminMapCanvas(stage);
+  });
+  adminMapViewportResizeObserver?.disconnect();
+  adminMapViewportResizeObserver = viewportResizeObserver;
+  viewportResizeObserver.observe(viewport);
+}
+
+function parsePalworldMapId(value: string | undefined): PalworldMapId | null {
+  return value === 'world' || value === 'tree' ? value : null;
+}
+
+function saveAdminMapViewState(viewport: HTMLElement): void {
+  const state = adminMapViewStates[activeAdminMap];
+  const maxScrollLeft = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
+  const maxScrollTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+  state.zoom = adminMapZoom;
+  state.scrollX = maxScrollLeft > 0 ? viewport.scrollLeft / maxScrollLeft : 0;
+  state.scrollY = maxScrollTop > 0 ? viewport.scrollTop / maxScrollTop : 0;
+}
+
+function renderCachedAdminMapView(): void {
+  if (!latestAdminStatus || !latestAdminPlayersStatus || !navigationState.is('admin')) {
+    return;
+  }
+  releaseAdminMapResources();
+  setContent(renderAdminStatus(
+    latestAdminStatus,
+    latestAdminPlayersStatus,
+    adminViewState.getTab(),
+    activeAdminMap
+  ));
+  bindAdminControls();
+}
+
+function bindAdminMapCanvas(stage: HTMLElement): void {
+  if (stage.dataset['adminMapCanvasBound'] === 'true') {
+    return;
+  }
+
+  stage.dataset['adminMapCanvasBound'] = 'true';
+  drawAdminMapCanvas(stage);
+}
+
+function drawAdminMapCanvas(stage: HTMLElement): void {
+  const canvas = stage.querySelector<HTMLCanvasElement>('[data-admin-map-canvas]');
+  if (!canvas || stage.clientWidth <= 0 || stage.clientHeight <= 0) {
+    return;
+  }
+
+  const { width: canvasWidth, height: canvasHeight } = calculateMapCanvasSize(
+    Number(stage.dataset['adminMapBaseWidth']) || stage.clientWidth / Math.max(1, adminMapZoom),
+    Number(stage.dataset['adminMapBaseHeight']) || stage.clientHeight / Math.max(1, adminMapZoom),
+    window.devicePixelRatio || 1
+  );
+  if (canvas.width !== canvasWidth || canvas.height !== canvasHeight) {
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
+  }
+
+  const context = canvas.getContext('2d');
+  if (!context) {
+    return;
+  }
+
+  context.setTransform(1, 0, 0, 1, 0, 0);
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.fillStyle = '#071015';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+
+  const mapId = parsePalworldMapId(canvas.dataset['mapLayer']);
+  if (!mapId) {
+    return;
+  }
+  const layer = PALWORLD_MAP_LAYERS.find(({ id }) => id === mapId);
+  const imageUrl = canvas.dataset['mapUrl'];
+  if (!layer || !imageUrl) {
+    return;
+  }
+  const bounds = PALWORLD_MAP_LAYER_BOUNDS[mapId];
+  const worldWidth = bounds.maxX - bounds.minX;
+  const worldHeight = bounds.maxY - bounds.minY;
+  const scaleX = canvas.width / worldWidth;
+  const scaleY = canvas.height / worldHeight;
+
+  const image = getAdminMapImage(imageUrl, () => {
+    drawAdminMapCanvas(stage);
+  });
+  if (!image.complete || image.naturalWidth === 0) {
+    return;
+  }
+
+  const transform = layer.imageToWorld;
+  context.save();
+  context.setTransform(
+    scaleX * transform.a,
+    -scaleY * transform.d,
+    scaleX * transform.b,
+    -scaleY * transform.e,
+    scaleX * (transform.c - bounds.minX),
+    scaleY * (bounds.maxY - transform.f)
+  );
+  context.drawImage(image, 0, 0, layer.imageWidth, layer.imageHeight);
+  context.restore();
+}
+
+function getAdminMapImage(imageUrl: string, onLoad: () => void): HTMLImageElement {
+  if (adminMapImageCache?.url === imageUrl) {
+    return adminMapImageCache.image;
+  }
+
+  releaseAdminMapImage();
+
+  const image = new Image();
+  image.decoding = 'async';
+  image.addEventListener('load', () => {
+    if (adminMapImageCache?.image === image) {
+      onLoad();
+    }
+  }, { once: true });
+  image.src = imageUrl;
+  adminMapImageCache = { url: imageUrl, image };
+  return image;
+}
+
+function releaseAdminMapResources(): void {
+  adminMapDrag = null;
+  adminMapViewportResizeObserver?.disconnect();
+  adminMapViewportResizeObserver = null;
+
+  const canvas = document.querySelector<HTMLCanvasElement>('[data-admin-map-canvas]');
+  if (canvas) {
+    canvas.width = 1;
+    canvas.height = 1;
+  }
+  releaseAdminMapImage();
+}
+
+function releaseAdminMapImage(): void {
+  if (!adminMapImageCache) {
+    return;
+  }
+  adminMapImageCache.image.src = '';
+  adminMapImageCache = null;
+}
+
+function applyAdminMapZoom(
+  viewport: HTMLElement,
+  stage: HTMLElement,
+  options: { preserveCenter?: boolean; restorePosition?: boolean } = {}
+): void {
+  const centerX = viewport.scrollWidth > 0
+    ? (viewport.scrollLeft + viewport.clientWidth / 2) / viewport.scrollWidth
+    : 0.5;
+  const centerY = viewport.scrollHeight > 0
+    ? (viewport.scrollTop + viewport.clientHeight / 2) / viewport.scrollHeight
+    : 0.5;
+  sizeAdminMapStage(viewport, stage, { recalculateBase: true });
+
+  window.requestAnimationFrame(() => {
+    if (options.restorePosition) {
+      const state = adminMapViewStates[activeAdminMap];
+      viewport.scrollLeft = state.scrollX * Math.max(0, viewport.scrollWidth - viewport.clientWidth);
+      viewport.scrollTop = state.scrollY * Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+      return;
+    }
+    if (options.preserveCenter) {
+      viewport.scrollLeft = centerX * viewport.scrollWidth - viewport.clientWidth / 2;
+      viewport.scrollTop = centerY * viewport.scrollHeight - viewport.clientHeight / 2;
+      saveAdminMapViewState(viewport);
+    }
+  });
+}
+
+function sizeAdminMapStage(
+  viewport: HTMLElement,
+  stage: HTMLElement,
+  options: { recalculateBase?: boolean } = {}
+): void {
+  const mapId = parsePalworldMapId(stage.dataset['mapLayer']) ?? activeAdminMap;
+  const bounds = PALWORLD_MAP_LAYER_BOUNDS[mapId];
+  const mapRatio = (bounds.maxX - bounds.minX) / (bounds.maxY - bounds.minY);
+  let baseWidth = Number(stage.dataset['adminMapBaseWidth']);
+  let baseHeight = Number(stage.dataset['adminMapBaseHeight']);
+
+  if (options.recalculateBase || !Number.isFinite(baseWidth) || !Number.isFinite(baseHeight)) {
+    const viewportBounds = viewport.getBoundingClientRect();
+    const viewportWidth = Math.max(1, viewportBounds.width);
+    const viewportHeight = Math.max(1, viewportBounds.height);
+    const viewportRatio = viewportWidth / viewportHeight;
+    baseWidth = viewportRatio >= mapRatio ? viewportWidth : viewportHeight * mapRatio;
+    baseHeight = viewportRatio >= mapRatio ? viewportWidth / mapRatio : viewportHeight;
+    stage.dataset['adminMapBaseWidth'] = String(baseWidth);
+    stage.dataset['adminMapBaseHeight'] = String(baseHeight);
+  }
+
+  stage.style.width = `${String(baseWidth * adminMapZoom)}px`;
+  stage.style.height = `${String(baseHeight * adminMapZoom)}px`;
+}
+
+async function hydrateGeneralServerUpdate(renderId: number): Promise<void> {
+  if (!palcmApi) {
+    return;
+  }
+
+  try {
+    latestPalworldUpdateStatus = await palcmApi.server.getUpdateStatus();
+  } catch (error) {
+    latestPalworldUpdateStatus = {
+      status: 'UNKNOWN',
+      appId: '2394010',
+      checkedAt: new Date().toISOString(),
+      message: 'No se pudo consultar la version publicada por Steam.'
+    };
+    appendConsoleLine(`No se pudo verificar la actualizacion del servidor: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  if (!isCurrentViewRender(renderId, 'home')) {
+    return;
+  }
+
+  replaceSummaryCard(
+    'general-server-update-card',
+    renderSummaryCard({ ...createGeneralServerUpdateCard(latestPalworldUpdateStatus), density: 'prominent' })
+  );
+  bindSummaryCards();
+}
+
+function showForceServerUpdateConfirmation(): void {
+  if (!appFooter) {
+    return;
+  }
+
+  rootElement.classList.add('app--footer-visible');
+  appFooter.classList.remove('hidden');
+  appFooter.classList.add('app-footer--confirm');
+  appFooter.innerHTML = renderInlineConfirm({
+    message:
+      'Se guardara el mundo si esta activo, se detendra el servidor, se creara un respaldo y SteamCMD ejecutara force_install_dir con app_update 2394010 validate. Si estaba activo, al finalizar se iniciara nuevamente.',
+    actions: [
+      { id: 'confirm-force-server-update', label: 'Actualizar servidor', tone: 'warning' },
+      { id: 'cancel-force-server-update', label: 'Cancelar', tone: 'secondary' }
+    ]
+  });
+  document.querySelector<HTMLButtonElement>('#confirm-force-server-update')?.addEventListener('click', () => {
+    runUiAction('No se pudo actualizar el servidor', forceUpdateRunningServer);
+  });
+  document.querySelector<HTMLButtonElement>('#cancel-force-server-update')?.addEventListener(
+    'click',
+    updateFooterChrome
+  );
+}
+
+async function forceUpdateRunningServer(): Promise<void> {
+  if (!palcmApi) {
+    return;
+  }
+
+  const runtimeStatus = await palcmApi.server.getRuntimeStatus();
+  if (runtimeStatus.state === 'STARTING' || runtimeStatus.state === 'STOPPING') {
+    throw new Error('PALWORLD_SERVER_TRANSITION_IN_PROGRESS');
+  }
+  const shouldRestart = runtimeStatus.state === 'RUNNING';
+  navigationState.set('logs');
+  renderActiveView();
+  appendConsoleLine('Actualizacion segura: solicitando guardado del mundo.');
+
+  if (shouldRestart) {
+    const saveResult = await palcmApi.admin.executeAction({
+      confirmed: true,
+      action: 'save'
+    });
+    appendConsoleLine(`Actualizacion segura: ${saveResult.message}`);
+
+    const stopAccepted = await palcmApi.server.stop({ confirmed: true });
+    if (!(await pollOperation(stopAccepted.operationId, { refreshStatusWhileRunning: true }))) {
+      return;
+    }
+  }
+
+  appendConsoleLine('Actualizacion segura: ejecutando SteamCMD con force_install_dir y validate.');
+  const updateAccepted = await palcmApi.server.update({ confirmed: true });
+  if (!(await pollOperation(updateAccepted.operationId))) {
+    return;
+  }
+
+  if (shouldRestart) {
+    appendConsoleLine('Actualizacion segura: iniciando nuevamente el servidor.');
+    const startAccepted = await palcmApi.server.start({ confirmed: true });
+    if (!(await pollOperation(startAccepted.operationId, { refreshStatusWhileRunning: true }))) {
+      return;
+    }
+  }
+
+  showToast('Servidor actualizado y datos validados');
+  latestPalworldUpdateStatus = await palcmApi.server.getUpdateStatus({ force: true });
+  await refreshState();
 }
 
 function showServerRestartConfirmation(): void {
@@ -3129,6 +3627,9 @@ async function executeAdminAction(form: HTMLFormElement, action: PalworldAdminAc
     });
     appendConsoleLine(`Administracion: ${result.message}`);
     showToast(result.message);
+    if (action === 'announce') {
+      form.reset();
+    }
     updateFooterChrome();
     await refreshAdminView({ force: true });
     await refreshStatusChrome();
@@ -3151,7 +3652,7 @@ function renderBackupsFooter(): void {
     return;
   }
 
-  appFooter.classList.remove('hidden', 'app-footer--confirm');
+  appFooter.classList.remove('hidden', 'app-footer--confirm', 'app-footer--server');
   appFooter.innerHTML = `
     <span id="backup-footer-message" class="app-footer__message">Selecciona backups para enviarlos a la papelera de Windows.</span>
     <button id="create-config-backup" class="secondary-button button-with-icon" type="button">
@@ -3677,6 +4178,7 @@ function updateFooterChrome(): void {
 
   if (!shouldShowFooter && appFooter) {
     appFooter.classList.add('hidden');
+    appFooter.classList.remove('app-footer--server');
     appFooter.innerHTML = '';
   }
 }
@@ -3701,29 +4203,34 @@ function renderServerFooter(parsed: ParsedPalworldSettings): void {
     return;
   }
 
-  appFooter.classList.remove('hidden');
+  appFooter.classList.remove('hidden', 'app-footer--confirm');
+  appFooter.classList.add('app-footer--server');
   appFooter.innerHTML = `
+    <div class="server-footer__actions server-footer__actions--maintenance">
+      <button id="restore-default-config" class="secondary-button secondary-button--warning button-with-icon" type="button">
+        ${renderIcon('reset')}
+        <span>Default</span>
+      </button>
+      <button id="update-server" class="secondary-button button-with-icon" type="button" ${isServerUpdateBlocked() ? 'disabled' : ''}>
+        ${renderIcon('refresh')}
+        <span>Actualizar</span>
+      </button>
+      <button id="server-maintenance" class="secondary-button button-with-icon" type="button" ${isServerUpdateBlocked() ? 'disabled' : ''}>
+        ${renderIcon('settings')}
+        <span>Mantenimiento</span>
+      </button>
+    </div>
     <span id="server-footer-message" class="app-footer__message">Sin cambios pendientes.</span>
-    <button id="restore-default-config" class="secondary-button secondary-button--warning button-with-icon" type="button">
-      ${renderIcon('reset')}
-      <span>Default</span>
-    </button>
-    <button id="update-server" class="secondary-button button-with-icon" type="button" ${isServerUpdateBlocked() ? 'disabled' : ''}>
-      ${renderIcon('refresh')}
-      <span>Actualizar</span>
-    </button>
-    <button id="server-maintenance" class="secondary-button button-with-icon" type="button" ${isServerUpdateBlocked() ? 'disabled' : ''}>
-      ${renderIcon('settings')}
-      <span>Mantenimiento</span>
-    </button>
-    <button id="discard-config" class="secondary-button button-with-icon" type="button" disabled>
-      ${renderIcon('undo')}
-      <span>Descartar</span>
-    </button>
-    <button id="save-config" class="primary-button button-with-icon" type="button">
-      ${renderIcon('check')}
-      <span>Guardar</span>
-    </button>
+    <div class="server-footer__actions server-footer__actions--commit">
+      <button id="discard-config" class="secondary-button button-with-icon" type="button" disabled>
+        ${renderIcon('undo')}
+        <span>Descartar</span>
+      </button>
+      <button id="save-config" class="primary-button button-with-icon" type="button">
+        ${renderIcon('check')}
+        <span>Guardar</span>
+      </button>
+    </div>
   `;
   document.querySelector<HTMLButtonElement>('#save-config')?.addEventListener('click', () => {
     runUiAction('No se pudo guardar la configuracion', () => saveConfiguration(parsed));
@@ -4578,8 +5085,8 @@ function replaceSummaryCard(id: string, html: string): void {
   const nextCard = template.content.firstElementChild;
   const currentCard = document.querySelector(`#${cssEscape(id)}`);
 
-  if (currentCard && nextCard) {
-    currentCard.replaceWith(nextCard);
+  if (currentCard instanceof HTMLElement && nextCard instanceof HTMLElement) {
+    syncLiveElement(currentCard, nextCard);
   }
 }
 
@@ -4591,6 +5098,11 @@ function bindSummaryCards(): void {
 
     card.dataset['summaryBound'] = 'true';
     card.addEventListener('click', (event) => {
+      if (card.dataset['summaryAction'] === 'server-update') {
+        showForceServerUpdateConfirmation();
+        return;
+      }
+
       const copyValue = card.dataset['copyValue'];
       const clickedElement = event.target instanceof Element ? event.target : null;
       const clickedTargetIcon = clickedElement

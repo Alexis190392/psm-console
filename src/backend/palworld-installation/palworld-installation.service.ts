@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { OperationManagerService } from '../operations/operation-manager.service';
 import { PortablePathService } from '../portable-path/portable-path.service';
 import { PortableStateService } from '../portable-state/portable-state.service';
@@ -15,10 +16,14 @@ import type {
   PalworldInstallationStatusDto,
   PalworldInstallRequestDto,
   PalworldRepairRequestDto,
+  PalworldUpdateStatusDto,
+  PalworldUpdateStatusRequestDto,
   PalworldUpdateRequestDto
 } from '../../shared/dto/palworld-installation-status.dto';
 
 export const PALWORLD_DEDICATED_SERVER_APP_ID = '2394010';
+const PALWORLD_UPDATE_CACHE_MS = 10 * 60 * 1000;
+const PALWORLD_UPDATE_REQUEST_TIMEOUT_MS = 20_000;
 
 interface SteamCmdRunResult {
   exitCode: number | null;
@@ -27,6 +32,8 @@ interface SteamCmdRunResult {
 
 @Injectable()
 export class PalworldInstallationService {
+  private updateStatusCache: { expiresAt: number; status: PalworldUpdateStatusDto } | null = null;
+
   constructor(
     private readonly portablePathService: PortablePathService,
     private readonly operationManagerService: OperationManagerService,
@@ -61,6 +68,57 @@ export class PalworldInstallationService {
         ? 'Palworld Dedicated Server esta instalado.'
         : 'Palworld Dedicated Server no esta instalado. Se requiere confirmacion para instalarlo con SteamCMD.'
     };
+  }
+
+  async getUpdateStatus(request?: PalworldUpdateStatusRequestDto): Promise<PalworldUpdateStatusDto> {
+    if (!request?.force && this.updateStatusCache?.expiresAt && this.updateStatusCache.expiresAt > Date.now()) {
+      return this.updateStatusCache.status;
+    }
+
+    const checkedAt = new Date().toISOString();
+    const installation = this.getStatus();
+    if (installation.status !== 'READY') {
+      return {
+        status: 'NOT_INSTALLED',
+        appId: PALWORLD_DEDICATED_SERVER_APP_ID,
+        checkedAt,
+        message: 'Palworld Dedicated Server no esta instalado.'
+      };
+    }
+
+    const manifestPath = join(
+      installation.installDirectory,
+      'steamapps',
+      `appmanifest_${PALWORLD_DEDICATED_SERVER_APP_ID}.acf`
+    );
+
+    try {
+      const localBuildId = extractManifestBuildId(await readFile(manifestPath, 'utf8'));
+      if (!localBuildId) {
+        return this.cacheUpdateStatus({
+          status: 'UNKNOWN',
+          appId: PALWORLD_DEDICATED_SERVER_APP_ID,
+          checkedAt,
+          message: 'No se pudo leer la version instalada del servidor.'
+        });
+      }
+
+      const steamCmdStatus = this.steamCmdService.getStatus();
+      if (steamCmdStatus.status !== 'READY') {
+        throw new Error('STEAMCMD_NOT_READY');
+      }
+
+      const requiredBuildId = await getSteamPublicBuildId(steamCmdStatus.executablePath);
+      const status = resolvePalworldUpdateStatus(localBuildId, requiredBuildId, checkedAt);
+      return this.cacheUpdateStatus(status);
+    } catch {
+      return this.cacheUpdateStatus({
+        status: 'UNKNOWN',
+        appId: PALWORLD_DEDICATED_SERVER_APP_ID,
+        checkedAt,
+        message: 'No se pudo consultar la version publicada por Steam.'
+      });
+    }
   }
 
   install(request: PalworldInstallRequestDto): OperationAcceptedDto {
@@ -294,6 +352,7 @@ export class PalworldInstallationService {
           '+quit'
         ],
         {
+          cwd: dirname(executablePath),
           windowsHide: true,
           shell: false
         }
@@ -355,6 +414,130 @@ export class PalworldInstallationService {
       throw new Error('STEAMCMD_NOT_READY');
     }
   }
+
+  private cacheUpdateStatus(status: PalworldUpdateStatusDto): PalworldUpdateStatusDto {
+    this.updateStatusCache = {
+      status,
+      expiresAt: Date.now() + PALWORLD_UPDATE_CACHE_MS
+    };
+    return status;
+  }
+}
+
+export function extractManifestBuildId(manifest: string): string | null {
+  return /^\s*"buildid"\s+"(\d+)"\s*$/im.exec(manifest)?.[1] ?? null;
+}
+
+export function resolvePalworldUpdateStatus(
+  localBuildId: string,
+  requiredBuildId: string,
+  checkedAt = new Date().toISOString()
+): PalworldUpdateStatusDto {
+  if (localBuildId === requiredBuildId) {
+    return {
+      status: 'UP_TO_DATE',
+      appId: PALWORLD_DEDICATED_SERVER_APP_ID,
+      localBuildId,
+      requiredBuildId,
+      checkedAt,
+      message: 'Palworld Dedicated Server esta actualizado.'
+    };
+  }
+
+  return {
+    status: 'UPDATE_AVAILABLE',
+    appId: PALWORLD_DEDICATED_SERVER_APP_ID,
+    localBuildId,
+    requiredBuildId,
+    checkedAt,
+    message: 'Hay una actualizacion disponible para Palworld Dedicated Server.'
+  };
+}
+
+async function getSteamPublicBuildId(executablePath: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(executablePath, [
+      '+@ShutdownOnFailedCommand',
+      '1',
+      '+@NoPromptForPassword',
+      '1',
+      '+login',
+      'anonymous',
+      '+app_info_update',
+      '1',
+      '+app_info_print',
+      PALWORLD_DEDICATED_SERVER_APP_ID,
+      '+quit'
+    ], {
+      cwd: dirname(executablePath),
+      windowsHide: true,
+      shell: false
+    });
+    let output = '';
+    let settled = false;
+    const timeout = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        child.kill();
+        reject(new Error('STEAM_UPDATE_TIMEOUT'));
+      }
+    }, PALWORLD_UPDATE_REQUEST_TIMEOUT_MS);
+
+    const collectOutput = (chunk: Buffer): void => {
+      output += chunk.toString('utf8');
+    };
+    child.stdout.on('data', collectOutput);
+    child.stderr.on('data', collectOutput);
+    child.on('error', (error) => {
+      clearTimeout(timeout);
+      if (!settled) {
+        settled = true;
+        reject(error);
+      }
+    });
+    child.on('close', (code) => {
+      clearTimeout(timeout);
+      if (settled) {
+        return;
+      }
+      settled = true;
+      const buildId = extractSteamCmdPublicBuildId(output);
+      if (code !== 0 || !buildId) {
+        reject(new Error('STEAM_UPDATE_BUILD_NOT_FOUND'));
+        return;
+      }
+      resolve(buildId);
+    });
+  });
+}
+
+export function extractSteamCmdPublicBuildId(output: string): string | null {
+  const branches = extractVdfObject(output, 'branches');
+  const publicBranch = branches ? extractVdfObject(branches, 'public') : null;
+  return publicBranch ? extractManifestBuildId(publicBranch) : null;
+}
+
+function extractVdfObject(source: string, key: string): string | null {
+  const keyPattern = new RegExp(`"${key}"\\s*\\r?\\n?\\s*\\{`, 'i');
+  const match = keyPattern.exec(source);
+  if (!match) {
+    return null;
+  }
+
+  const openingBrace = source.indexOf('{', match.index);
+  let depth = 0;
+  for (let index = openingBrace; index < source.length; index += 1) {
+    if (source[index] === '{') {
+      depth += 1;
+    } else if (source[index] === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        return source.slice(openingBrace + 1, index);
+      }
+    }
+  }
+
+  return null;
 }
 
 function shouldRetryAfterSteamCmdBootstrap(output: string): boolean {

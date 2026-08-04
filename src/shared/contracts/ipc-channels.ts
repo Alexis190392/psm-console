@@ -15,6 +15,7 @@ export const ipcChannels = {
   steamCmdInstall: 'steamcmd:install',
   steamCmdRepair: 'steamcmd:repair',
   serverGetInstallationStatus: 'server:get-installation-status',
+  serverGetUpdateStatus: 'server:get-update-status',
   serverInstall: 'server:install',
   serverUpdate: 'server:update',
   serverRepair: 'server:repair',

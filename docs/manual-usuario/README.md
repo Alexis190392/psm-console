@@ -107,6 +107,8 @@ Puedes localizar una opción mediante:
 
 El contador indica cuántos parámetros coinciden con el filtro actual.
 
+Las categorías permanecen plegadas para mantener una vista compacta. Presiona el encabezado de una categoría para mostrar sus parámetros; durante una búsqueda, las categorías con coincidencias se abren automáticamente.
+
 ### Tipos de controles
 
 - **Interruptor:** activa o desactiva una opción.
@@ -133,10 +135,12 @@ Los cambios sin guardar permanecen disponibles al navegar por la aplicación dur
 ### Otras acciones
 
 - **Default:** prepara los valores iniciales del servidor. Requiere confirmación.
-- **Actualizar:** vuelve a leer el INI activo.
+- **Actualizar:** con el servidor detenido, crea un respaldo de mantenimiento y ejecuta SteamCMD con `force_install_dir` y validacion completa.
 - **Mantenimiento:** habilita acciones adicionales sobre la configuración.
 - **Descartar:** elimina los cambios pendientes del formulario.
 - **Ver INI avanzado:** muestra cómo quedará el contenido antes de guardarlo.
+
+La barra inferior mantiene **Default**, **Actualizar** y **Mantenimiento** a la izquierda, muestra el estado de los cambios en el centro y reserva la derecha para **Descartar** y **Guardar**. En ventanas estrechas se reorganiza automáticamente sin ocultar acciones.
 
 Si el servidor está ejecutándose, algunos cambios pueden requerir reiniciarlo para entrar en vigor.
 
@@ -211,6 +215,7 @@ Permite:
 
 - Consultar información, métricas y configuración reportadas por el servidor.
 - Guardar el mundo manualmente.
+- Forzar una actualizacion segura: guarda el mundo, detiene el servidor, respalda los datos, actualiza con SteamCMD y vuelve a iniciarlo.
 - Programar un apagado con tiempo y mensaje.
 - Reiniciar el servidor.
 - Forzar la detención en una emergencia.
@@ -233,9 +238,23 @@ Las acciones administrativas pueden requerir confirmación. El botón de expulsi
 
 ### Mapa
 
-Muestra una representación relativa de las coordenadas reportadas por la API REST. No reemplaza el mapa oficial del juego y solo aparecen jugadores con coordenadas disponibles.
+Muestra las coordenadas reportadas por la API REST sobre los mapas actuales de Palpagos y el Arbol del Mundo. Ambos mapas estan separados en pestañas para mantener su escala y sistema de coordenadas correctos. PSM Console convierte las coordenadas del servidor y muestra en cada mapa solamente los jugadores ubicados dentro de sus limites.
+
+Permite:
+
+- Usar la rueda del mouse para ampliar o alejar conservando bajo el cursor la zona señalada.
+- Desplazarse manteniendo presionado el botón principal y arrastrando el mapa.
+- Cambiar entre `Palpagos` y `Arbol del Mundo` desde las pestañas superiores.
+- Conservar de forma independiente el zoom y el sector visible de cada mapa mientras la vista permanezca abierta.
+- Ver el nombre del jugador directamente sobre su marcador.
+
+Los marcadores se actualizan automáticamente mientras la API REST del servidor permanezca disponible. La actualización no modifica el zoom, el mapa seleccionado ni el sector que estés observando. Si no hay jugadores conectados o no reportan coordenadas, el mapa sigue visible e informa que está esperando posiciones.
+
+Para reducir el consumo de memoria, PSM Console mantiene cargado solamente el mapa activo y libera sus recursos al salir de la vista. El zoom escala una superficie fija sin volver a dibujar el mapa en cada paso. Al volver, conserva el zoom y el sector guardados para cada mapa.
 
 ![Mapa administrativo sin jugadores conectados](../../resources/screenshots/administracion-mapa.png)
+
+Las capas se distribuyen localmente y no requieren una consulta externa durante el uso. Su procedencia y los avisos de derechos estan registrados en [Avisos de terceros](../../THIRD_PARTY_NOTICES.md).
 
 ## 8. Backups
 
@@ -398,6 +417,7 @@ Al habilitar la API cliente, selecciona las acciones disponibles:
 - Consultar los logs.
 - Iniciar, reiniciar o detener el servidor de forma independiente.
 - Ver jugadores conectados.
+- Ver la ubicación de los jugadores en los mapas de Palpagos y el Árbol del Mundo.
 - Expulsar jugadores.
 - Banear jugadores.
 
@@ -414,7 +434,22 @@ El perfil cliente muestra únicamente las secciones y acciones habilitadas. La i
   <img src="../../resources/screenshots/api-web-cliente-movil.png" alt="Panel cliente adaptado a móvil" width="28%" />
 </p>
 
-En escritorio, las secciones aparecen en el lateral izquierdo. En teléfonos, la navegación se ubica en la parte inferior para mantener visibles los datos y controles. Los botones de **General**, **Jugadores**, **Logs** y **Salir** conservan un área táctil suficiente y no requieren ampliar la página.
+En escritorio, las secciones aparecen en el lateral izquierdo. En teléfonos, la navegación se ubica en la parte inferior. **General**, **Jugadores**, **Mapa**, **Logs** y **Salir** mantienen un área táctil suficiente.
+
+### Mapa desde la API web
+
+El permiso **Ver jugadores** también habilita la sección **Mapa**. La API web utiliza las mismas capas y la misma calibración que la aplicación de escritorio, por lo que no mantiene una segunda conversión de coordenadas.
+
+- **Palpagos** y **Árbol del Mundo** se muestran en pestañas independientes.
+- La rueda aplica zoom sobre la posición del puntero.
+- Puedes arrastrar el mapa con el mouse o mediante gestos táctiles.
+- La consulta periódica actualiza solamente los marcadores; no cambia el zoom ni el sector visible.
+- Si se revoca **Ver jugadores**, la siguiente consulta muestra **No permitido** y actualiza la navegación.
+
+<p align="center">
+  <img src="../../resources/screenshots/api-web-mapa.png" alt="Mapa de jugadores en PSM Console Web" width="68%" />
+  <img src="../../resources/screenshots/api-web-mapa-movil.png" alt="Mapa web adaptado a móvil" width="28%" />
+</p>
 
 El indicador verde de la barra superior confirma que la sesión sigue comunicándose con PSM Console. Si cambia a **Sin respuesta**, verifica que la aplicación continúe abierta y que el equipo siga accesible.
 
