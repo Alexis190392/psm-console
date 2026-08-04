@@ -37,6 +37,7 @@ describe('general view', () => {
     expect(html).toContain('192.168.0.10:8211');
     expect(html).toContain('data-copy-value="192.168.0.10:8211"');
     expect(html).toContain('Red: verificado hace 1 minuto');
+    expect(html).toContain('view-stack--scroll general-view');
     expect(html).toContain('summary-card--prominent');
     expect(html).toContain('summary-card--compact');
   });

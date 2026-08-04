@@ -17,7 +17,7 @@ export interface GeneralViewModel {
 
 export function renderGeneralView(model: GeneralViewModel): string {
   return `
-    <div class="view-stack">
+    <div class="view-stack view-stack--scroll general-view">
       <div class="view-header view-header--contained">
         <h3>General</h3>
         <div class="view-actions">

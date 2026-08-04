@@ -9,6 +9,7 @@ const { createMainWindowOptions } = require('../dist/main/electron/window-option
 const outputDir = join(process.cwd(), 'docs', 'implementation', 'visual-comparison');
 const viewports = [
   { name: 'desktop', width: 1440, height: 900 },
+  { name: 'vertical-third', width: 1080, height: 600 },
   { name: 'portrait-half', width: 1080, height: 900 },
   { name: 'medium', width: 900, height: 800 },
   { name: 'compact', width: 640, height: 700 },
@@ -114,11 +115,49 @@ async function capture(window, viewport, view) {
   if (view.readySelector) {
     await waitForSelector(window, view.readySelector, 30000);
   }
+  await waitForSelectorRemoved(window, '.view-loading-overlay');
+  await wait(300);
+  if (viewport.name === 'vertical-third' && view.name === 'general') {
+    await assertGeneralScroll(window);
+  }
   const image = await capturePageWithRetry(window);
   writeFileSync(
     join(outputDir, `${viewport.name}-${String(viewport.width)}x${String(viewport.height)}-${view.name}.png`),
     image.toPNG()
   );
+}
+
+async function assertGeneralScroll(window) {
+  const result = await window.webContents.executeJavaScript(`
+    (() => {
+      const element = document.querySelector('.general-view');
+      if (!(element instanceof HTMLElement)) {
+        return { found: false, maxScrollTop: 0, moved: false };
+      }
+      const firstChild = element.firstElementChild;
+      const style = getComputedStyle(element);
+      const maxScrollTop = element.scrollHeight - element.clientHeight;
+      element.scrollTop = maxScrollTop;
+      const moved = element.scrollTop > 0;
+      element.scrollTop = 0;
+      return {
+        found: true,
+        maxScrollTop,
+        moved,
+        clientHeight: element.clientHeight,
+        scrollHeight: element.scrollHeight,
+        childCount: element.children.length,
+        textLength: element.innerText.length,
+        display: style.display,
+        visibility: style.visibility,
+        opacity: style.opacity,
+        firstChildRect: firstChild?.getBoundingClientRect().toJSON()
+      };
+    })()
+  `);
+  if (!result.found || result.maxScrollTop <= 0 || !result.moved) {
+    throw new Error(`General view is not scrollable at 1080x600: ${JSON.stringify(result)}`);
+  }
 }
 
 async function waitForSelectorRemoved(window, selector, timeoutMs = 30000) {

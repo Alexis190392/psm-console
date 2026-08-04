@@ -1673,6 +1673,14 @@ input[type="range"] {
   padding-right: 4px;
 }
 
+.general-view {
+  scrollbar-gutter: stable;
+}
+
+.general-view > * {
+  flex: 0 0 auto;
+}
+
 .view-header {
   display: flex;
   align-items: center;
@@ -6974,6 +6982,11 @@ html.window-maximized .tactical-window-frame {
 /* Window-responsive shell: follows the available Electron window, not the monitor resolution. */
 #app.app--responsive-compact {
   --sidebar-width: 82px;
+}
+
+#app[data-view="home"].app--wide.app--responsive-short .panel {
+  min-height: 0;
+  flex: 1 1 auto;
 }
 
 #app.app--responsive-compact .sidebar {
