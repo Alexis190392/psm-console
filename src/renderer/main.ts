@@ -50,6 +50,7 @@ import {
 import { formatBytes, formatLastVerification } from './utils/format';
 import { syncLiveElement } from './utils/dom-sync';
 import { calculateMapCanvasSize } from './utils/map-canvas-size';
+import { calculateAnchoredMapScroll } from './utils/map-zoom';
 import { getOperationFailureMessage, isOperationSuccessful } from './utils/operation-result';
 import { cssEscape, escapeHtml, normalizeSearchText } from './utils/text';
 import { renderBackupsView as renderBackupsViewHtml } from './views/backups-view';
@@ -377,16 +378,6 @@ let adminMapDrag: {
 } | null = null;
 let adminMapViewportResizeObserver: ResizeObserver | null = null;
 let adminMapImageCache: { url: string; image: HTMLImageElement } | null = null;
-let adminMapZoomFrame: number | null = null;
-let pendingAdminMapZoom: {
-  viewport: HTMLElement;
-  stage: HTMLElement;
-  zoom: number;
-  anchorX: number;
-  anchorY: number;
-  pointerX: number;
-  pointerY: number;
-} | null = null;
 let remoteApiConnectionRefreshTimer: number | null = null;
 let generalRemoteApiRefreshTimer: number | null = null;
 let remoteApiSaveStatusTimer: number | null = null;
@@ -3127,22 +3118,33 @@ function bindAdminMapControls(): void {
   viewport.addEventListener('wheel', (event) => {
     event.preventDefault();
     const direction = event.deltaY < 0 ? 1 : -1;
-    const currentTargetZoom = pendingAdminMapZoom?.zoom ?? adminMapZoom;
-    const nextZoom = Math.min(4, Math.max(1, currentTargetZoom + direction * 0.25));
-    if (nextZoom === currentTargetZoom) {
+    const currentZoom = adminMapZoom;
+    const nextZoom = Math.min(4, Math.max(1, currentZoom + direction * 0.25));
+    if (nextZoom === currentZoom) {
       return;
     }
     const viewportBounds = viewport.getBoundingClientRect();
     const pointerX = event.clientX - viewportBounds.left;
     const pointerY = event.clientY - viewportBounds.top;
-    const anchorX = stage.offsetWidth > 0
-      ? (viewport.scrollLeft + pointerX) / stage.offsetWidth
-      : 0.5;
-    const anchorY = stage.offsetHeight > 0
-      ? (viewport.scrollTop + pointerY) / stage.offsetHeight
-      : 0.5;
+    const nextScrollLeft = calculateAnchoredMapScroll(
+      viewport.scrollLeft,
+      pointerX,
+      currentZoom,
+      nextZoom
+    );
+    const nextScrollTop = calculateAnchoredMapScroll(
+      viewport.scrollTop,
+      pointerY,
+      currentZoom,
+      nextZoom
+    );
 
-    scheduleAdminMapZoom(viewport, stage, nextZoom, anchorX, anchorY, pointerX, pointerY);
+    adminMapZoom = nextZoom;
+    adminMapViewStates[activeAdminMap].zoom = nextZoom;
+    sizeAdminMapStage(viewport, stage);
+    viewport.scrollLeft = nextScrollLeft;
+    viewport.scrollTop = nextScrollTop;
+    saveAdminMapViewState(viewport);
   }, { passive: false });
   viewport.addEventListener('pointerdown', (event) => {
     if (event.button !== 0 || (event.target instanceof Element && event.target.closest('button'))) {
@@ -3180,7 +3182,7 @@ function bindAdminMapControls(): void {
   viewport.addEventListener('pointercancel', stopDragging);
 
   const viewportResizeObserver = new ResizeObserver(() => {
-    sizeAdminMapStage(viewport, stage);
+    sizeAdminMapStage(viewport, stage, { recalculateBase: true });
     drawAdminMapCanvas(stage);
   });
   adminMapViewportResizeObserver?.disconnect();
@@ -3190,37 +3192,6 @@ function bindAdminMapControls(): void {
 
 function parsePalworldMapId(value: string | undefined): PalworldMapId | null {
   return value === 'world' || value === 'tree' ? value : null;
-}
-
-function scheduleAdminMapZoom(
-  viewport: HTMLElement,
-  stage: HTMLElement,
-  zoom: number,
-  anchorX: number,
-  anchorY: number,
-  pointerX: number,
-  pointerY: number
-): void {
-  pendingAdminMapZoom = { viewport, stage, zoom, anchorX, anchorY, pointerX, pointerY };
-  if (adminMapZoomFrame !== null) {
-    return;
-  }
-
-  adminMapZoomFrame = window.requestAnimationFrame(() => {
-    adminMapZoomFrame = null;
-    const pending = pendingAdminMapZoom;
-    pendingAdminMapZoom = null;
-    if (!pending || !pending.viewport.isConnected || !pending.stage.isConnected) {
-      return;
-    }
-
-    adminMapZoom = pending.zoom;
-    adminMapViewStates[activeAdminMap].zoom = pending.zoom;
-    sizeAdminMapStage(pending.viewport, pending.stage);
-    pending.viewport.scrollLeft = pending.anchorX * pending.stage.offsetWidth - pending.pointerX;
-    pending.viewport.scrollTop = pending.anchorY * pending.stage.offsetHeight - pending.pointerY;
-    saveAdminMapViewState(pending.viewport);
-  });
 }
 
 function saveAdminMapViewState(viewport: HTMLElement): void {
@@ -3338,11 +3309,6 @@ function getAdminMapImage(imageUrl: string, onLoad: () => void): HTMLImageElemen
 
 function releaseAdminMapResources(): void {
   adminMapDrag = null;
-  if (adminMapZoomFrame !== null) {
-    window.cancelAnimationFrame(adminMapZoomFrame);
-    adminMapZoomFrame = null;
-  }
-  pendingAdminMapZoom = null;
   adminMapViewportResizeObserver?.disconnect();
   adminMapViewportResizeObserver = null;
 
@@ -3373,7 +3339,7 @@ function applyAdminMapZoom(
   const centerY = viewport.scrollHeight > 0
     ? (viewport.scrollTop + viewport.clientHeight / 2) / viewport.scrollHeight
     : 0.5;
-  sizeAdminMapStage(viewport, stage);
+  sizeAdminMapStage(viewport, stage, { recalculateBase: true });
 
   window.requestAnimationFrame(() => {
     if (options.restorePosition) {
@@ -3390,17 +3356,28 @@ function applyAdminMapZoom(
   });
 }
 
-function sizeAdminMapStage(viewport: HTMLElement, stage: HTMLElement): void {
+function sizeAdminMapStage(
+  viewport: HTMLElement,
+  stage: HTMLElement,
+  options: { recalculateBase?: boolean } = {}
+): void {
   const mapId = parsePalworldMapId(stage.dataset['mapLayer']) ?? activeAdminMap;
   const bounds = PALWORLD_MAP_LAYER_BOUNDS[mapId];
   const mapRatio = (bounds.maxX - bounds.minX) / (bounds.maxY - bounds.minY);
-  const viewportWidth = Math.max(1, viewport.clientWidth);
-  const viewportHeight = Math.max(1, viewport.clientHeight);
-  const viewportRatio = viewportWidth / viewportHeight;
-  const baseWidth = viewportRatio >= mapRatio ? viewportWidth : viewportHeight * mapRatio;
-  const baseHeight = viewportRatio >= mapRatio ? viewportWidth / mapRatio : viewportHeight;
-  stage.dataset['adminMapBaseWidth'] = String(baseWidth);
-  stage.dataset['adminMapBaseHeight'] = String(baseHeight);
+  let baseWidth = Number(stage.dataset['adminMapBaseWidth']);
+  let baseHeight = Number(stage.dataset['adminMapBaseHeight']);
+
+  if (options.recalculateBase || !Number.isFinite(baseWidth) || !Number.isFinite(baseHeight)) {
+    const viewportBounds = viewport.getBoundingClientRect();
+    const viewportWidth = Math.max(1, viewportBounds.width);
+    const viewportHeight = Math.max(1, viewportBounds.height);
+    const viewportRatio = viewportWidth / viewportHeight;
+    baseWidth = viewportRatio >= mapRatio ? viewportWidth : viewportHeight * mapRatio;
+    baseHeight = viewportRatio >= mapRatio ? viewportWidth / mapRatio : viewportHeight;
+    stage.dataset['adminMapBaseWidth'] = String(baseWidth);
+    stage.dataset['adminMapBaseHeight'] = String(baseHeight);
+  }
+
   stage.style.width = `${String(baseWidth * adminMapZoom)}px`;
   stage.style.height = `${String(baseHeight * adminMapZoom)}px`;
 }

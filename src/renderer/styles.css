@@ -3298,17 +3298,22 @@ button.settings-api-address:not(:disabled):focus-visible {
 }
 
 .admin-map-layout {
+  position: relative;
   display: block;
-  min-height: 0;
+  min-height: 360px;
   height: 100%;
+  overflow: hidden;
+  contain: size layout;
 }
 
 .admin-map-viewport {
-  position: relative;
+  position: absolute;
+  inset: 0;
   display: block;
   min-width: 0;
-  min-height: 360px;
-  height: 100%;
+  min-height: 0;
+  width: auto;
+  height: auto;
   overflow: auto;
   overscroll-behavior: contain;
   border: 1px solid rgba(0, 229, 255, 0.24);
