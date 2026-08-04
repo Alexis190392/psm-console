@@ -14,6 +14,7 @@
     <svg class="icon-sprite" aria-hidden="true">
       <symbol id="icon-home" viewBox="0 0 24 24"><path d="m3 11 9-8 9 8v9a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></symbol>
       <symbol id="icon-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+      <symbol id="icon-map" viewBox="0 0 24 24"><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15M15 6v15"/></symbol>
       <symbol id="icon-terminal" viewBox="0 0 24 24"><path d="m4 17 6-5-6-5M12 19h8"/></symbol>
       <symbol id="icon-refresh" viewBox="0 0 24 24"><path d="M20 7h-5V2"/><path d="M20 7a9 9 0 1 0 2 6"/></symbol>
       <symbol id="icon-power" viewBox="0 0 24 24"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></symbol>
@@ -82,6 +83,9 @@
               </button>
               <button class="nav-button" type="button" data-view="players" data-permission-any="PLAYERS_VIEW,PLAYERS_KICK,PLAYERS_BAN">
                 <svg aria-hidden="true"><use href="#icon-users"></use></svg><span>Jugadores</span>
+              </button>
+              <button class="nav-button" type="button" data-view="map" data-permission-any="PLAYERS_VIEW,PLAYERS_KICK,PLAYERS_BAN">
+                <svg aria-hidden="true"><use href="#icon-map"></use></svg><span>Mapa</span>
               </button>
               <button class="nav-button" type="button" data-view="logs" data-permission="LOGS">
                 <svg aria-hidden="true"><use href="#icon-terminal"></use></svg><span>Logs</span>
@@ -156,6 +160,29 @@
               </div>
               <div id="players-list" class="data-list">
                 <p class="empty-state">Consultando jugadores...</p>
+              </div>
+            </section>
+
+            <section id="map-view" class="content-view content-view--map hud-panel" data-content-view="map" hidden>
+              <div class="page-heading map-heading">
+                <div>
+                  <p class="eyebrow">UBICACION</p>
+                  <h1>Mapa de jugadores</h1>
+                </div>
+                <button class="icon-button refresh-button" type="button" data-refresh aria-label="Actualizar mapa" title="Actualizar mapa">
+                  <svg aria-hidden="true"><use href="#icon-refresh"></use></svg>
+                </button>
+              </div>
+              <div class="web-map-tabs" role="tablist" aria-label="Mapas de Palworld">
+                <button class="web-map-tab web-map-tab--active" type="button" role="tab" aria-selected="true" data-map-layer="world">Palpagos</button>
+                <button class="web-map-tab" type="button" role="tab" aria-selected="false" data-map-layer="tree">Arbol del Mundo</button>
+              </div>
+              <div id="web-map-viewport" class="web-map-viewport">
+                <div id="web-map-stage" class="web-map-stage">
+                  <canvas id="web-map-canvas" class="web-map-canvas" aria-hidden="true"></canvas>
+                  <div id="web-map-markers" class="web-map-markers"></div>
+                  <p id="web-map-empty" class="web-map-empty">Consultando posiciones...</p>
+                </div>
               </div>
             </section>
 

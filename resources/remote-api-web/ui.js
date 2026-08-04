@@ -19,6 +19,15 @@
       'LOGS'
     ]
   };
+  var mapData = null;
+  var activeMapLayer = 'world';
+  var mapZoom = 1;
+  var mapDrag = null;
+  var mapImageCache = {};
+  var mapViewStates = {
+    world: { zoom: 1, scrollX: 0, scrollY: 0 },
+    tree: { zoom: 1, scrollX: 0, scrollY: 0 }
+  };
 
   var loginView = document.getElementById('login-view');
   var dashboardView = document.getElementById('dashboard-view');
@@ -88,6 +97,8 @@
     sessionStorage.removeItem(TOKEN_KEY);
     clearInterval(refreshTimer);
     refreshTimer = null;
+    releaseWebMapImagesExcept(null);
+    mapData = null;
     loginView.hidden = false;
     dashboardView.hidden = true;
     connectionState.hidden = true;
@@ -237,6 +248,292 @@
     renderPlayers(result.players || [], result.message);
   }
 
+  async function refreshMap() {
+    mapData = await apiRequest('/map');
+    renderWebMap();
+  }
+
+  function renderWebMap() {
+    var viewport = document.getElementById('web-map-viewport');
+    var stage = document.getElementById('web-map-stage');
+    if (!viewport || !stage || !mapData) {
+      return;
+    }
+    var layer = getActiveMapLayer();
+    if (!layer) {
+      return;
+    }
+    var requiresMapLayout = stage.dataset.mapLayer !== layer.id || !stage.dataset.baseWidth;
+    stage.dataset.mapLayer = layer.id;
+    if (requiresMapLayout) {
+      stage.removeAttribute('data-base-width');
+      stage.removeAttribute('data-base-height');
+      sizeWebMapStage(true);
+      drawWebMapCanvas(layer);
+      restoreWebMapPosition();
+    }
+    renderWebMapMarkers();
+  }
+
+  function getActiveMapLayer() {
+    return mapData && Array.isArray(mapData.layers)
+      ? mapData.layers.find(function (layer) { return layer.id === activeMapLayer; })
+      : null;
+  }
+
+  function sizeWebMapStage(recalculateBase) {
+    var viewport = document.getElementById('web-map-viewport');
+    var stage = document.getElementById('web-map-stage');
+    var layer = getActiveMapLayer();
+    if (!viewport || !stage || !layer || viewport.clientWidth <= 0 || viewport.clientHeight <= 0) {
+      return;
+    }
+    var baseWidth = Number(stage.dataset.baseWidth);
+    var baseHeight = Number(stage.dataset.baseHeight);
+    if (recalculateBase || !Number.isFinite(baseWidth) || !Number.isFinite(baseHeight)) {
+      var worldWidth = layer.bounds.maxX - layer.bounds.minX;
+      var worldHeight = layer.bounds.maxY - layer.bounds.minY;
+      var mapRatio = worldWidth / worldHeight;
+      var viewportRatio = viewport.clientWidth / viewport.clientHeight;
+      baseWidth = viewportRatio >= mapRatio ? viewport.clientWidth : viewport.clientHeight * mapRatio;
+      baseHeight = viewportRatio >= mapRatio ? viewport.clientWidth / mapRatio : viewport.clientHeight;
+      stage.dataset.baseWidth = String(baseWidth);
+      stage.dataset.baseHeight = String(baseHeight);
+    }
+    stage.style.width = String(baseWidth * mapZoom) + 'px';
+    stage.style.height = String(baseHeight * mapZoom) + 'px';
+  }
+
+  function drawWebMapCanvas(layer) {
+    var stage = document.getElementById('web-map-stage');
+    var canvas = document.getElementById('web-map-canvas');
+    if (!stage || !canvas) {
+      return;
+    }
+    var baseWidth = Number(stage.dataset.baseWidth) || 1;
+    var baseHeight = Number(stage.dataset.baseHeight) || 1;
+    var ratio = Math.min(Math.max(window.devicePixelRatio || 1, 1), 1.25);
+    var reduction = Math.min(1, 2048 / (baseWidth * ratio), 2048 / (baseHeight * ratio));
+    var width = Math.max(1, Math.round(baseWidth * ratio * reduction));
+    var height = Math.max(1, Math.round(baseHeight * ratio * reduction));
+    if (canvas.width !== width || canvas.height !== height) {
+      canvas.width = width;
+      canvas.height = height;
+    }
+    var context = canvas.getContext('2d');
+    if (!context) {
+      return;
+    }
+    context.setTransform(1, 0, 0, 1, 0, 0);
+    context.fillStyle = '#071015';
+    context.fillRect(0, 0, width, height);
+    var image = getWebMapImage(layer.imageUrl, function () {
+      if (activeMapLayer === layer.id) {
+        drawWebMapCanvas(layer);
+      }
+    });
+    if (!image.complete || image.naturalWidth === 0) {
+      return;
+    }
+    var worldWidth = layer.bounds.maxX - layer.bounds.minX;
+    var worldHeight = layer.bounds.maxY - layer.bounds.minY;
+    var scaleX = width / worldWidth;
+    var scaleY = height / worldHeight;
+    var transform = layer.imageToWorld;
+    context.save();
+    context.setTransform(
+      scaleX * transform.a,
+      -scaleY * transform.d,
+      scaleX * transform.b,
+      -scaleY * transform.e,
+      scaleX * (transform.c - layer.bounds.minX),
+      scaleY * (layer.bounds.maxY - transform.f)
+    );
+    context.drawImage(image, 0, 0, layer.imageWidth, layer.imageHeight);
+    context.restore();
+  }
+
+  function getWebMapImage(url, onLoad) {
+    if (mapImageCache[url]) {
+      return mapImageCache[url];
+    }
+    var image = new Image();
+    image.decoding = 'async';
+    image.addEventListener('load', onLoad, { once: true });
+    image.src = url;
+    mapImageCache[url] = image;
+    return image;
+  }
+
+  function releaseWebMapImagesExcept(activeUrl) {
+    Object.keys(mapImageCache).forEach(function (url) {
+      if (url === activeUrl) {
+        return;
+      }
+      mapImageCache[url].src = '';
+      delete mapImageCache[url];
+    });
+  }
+
+  function renderWebMapMarkers() {
+    var markerLayer = document.getElementById('web-map-markers');
+    var empty = document.getElementById('web-map-empty');
+    if (!markerLayer || !empty || !mapData) {
+      return;
+    }
+    var players = (mapData.players || []).filter(function (player) {
+      return player.mapId === activeMapLayer;
+    });
+    markerLayer.replaceChildren();
+    players.forEach(function (player) {
+      var marker = document.createElement('article');
+      marker.className = 'web-map-marker';
+      marker.style.left = player.left + '%';
+      marker.style.top = player.top + '%';
+      marker.title = player.name;
+      var pin = document.createElement('span');
+      pin.className = 'web-map-marker__pin';
+      pin.textContent = getPlayerInitials(player.name);
+      var label = document.createElement('span');
+      label.className = 'web-map-marker__label';
+      label.textContent = player.name || 'Jugador';
+      marker.append(pin, label);
+      markerLayer.appendChild(marker);
+    });
+    empty.hidden = players.length > 0;
+    empty.textContent = mapData.status === 'READY'
+      ? 'No hay jugadores conectados en este mapa.'
+      : mapData.message || 'Esperando posiciones de jugadores.';
+  }
+
+  function getPlayerInitials(name) {
+    var initials = String(name || '').trim().split(/\s+/).filter(Boolean).slice(0, 2).map(function (word) {
+      return word.charAt(0).toUpperCase();
+    }).join('');
+    return initials || 'J';
+  }
+
+  function saveWebMapPosition() {
+    var viewport = document.getElementById('web-map-viewport');
+    if (!viewport) {
+      return;
+    }
+    var maxX = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
+    var maxY = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+    mapViewStates[activeMapLayer] = {
+      zoom: mapZoom,
+      scrollX: maxX > 0 ? viewport.scrollLeft / maxX : 0,
+      scrollY: maxY > 0 ? viewport.scrollTop / maxY : 0
+    };
+  }
+
+  function restoreWebMapPosition() {
+    var viewport = document.getElementById('web-map-viewport');
+    if (!viewport) {
+      return;
+    }
+    var state = mapViewStates[activeMapLayer];
+    requestAnimationFrame(function () {
+      viewport.scrollLeft = state.scrollX * Math.max(0, viewport.scrollWidth - viewport.clientWidth);
+      viewport.scrollTop = state.scrollY * Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+    });
+  }
+
+  function selectMapLayer(mapId) {
+    if (mapId === activeMapLayer) {
+      return;
+    }
+    saveWebMapPosition();
+    activeMapLayer = mapId;
+    mapZoom = mapViewStates[mapId].zoom;
+    var nextLayer = getActiveMapLayer();
+    releaseWebMapImagesExcept(nextLayer ? nextLayer.imageUrl : null);
+    var stage = document.getElementById('web-map-stage');
+    if (stage) {
+      stage.removeAttribute('data-base-width');
+      stage.removeAttribute('data-base-height');
+    }
+    document.querySelectorAll('[data-map-layer]').forEach(function (button) {
+      var selected = button.dataset.mapLayer === mapId;
+      button.classList.toggle('web-map-tab--active', selected);
+      button.setAttribute('aria-selected', String(selected));
+    });
+    renderWebMap();
+  }
+
+  function bindWebMapControls() {
+    var viewport = document.getElementById('web-map-viewport');
+    if (!viewport) {
+      return;
+    }
+    document.querySelectorAll('[data-map-layer]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        selectMapLayer(button.dataset.mapLayer);
+      });
+    });
+    viewport.addEventListener('wheel', function (event) {
+      event.preventDefault();
+      var nextZoom = Math.min(4, Math.max(1, mapZoom + (event.deltaY < 0 ? 0.25 : -0.25)));
+      if (nextZoom === mapZoom) {
+        return;
+      }
+      var bounds = viewport.getBoundingClientRect();
+      var pointerX = event.clientX - bounds.left;
+      var pointerY = event.clientY - bounds.top;
+      var nextLeft = ((viewport.scrollLeft + pointerX) / mapZoom) * nextZoom - pointerX;
+      var nextTop = ((viewport.scrollTop + pointerY) / mapZoom) * nextZoom - pointerY;
+      mapZoom = nextZoom;
+      mapViewStates[activeMapLayer].zoom = nextZoom;
+      sizeWebMapStage(false);
+      viewport.scrollLeft = nextLeft;
+      viewport.scrollTop = nextTop;
+      saveWebMapPosition();
+    }, { passive: false });
+    viewport.addEventListener('pointerdown', function (event) {
+      if (event.button !== 0) {
+        return;
+      }
+      mapDrag = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        scrollLeft: viewport.scrollLeft,
+        scrollTop: viewport.scrollTop
+      };
+      viewport.setPointerCapture(event.pointerId);
+      viewport.classList.add('web-map-viewport--dragging');
+    });
+    viewport.addEventListener('pointermove', function (event) {
+      if (!mapDrag || mapDrag.pointerId !== event.pointerId) {
+        return;
+      }
+      viewport.scrollLeft = mapDrag.scrollLeft - (event.clientX - mapDrag.startX);
+      viewport.scrollTop = mapDrag.scrollTop - (event.clientY - mapDrag.startY);
+      saveWebMapPosition();
+    });
+    function stopMapDrag(event) {
+      if (!mapDrag || mapDrag.pointerId !== event.pointerId) {
+        return;
+      }
+      mapDrag = null;
+      viewport.classList.remove('web-map-viewport--dragging');
+      if (viewport.hasPointerCapture(event.pointerId)) {
+        viewport.releasePointerCapture(event.pointerId);
+      }
+    }
+    viewport.addEventListener('pointerup', stopMapDrag);
+    viewport.addEventListener('pointercancel', stopMapDrag);
+    new ResizeObserver(function () {
+      if (!document.getElementById('map-view').hidden && mapData) {
+        var layer = getActiveMapLayer();
+        sizeWebMapStage(true);
+        if (layer) {
+          drawWebMapCanvas(layer);
+        }
+      }
+    }).observe(viewport);
+  }
+
   function renderPlayers(players, message) {
     var container = document.getElementById('players-list');
     container.replaceChildren();
@@ -362,6 +659,13 @@
       if (hasPermission('LOGS')) {
         requests.push(refreshLogs());
       }
+      if (
+        hasPermission('PLAYERS_VIEW')
+        || hasPermission('PLAYERS_KICK')
+        || hasPermission('PLAYERS_BAN')
+      ) {
+        requests.push(refreshMap());
+      }
       await Promise.all(requests);
       connectionLabel.textContent = 'Conectado';
     } catch (error) {
@@ -382,6 +686,8 @@
       var view = getVisibleView();
       if (view === 'players') {
         await refreshPlayers();
+      } else if (view === 'map') {
+        await refreshMap();
       } else if (view === 'logs') {
         await refreshLogs();
       } else {
@@ -497,6 +803,7 @@
   document.getElementById('stop-button').addEventListener('click', function () {
     void executeServerAction('stop');
   });
+  bindWebMapControls();
 
   if (getToken()) {
     apiRequest('/session')

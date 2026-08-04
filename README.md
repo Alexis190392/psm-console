@@ -33,7 +33,7 @@ El manual explica la preparación inicial, configuración, administración, back
 - Inicia, detiene y supervisa el servidor con logs en tiempo real.
 - Habilita controles de administración, jugadores y mundo mientras el servidor está activo.
 - Ubica jugadores conectados en mapas independientes de Palpagos y el Arbol del Mundo, con zoom sobre el cursor y desplazamiento persistente.
-- Expone un panel web compartido con perfiles administrativo y cliente, credenciales independientes y permisos configurables.
+- Expone un panel web compartido con perfiles administrativo y cliente, credenciales independientes, permisos configurables y mapa de jugadores.
 - Verifica progresivamente el acceso web desde este equipo, la red local e Internet.
 - Conserva las sesiones web mientras PSM Console permanece abierta y aplica los permisos del cliente en tiempo real.
 
@@ -83,6 +83,6 @@ npm.cmd run start:dev
 
 ## Estado del proyecto
 
-Versión actual: `0.17.15 Dev`.
+Versión actual: `0.18.0 Dev`.
 
 Palworld, Steam y SteamCMD son marcas de sus respectivos propietarios. Este proyecto es una herramienta independiente y no está afiliado con Pocketpair ni Valve.

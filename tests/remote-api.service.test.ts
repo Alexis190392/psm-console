@@ -71,7 +71,10 @@ describe('RemoteApiService', () => {
     expect(scriptResponse.headers.get('content-type')).toContain('text/javascript');
     expect(script).toContain("throw new Error('No permitido')");
     expect(script).toContain("apiRequest('/session')");
+    expect(script).toContain("apiRequest('/map')");
     expect((await fetch(`${baseUrl}/logo.png`)).headers.get('content-type')).toContain('image/png');
+    expect((await fetch(`${baseUrl}/map/world.webp`)).headers.get('content-type')).toContain('image/webp');
+    expect((await fetch(`${baseUrl}/map/tree.webp`)).headers.get('content-type')).toContain('image/webp');
     expect((await fetch(`${baseUrl}/health`)).status).toBe(200);
     expect((await fetch(`${baseUrl}/status`)).status).toBe(401);
 
@@ -163,6 +166,24 @@ describe('RemoteApiService', () => {
     expect(clientLogin.permissions).toEqual(['PLAYERS_VIEW', 'PLAYERS_KICK']);
     expect((await fetch(`${baseUrl}/session`, { headers: clientHeaders })).status).toBe(200);
     expect((await fetch(`${baseUrl}/players`, { headers: clientHeaders })).status).toBe(200);
+    const mapResponse = await fetch(`${baseUrl}/map`, { headers: clientHeaders });
+    const map = await mapResponse.json() as {
+      layers: Array<{ id: string; imageUrl: string }>;
+      players: Array<{ name: string; mapId: string; left: string; top: string }>;
+    };
+    expect(mapResponse.status).toBe(200);
+    expect(map.layers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'world', imageUrl: '/api/v1/map/world.webp' }),
+      expect.objectContaining({ id: 'tree', imageUrl: '/api/v1/map/tree.webp' })
+    ]));
+    expect(map.players).toEqual([
+      expect.objectContaining({
+        name: 'Jugador de prueba',
+        mapId: 'world'
+      })
+    ]);
+    expect(typeof map.players[0]?.left).toBe('string');
+    expect(typeof map.players[0]?.top).toBe('string');
     expect((await fetch(`${baseUrl}/status`, { headers: clientHeaders })).status).toBe(403);
     expect((await fetch(`${baseUrl}/logs`, { headers: clientHeaders })).status).toBe(403);
     expect((await fetch(`${baseUrl}/server/start`, {
@@ -213,6 +234,7 @@ describe('RemoteApiService', () => {
     });
     expect(updatedStatus.client.state).toBe('RUNNING');
     expect((await fetch(`${baseUrl}/players`, { headers: clientHeaders })).status).toBe(403);
+    expect((await fetch(`${baseUrl}/map`, { headers: clientHeaders })).status).toBe(403);
     expect((await fetch(`${baseUrl}/logs`, { headers: clientHeaders })).status).toBe(200);
     const refreshedSession = await fetch(`${baseUrl}/session`, { headers: clientHeaders });
     expect(await refreshedSession.json()).toEqual({
@@ -402,11 +424,19 @@ function createRemoteApiFixture(
     {
       getStatus: vi.fn(() => ({
         status: 'READY',
-        players: [],
-        currentPlayers: 0,
+        players: [{
+          name: 'Jugador de prueba',
+          steamId: 'steam_00000000000000001',
+          userId: 'steam_00000000000000001',
+          playerId: '00000001',
+          ping: 24.3,
+          locationX: 305821,
+          locationY: 230422
+        }],
+        currentPlayers: 1,
         maxPlayers: 32,
         updatedAt: new Date().toISOString(),
-        message: 'No hay jugadores conectados.'
+        message: 'Un jugador conectado.'
       }))
     } as unknown as PalworldPlayersService,
     { getStatus: vi.fn(), execute } as unknown as PalworldAdminService,

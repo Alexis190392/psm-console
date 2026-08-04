@@ -417,6 +417,7 @@ Al habilitar la API cliente, selecciona las acciones disponibles:
 - Consultar los logs.
 - Iniciar, reiniciar o detener el servidor de forma independiente.
 - Ver jugadores conectados.
+- Ver la ubicación de los jugadores en los mapas de Palpagos y el Árbol del Mundo.
 - Expulsar jugadores.
 - Banear jugadores.
 
@@ -433,7 +434,22 @@ El perfil cliente muestra únicamente las secciones y acciones habilitadas. La i
   <img src="../../resources/screenshots/api-web-cliente-movil.png" alt="Panel cliente adaptado a móvil" width="28%" />
 </p>
 
-En escritorio, las secciones aparecen en el lateral izquierdo. En teléfonos, la navegación se ubica en la parte inferior para mantener visibles los datos y controles. Los botones de **General**, **Jugadores**, **Logs** y **Salir** conservan un área táctil suficiente y no requieren ampliar la página.
+En escritorio, las secciones aparecen en el lateral izquierdo. En teléfonos, la navegación se ubica en la parte inferior. **General**, **Jugadores**, **Mapa**, **Logs** y **Salir** mantienen un área táctil suficiente.
+
+### Mapa desde la API web
+
+El permiso **Ver jugadores** también habilita la sección **Mapa**. La API web utiliza las mismas capas y la misma calibración que la aplicación de escritorio, por lo que no mantiene una segunda conversión de coordenadas.
+
+- **Palpagos** y **Árbol del Mundo** se muestran en pestañas independientes.
+- La rueda aplica zoom sobre la posición del puntero.
+- Puedes arrastrar el mapa con el mouse o mediante gestos táctiles.
+- La consulta periódica actualiza solamente los marcadores; no cambia el zoom ni el sector visible.
+- Si se revoca **Ver jugadores**, la siguiente consulta muestra **No permitido** y actualiza la navegación.
+
+<p align="center">
+  <img src="../../resources/screenshots/api-web-mapa.png" alt="Mapa de jugadores en PSM Console Web" width="68%" />
+  <img src="../../resources/screenshots/api-web-mapa-movil.png" alt="Mapa web adaptado a móvil" width="28%" />
+</p>
 
 El indicador verde de la barra superior confirma que la sesión sigue comunicándose con PSM Console. Si cambia a **Sin respuesta**, verifica que la aplicación continúe abierta y que el equipo siga accesible.
 
