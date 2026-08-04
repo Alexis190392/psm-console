@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PalworldAdminStatusDto } from '../src/shared/dto/palworld-admin.dto';
 import type { PalworldPlayersStatusDto } from '../src/shared/dto/palworld-players-status.dto';
-import { hasAdminGeneralData, renderAdminStatus } from '../src/renderer/views/admin-view';
+import { getPlayerMapPosition, hasAdminGeneralData, renderAdminStatus } from '../src/renderer/views/admin-view';
 
 const adminStatus: PalworldAdminStatusDto = {
   status: 'READY',
@@ -114,12 +114,36 @@ describe('admin view', () => {
     expect(html).not.toContain('Jugador <Uno>');
   });
 
-  it('renders relative player positions in the map tab', () => {
+  it('renders separate Palpagos and World Tree map tabs', () => {
     const html = renderAdminStatus(adminStatus, playersStatus, 'map');
+    const treeHtml = renderAdminStatus(adminStatus, playersStatus, 'map', 'tree');
 
     expect(html).toContain('<h3>Mapa</h3>');
     expect(html).toContain('admin-map-marker');
-    expect(html).toContain('X 120 / Y -45');
+    expect(html).toContain('palworld-world-map-1.0.webp');
+    expect(treeHtml).toContain('palworld-tree-map-1.0.webp');
+    expect(html).toContain('data-admin-map-layer-action="world"');
+    expect(html).toContain('data-admin-map-layer-action="tree"');
+    expect(html).toContain('Palpagos');
+    expect(html).toContain('Arbol del Mundo');
+    expect(html).toContain('<canvas');
+    expect(html).toContain('data-admin-map-canvas');
+    expect(html).toContain('data-admin-live-region="map-markers"');
+    expect(html).toContain('data-admin-live-region="map-empty"');
+    expect(html).not.toContain('data-admin-live-region="map-content"');
+    expect(html).not.toContain('Ubicacion de jugadores');
+    expect(html).not.toContain('data-admin-map-action');
+  });
+
+  it('maps REST coordinates through the current Palworld calibration', () => {
+    expect(getPlayerMapPosition({ locationX: 120, locationY: -45 })).toEqual({
+      left: '64.63',
+      top: '34.50'
+    });
+    expect(getPlayerMapPosition({ locationX: -221_398.9, locationY: -579_981.9 })).toEqual({
+      left: '10.75',
+      top: '39.73'
+    });
   });
 
   it('detects when the complete server view still has pending data', () => {

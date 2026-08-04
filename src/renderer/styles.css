@@ -3247,83 +3247,117 @@ button.settings-api-address:not(:disabled):focus-visible {
 
 .admin-map-panel {
   display: grid;
-  gap: 14px;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 10px;
   min-width: 0;
+  min-height: 0;
+  height: 100%;
 }
 
-.admin-map__header {
+.admin-view:has(.admin-map-panel) {
+  overflow: hidden;
+}
+
+.admin-panel:has(.admin-map-panel) {
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  height: 100%;
+}
+
+.admin-map-tabs {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 6px;
   min-width: 0;
 }
 
-.admin-map__header h3 {
-  margin: 4px 0 0;
+.admin-map-tab {
+  min-height: 32px;
+  padding: 6px 14px;
+  border: 1px solid rgba(0, 229, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(3, 8, 12, 0.62);
+  color: var(--color-text-muted);
+  font: 700 12px "JetBrains Mono", Consolas, monospace;
+  cursor: pointer;
+  transition: border-color 150ms ease, background-color 150ms ease, color 150ms ease;
+}
+
+.admin-map-tab:hover,
+.admin-map-tab:focus-visible {
+  border-color: rgba(0, 229, 255, 0.52);
   color: var(--color-primary-soft);
-  font-size: 20px;
+  outline: none;
+}
+
+.admin-map-tab--active {
+  border-color: rgba(0, 229, 255, 0.62);
+  background: rgba(0, 229, 255, 0.13);
+  color: var(--color-primary-soft);
+  box-shadow: inset 0 -2px rgba(255, 43, 127, 0.72);
 }
 
 .admin-map-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(240px, 0.55fr);
-  gap: 14px;
-  min-height: 460px;
+  display: block;
+  min-height: 0;
+  height: 100%;
+}
+
+.admin-map-viewport {
+  position: relative;
+  display: block;
+  min-width: 0;
+  min-height: 360px;
+  height: 100%;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid rgba(0, 229, 255, 0.24);
+  background: rgba(3, 8, 12, 0.9);
+  cursor: grab;
+  scrollbar-color: rgba(0, 229, 255, 0.52) rgba(6, 13, 18, 0.82);
+  touch-action: none;
+}
+
+.admin-map-viewport.admin-map-viewport--dragging {
+  cursor: grabbing;
+  user-select: none;
 }
 
 .admin-map-stage {
   position: relative;
-  min-height: 460px;
+  margin-inline: auto;
   overflow: hidden;
-  border: 1px solid rgba(0, 229, 255, 0.18);
-  border-radius: 8px;
-  background:
-    linear-gradient(rgba(0, 229, 255, 0.055) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 229, 255, 0.055) 1px, transparent 1px),
-    radial-gradient(circle at center, rgba(0, 229, 255, 0.12), transparent 62%),
-    rgba(7, 11, 14, 0.74);
-  background-size: 42px 42px, 42px 42px, auto, auto;
+  background: #071015;
 }
 
-.admin-map-stage::before,
 .admin-map-stage::after {
   position: absolute;
+  inset: 0;
   content: "";
-  background: rgba(0, 229, 255, 0.14);
+  border: 1px solid rgba(0, 229, 255, 0.16);
+  background:
+    linear-gradient(rgba(0, 229, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 229, 255, 0.045) 1px, transparent 1px);
+  background-size: 12.5% 12.5%;
+  pointer-events: none;
 }
 
-.admin-map-stage::before {
-  top: 50%;
-  right: 0;
-  left: 0;
-  height: 1px;
-}
-
-.admin-map-stage::after {
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  width: 1px;
-}
-
-.admin-map-stage__axis {
+.admin-map-stage__image {
   position: absolute;
-  z-index: 1;
-  color: var(--color-primary);
-  font-family: "JetBrains Mono", Consolas, monospace;
-  font-size: 11px;
-  font-weight: 800;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  user-select: none;
 }
 
-.admin-map-stage__axis--x {
-  right: 12px;
-  bottom: 10px;
-}
-
-.admin-map-stage__axis--y {
-  top: 10px;
-  left: 12px;
+.admin-map-marker-layer,
+.admin-map-empty-layer {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  pointer-events: none;
 }
 
 .admin-map-marker {
@@ -3367,16 +3401,11 @@ button.settings-api-address:not(:disabled):focus-visible {
   white-space: nowrap;
 }
 
-.admin-map-list {
-  display: grid;
-  align-content: start;
-  gap: 10px;
-  min-width: 0;
-  max-height: 460px;
-  overflow: auto;
-}
-
 .admin-map-player {
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: left;
   display: grid;
   gap: 5px;
   min-width: 0;
@@ -3384,6 +3413,16 @@ button.settings-api-address:not(:disabled):focus-visible {
   border: 1px solid rgba(0, 229, 255, 0.16);
   border-radius: 8px;
   background: rgba(11, 15, 19, 0.46);
+  cursor: pointer;
+  transition: border-color 150ms ease, background-color 150ms ease, transform 150ms ease;
+}
+
+.admin-map-player:hover,
+.admin-map-player:focus-visible {
+  border-color: rgba(0, 229, 255, 0.52);
+  background: rgba(0, 229, 255, 0.08);
+  outline: none;
+  transform: translateX(2px);
 }
 
 .admin-map-player strong,
@@ -3408,6 +3447,28 @@ button.settings-api-address:not(:disabled):focus-visible {
 
 .admin-map-player small {
   color: var(--color-text-muted);
+}
+
+.admin-map-sidebar {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.admin-map-stage__empty {
+  position: absolute;
+  z-index: 3;
+  top: 50%;
+  left: 50%;
+  width: min(360px, calc(100% - 32px));
+  margin: 0;
+  padding: 12px 16px;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(0, 229, 255, 0.28);
+  background: rgba(3, 8, 12, 0.9);
+  color: var(--color-text-muted);
+  text-align: center;
 }
 
 .admin-icon-button {
@@ -5714,7 +5775,7 @@ html.window-maximized .tactical-window-frame {
   background: linear-gradient(180deg, var(--color-primary), rgba(8, 217, 232, 0.58) 62%, var(--color-accent));
   box-shadow: 0 0 9px rgba(8, 217, 232, 0.42);
   content: "";
-  pointer-events: none;
+  pointer-events: auto;
 }
 
 .titlebar::after {
@@ -6887,6 +6948,11 @@ html.window-maximized .tactical-window-frame {
 
   .admin-map-layout {
     grid-template-columns: 1fr;
+  }
+
+  .admin-map-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    max-height: none;
   }
 
   .inline-confirm {

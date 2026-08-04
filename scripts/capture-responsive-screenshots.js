@@ -47,7 +47,12 @@ const manualViews = [
 const manualRuntimeViews = [
   { name: 'administracion-servidor', selector: '[data-admin-sidebar-tab="general"]', waitMs: 5000 },
   { name: 'administracion-jugadores', selector: '[data-admin-sidebar-tab="players"]', waitMs: 2500 },
-  { name: 'administracion-mapa', selector: '[data-admin-sidebar-tab="map"]', waitMs: 1500 },
+  {
+    name: 'administracion-mapa',
+    selector: '[data-admin-sidebar-tab="map"]',
+    readySelector: '.admin-map-stage',
+    waitMs: 600
+  },
   { name: 'general-servidor-activo', selector: '.sidebar__link[data-nav="home"]', waitMs: 1500 }
 ];
 
@@ -166,13 +171,23 @@ async function writeScreenshotWithRetry(targetPath, pngBuffer, attempts = 5) {
 async function openManualView(window, view) {
   if (view.selector.includes('data-settings-sidebar-tab')) {
     await window.webContents.executeJavaScript(`
-      document.querySelector('[data-settings-group-toggle]')?.click()
+      (() => {
+        const group = document.querySelector('[data-nav-group="settings"]');
+        if (group?.classList.contains('sidebar__group--collapsed')) {
+          document.querySelector('[data-settings-group-toggle]')?.click();
+        }
+      })()
     `);
     await waitForSelector(window, view.selector);
   }
   if (view.selector.includes('data-admin-sidebar-tab')) {
     await window.webContents.executeJavaScript(`
-      document.querySelector('[data-admin-group-toggle]')?.click()
+      (() => {
+        const group = document.querySelector('[data-nav-group="admin"]');
+        if (group?.classList.contains('sidebar__group--collapsed')) {
+          document.querySelector('[data-admin-group-toggle]')?.click();
+        }
+      })()
     `);
     await waitForSelector(window, view.selector);
   }
@@ -187,6 +202,10 @@ async function openManualView(window, view) {
   `);
   if (!clicked) {
     throw new Error(`Manual view is not available: ${view.name}`);
+  }
+  const adminTab = view.selector.match(/data-admin-sidebar-tab="([^"]+)"/)?.[1];
+  if (adminTab) {
+    await waitForSelector(window, `[data-admin-active-tab="${adminTab}"]`);
   }
   await wait(view.waitMs);
 }
@@ -356,15 +375,31 @@ async function writeManualScreenshot(window, outputDir, view) {
 async function captureManualScreenshots(window) {
   const manualOutputDir = join(process.cwd(), 'resources', 'screenshots');
   const requestedView = process.env.PALCM_CAPTURE_VIEW;
+  const requestedRuntimeView = requestedView
+    ? manualRuntimeViews.find((view) => view.name === requestedView)
+    : undefined;
   const selectedViews = requestedView
     ? manualViews.filter((view) => view.name === requestedView)
     : manualViews;
-  if (requestedView && selectedViews.length === 0) {
+  if (requestedView && selectedViews.length === 0 && !requestedRuntimeView) {
     throw new Error(`Unknown manual capture view: ${requestedView}`);
   }
   mkdirSync(manualOutputDir, { recursive: true });
   window.setSize(1440, 900);
   await wait(400);
+
+  if (requestedRuntimeView) {
+    await ensureServerRunning(window);
+    try {
+      window.webContents.reload();
+      await waitForSelector(window, '.sidebar__link[data-nav="home"]');
+      await waitForEnabledNavigation(window, 'admin');
+      await writeManualScreenshot(window, manualOutputDir, requestedRuntimeView);
+    } finally {
+      await ensureServerStopped(window);
+    }
+    return;
+  }
 
   if (requestedView && requestedView !== 'general') {
     const generalView = manualViews.find((view) => view.name === 'general');

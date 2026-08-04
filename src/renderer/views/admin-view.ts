@@ -2,12 +2,25 @@ import type { PalworldAdminStatusDto } from '../../shared/dto/palworld-admin.dto
 import type { PalworldPlayersStatusDto } from '../../shared/dto/palworld-players-status.dto';
 import { renderIcon } from '../components/icon';
 import {
+  getPalworldMapPosition,
+  isPalworldPositionInMap,
+  PALWORLD_MAP_LAYER_BOUNDS,
+  type PalworldMapId
+} from '../constants/palworld-map';
+import {
   getAdminSnapshotFields,
   type AdminSnapshotFieldDefinition,
   type AdminSnapshotSection
 } from '../constants/admin-snapshot-catalog';
 import { formatDateTime } from '../utils/format';
 import { escapeHtml } from '../utils/text';
+
+const palworldWorldMapUrl = new URL('../assets/palworld-world-map-1.0.webp', import.meta.url).href;
+const palworldTreeMapUrl = new URL('../assets/palworld-tree-map-1.0.webp', import.meta.url).href;
+const palworldMapUrls = {
+  world: palworldWorldMapUrl,
+  tree: palworldTreeMapUrl
+} as const;
 
 export type AdminTab = 'general' | 'players' | 'map';
 
@@ -20,7 +33,8 @@ export function hasAdminGeneralData(adminStatus: PalworldAdminStatusDto): boolea
 export function renderAdminStatus(
   adminStatus: PalworldAdminStatusDto,
   playersStatus: PalworldPlayersStatusDto,
-  activeTab: AdminTab
+  activeTab: AdminTab,
+  activeMap: PalworldMapId = 'world'
 ): string {
   const isReady = adminStatus.status === 'READY';
 
@@ -29,7 +43,7 @@ export function renderAdminStatus(
       <section class="content-card admin-panel">
         ${
           isReady
-            ? renderAdminTabs(adminStatus, playersStatus, activeTab)
+            ? renderAdminTabs(adminStatus, playersStatus, activeTab, activeMap)
             : `<div class="admin-toolbar"><h3>Administracion</h3><span class="view-meta-pill">${escapeHtml(adminStatus.message)}</span></div><p class="empty-state">${escapeHtml(adminStatus.message)}</p>`
         }
       </section>
@@ -40,7 +54,8 @@ export function renderAdminStatus(
 function renderAdminTabs(
   adminStatus: PalworldAdminStatusDto,
   playersStatus: PalworldPlayersStatusDto,
-  activeTab: AdminTab
+  activeTab: AdminTab,
+  activeMap: PalworldMapId
 ): string {
   const tabLabel: Record<AdminTab, string> = {
     general: 'Servidor',
@@ -53,20 +68,21 @@ function renderAdminTabs(
       <h3>${tabLabel[activeTab]}</h3>
       <span class="view-meta-pill" data-admin-live-region="status-message">${escapeHtml(adminStatus.message)}</span>
     </div>
-    ${renderAdminActiveTab(adminStatus, playersStatus, activeTab)}
+    ${renderAdminActiveTab(adminStatus, playersStatus, activeTab, activeMap)}
   `;
 }
 
 function renderAdminActiveTab(
   adminStatus: PalworldAdminStatusDto,
   playersStatus: PalworldPlayersStatusDto,
-  activeTab: AdminTab
+  activeTab: AdminTab,
+  activeMap: PalworldMapId
 ): string {
   if (activeTab === 'players') {
     return renderAdminPlayersTab(playersStatus);
   }
   if (activeTab === 'map') {
-    return renderAdminMapTab(playersStatus);
+    return renderAdminMapTab(playersStatus, activeMap);
   }
   return renderAdminGeneralTab(adminStatus);
 }
@@ -145,43 +161,46 @@ function renderAdminPlayersTab(playersStatus: PalworldPlayersStatusDto): string 
   `;
 }
 
-function renderAdminMapTab(playersStatus: PalworldPlayersStatusDto): string {
-  return `<div data-admin-live-region="map-content">${renderAdminMapContent(playersStatus)}</div>`;
+function renderAdminMapTab(playersStatus: PalworldPlayersStatusDto, activeMap: PalworldMapId): string {
+  return renderAdminMapContent(playersStatus, activeMap);
 }
 
-function renderAdminMapContent(playersStatus: PalworldPlayersStatusDto): string {
-  if (playersStatus.status !== 'READY') {
-    return `<section class="admin-map-panel"><p class="empty-state">${escapeHtml(playersStatus.message)}</p></section>`;
-  }
-  const locatedPlayers = playersStatus.players.filter(hasPlayerLocation);
-  if (locatedPlayers.length === 0) {
-    return `
-      <section class="admin-map-panel">
-        <div class="admin-map__header">
-          <h3>Ubicacion de jugadores</h3>
-          <span class="view-meta-pill">${escapeHtml(formatDateTime(playersStatus.updatedAt))}</span>
-        </div>
-        <p class="empty-state">No hay jugadores conectados con coordenadas reportadas por la REST API.</p>
-      </section>
-    `;
-  }
-  const bounds = getPlayerMapBounds(locatedPlayers);
+function renderAdminMapContent(playersStatus: PalworldPlayersStatusDto, activeMap: PalworldMapId): string {
+  const locatedPlayers = playersStatus.status === 'READY'
+    ? playersStatus.players
+      .filter(hasPlayerLocation)
+      .filter((player) => isPalworldPositionInMap(player.locationX, player.locationY, activeMap))
+    : [];
+  const bounds = PALWORLD_MAP_LAYER_BOUNDS[activeMap];
+  const emptyMessage = playersStatus.status === 'READY'
+    ? 'No hay jugadores conectados en este mapa.'
+    : playersStatus.message;
   return `
-    <section class="admin-map-panel">
-      <div class="admin-map__header">
-        <h3>Ubicacion de jugadores</h3>
-        <span class="view-meta-pill">${String(locatedPlayers.length)} activos</span>
+    <section class="admin-map-panel" data-admin-map-panel data-map-layer="${activeMap}">
+      <div class="admin-map-tabs" role="tablist" aria-label="Mapas de Palworld">
+        ${renderMapTab('world', 'Palpagos', activeMap)}
+        ${renderMapTab('tree', 'Arbol del Mundo', activeMap)}
       </div>
       <div class="admin-map-layout">
-        <div class="admin-map-stage" role="img" aria-label="Mapa relativo de jugadores conectados">
-          <div class="admin-map-stage__axis admin-map-stage__axis--x">X</div>
-          <div class="admin-map-stage__axis admin-map-stage__axis--y">Y</div>
-          ${locatedPlayers.map((player, index) => renderPlayerMapMarker(player, bounds, index)).join('')}
+        <div class="admin-map-viewport" data-admin-map-viewport>
+          <div class="admin-map-stage" data-admin-map-stage data-map-layer="${activeMap}" role="img" aria-label="${activeMap === 'world' ? 'Mapa de Palpagos' : 'Mapa del Arbol del Mundo'} con jugadores conectados" style="aspect-ratio: ${String(bounds.maxX - bounds.minX)} / ${String(bounds.maxY - bounds.minY)};">
+            ${renderPalworldMapLayer(activeMap)}
+            <div class="admin-map-marker-layer" data-admin-live-region="map-markers">
+              ${locatedPlayers.map((player, index) => renderPlayerMapMarker(player, index, activeMap)).join('')}
+            </div>
+            <div class="admin-map-empty-layer" data-admin-live-region="map-empty">
+              ${locatedPlayers.length === 0 ? `<p class="admin-map-stage__empty">${escapeHtml(emptyMessage)}</p>` : ''}
+            </div>
+          </div>
         </div>
-        <div class="admin-map-list">${locatedPlayers.map(renderPlayerMapListItem).join('')}</div>
       </div>
     </section>
   `;
+}
+
+function renderMapTab(mapId: PalworldMapId, label: string, activeMap: PalworldMapId): string {
+  const selected = mapId === activeMap;
+  return `<button class="admin-map-tab${selected ? ' admin-map-tab--active' : ''}" type="button" role="tab" aria-selected="${String(selected)}" data-admin-map-layer-action="${mapId}">${escapeHtml(label)}</button>`;
 }
 
 function renderAdminSnapshotCard(
@@ -413,13 +432,6 @@ function formatPlayerUid(playerId: string): string {
   return playerId.slice(0, 8);
 }
 
-interface PlayerMapBounds {
-  minX: number;
-  maxX: number;
-  minY: number;
-  maxY: number;
-}
-
 function hasPlayerLocation(
   player: PalworldPlayersStatusDto['players'][number]
 ): player is PalworldPlayersStatusDto['players'][number] & { locationX: number; locationY: number } {
@@ -429,66 +441,38 @@ function hasPlayerLocation(
     Number.isFinite(player.locationY);
 }
 
-function getPlayerMapBounds(
-  players: Array<PalworldPlayersStatusDto['players'][number] & { locationX: number; locationY: number }>
-): PlayerMapBounds {
-  const xs = players.map((player) => player.locationX);
-  const ys = players.map((player) => player.locationY);
-  return {
-    minX: Math.min(...xs),
-    maxX: Math.max(...xs),
-    minY: Math.min(...ys),
-    maxY: Math.max(...ys)
-  };
-}
-
 function renderPlayerMapMarker(
   player: PalworldPlayersStatusDto['players'][number] & { locationX: number; locationY: number },
-  bounds: PlayerMapBounds,
-  index: number
+  index: number,
+  mapId: PalworldMapId
 ): string {
-  const position = getPlayerMapPosition(player, bounds);
+  const position = getPlayerMapPosition(player, mapId);
+  const playerKey = player.userId ?? player.playerId ?? player.name;
   return `
-    <article class="admin-map-marker" style="left: ${position.left}%; top: ${position.top}%;" title="${escapeHtml(player.name)}">
+    <article class="admin-map-marker" data-live-key="map-player-${escapeHtml(playerKey)}" style="left: ${position.left}%; top: ${position.top}%;" title="${escapeHtml(player.name)}">
       <span class="admin-map-marker__pin">${escapeHtml(getPlayerInitials(player.name))}</span>
       <span class="admin-map-marker__label">${escapeHtml(player.name || `Jugador ${String(index + 1)}`)}</span>
     </article>
   `;
 }
 
-function renderPlayerMapListItem(
-  player: PalworldPlayersStatusDto['players'][number] & { locationX: number; locationY: number }
-): string {
-  const details = [
-    typeof player.level === 'number' ? `Nivel ${String(player.level)}` : null,
-    typeof player.ping === 'number' ? `${formatPing(player.ping)} ms` : null,
-    typeof player.locationZ === 'number' ? `Z ${formatCoordinate(player.locationZ)}` : null
-  ].filter((value): value is string => value !== null);
-  return `
-    <article class="admin-map-player">
-      <strong>${escapeHtml(player.name)}</strong>
-      <span>X ${formatCoordinate(player.locationX)} / Y ${formatCoordinate(player.locationY)}</span>
-      <small>${escapeHtml(details.join(' - ') || 'Sin datos adicionales')}</small>
-    </article>
-  `;
-}
-
-function getPlayerMapPosition(
-  player: PalworldPlayersStatusDto['players'][number] & { locationX: number; locationY: number },
-  bounds: PlayerMapBounds
+export function getPlayerMapPosition(
+  player: { locationX: number; locationY: number },
+  mapId: PalworldMapId = 'world'
 ): { left: string; top: string } {
-  const left = normalizeMapAxis(player.locationX, bounds.minX, bounds.maxX);
-  const top = 100 - normalizeMapAxis(player.locationY, bounds.minY, bounds.maxY);
-  return { left: left.toFixed(2), top: top.toFixed(2) };
+  return getPalworldMapPosition(player.locationX, player.locationY, mapId);
 }
 
-function normalizeMapAxis(value: number, min: number, max: number): number {
-  if (min === max) {
-    return 50;
-  }
-  const padding = 8;
-  const normalized = ((value - min) / (max - min)) * (100 - padding * 2) + padding;
-  return Math.min(100 - padding, Math.max(padding, normalized));
+function renderPalworldMapLayer(mapId: PalworldMapId): string {
+  return `
+    <canvas
+      class="admin-map-stage__image"
+      data-admin-map-canvas
+      data-map-layer="${mapId}"
+      data-map-url="${escapeHtml(palworldMapUrls[mapId])}"
+      aria-hidden="true"
+    ></canvas>
+  `;
 }
 
 function getPlayerInitials(name: string): string {

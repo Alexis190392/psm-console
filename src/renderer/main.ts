@@ -36,6 +36,11 @@ import { CONFIGURATION_PRESETS } from './config/configuration-presets';
 import { hasConfigurationChangedExternally } from './config/configuration-change-guard';
 import { getSettingDefinition } from './config/setting-definition-resolver';
 import {
+  PALWORLD_MAP_LAYER_BOUNDS,
+  PALWORLD_MAP_LAYERS,
+  type PalworldMapId
+} from './constants/palworld-map';
+import {
   formatSettingValue,
   parsePalworldSettings,
   serializePalworldSettings,
@@ -356,6 +361,19 @@ let latestPalworldUpdateStatus: PalworldUpdateStatusDto | null = null;
 let updateStatusRequest: Promise<AppUpdateStatusDto> | null = null;
 let announcedUpdateVersion: string | null = null;
 let adminRefreshTimer: number | null = null;
+let adminMapZoom = 1;
+let activeAdminMap: PalworldMapId = 'world';
+const adminMapViewStates: Record<PalworldMapId, { zoom: number; scrollX: number; scrollY: number }> = {
+  world: { zoom: 1, scrollX: 0, scrollY: 0 },
+  tree: { zoom: 1, scrollX: 0, scrollY: 0 }
+};
+let adminMapDrag: {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  scrollLeft: number;
+  scrollTop: number;
+} | null = null;
 let remoteApiConnectionRefreshTimer: number | null = null;
 let generalRemoteApiRefreshTimer: number | null = null;
 let remoteApiSaveStatusTimer: number | null = null;
@@ -366,6 +384,8 @@ const remoteApiAutosaveTimers: Record<'ADMIN' | 'CLIENT', number | null> = {
   CLIENT: null
 };
 let adminStatusRequest: Promise<[PalworldAdminStatusDto, PalworldPlayersStatusDto]> | null = null;
+let latestAdminStatus: PalworldAdminStatusDto | null = null;
+let latestAdminPlayersStatus: PalworldPlayersStatusDto | null = null;
 const adminViewState = new AdminViewState();
 const settingsViewState = new SettingsViewState();
 let consoleSearchTerm = '';
@@ -2935,6 +2955,8 @@ async function refreshAdminView(options: { force?: boolean } = {}, renderId?: nu
       adminStatusRequest = null;
     });
     const [adminStatus, playersStatus] = await adminStatusRequest;
+    latestAdminStatus = adminStatus;
+    latestAdminPlayersStatus = playersStatus;
 
     const belongsToCurrentView = renderId === undefined || isCurrentViewRender(renderId, 'admin');
     if (belongsToCurrentView && navigationState.is('admin') && (options.force || !isEditingAdminForm())) {
@@ -2943,7 +2965,7 @@ async function refreshAdminView(options: { force?: boolean } = {}, renderId?: nu
         renderViewLoading('CARGANDO DATOS DEL SERVIDOR');
         return;
       }
-      const html = renderAdminStatus(adminStatus, playersStatus, activeTab);
+      const html = renderAdminStatus(adminStatus, playersStatus, activeTab, activeAdminMap);
       if (!updateAdminLiveRegions(html, activeTab)) {
         setContent(html);
       }
@@ -3013,6 +3035,7 @@ function startAdminAutoRefresh(): void {
 }
 
 function bindAdminControls(): void {
+  bindAdminMapControls();
   const forceUpdateButton = document.querySelector<HTMLButtonElement>('#force-update-server');
   if (forceUpdateButton && forceUpdateButton.dataset['adminBound'] !== 'true') {
     forceUpdateButton.dataset['adminBound'] = 'true';
@@ -3043,6 +3066,271 @@ function bindAdminControls(): void {
       showAdminConfirmation(form, submitter);
     });
   });
+}
+
+function bindAdminMapControls(): void {
+  const viewport = document.querySelector<HTMLElement>('[data-admin-map-viewport]');
+  const stage = document.querySelector<HTMLElement>('[data-admin-map-stage]');
+  if (!viewport || !stage) {
+    return;
+  }
+
+  const renderedMap = parsePalworldMapId(stage.dataset['mapLayer']);
+  if (renderedMap) {
+    activeAdminMap = renderedMap;
+  }
+  adminMapZoom = adminMapViewStates[activeAdminMap].zoom;
+  bindAdminMapCanvas(stage);
+  if (stage.dataset['adminMapInitialized'] !== 'true') {
+    stage.dataset['adminMapInitialized'] = 'true';
+    applyAdminMapZoom(viewport, stage, { restorePosition: true });
+  }
+
+  document.querySelectorAll<HTMLButtonElement>('[data-admin-map-layer-action]').forEach((button) => {
+    if (button.dataset['adminMapBound'] === 'true') {
+      return;
+    }
+    button.dataset['adminMapBound'] = 'true';
+    button.addEventListener('click', () => {
+      const nextMap = parsePalworldMapId(button.dataset['adminMapLayerAction']);
+      if (!nextMap || nextMap === activeAdminMap) {
+        return;
+      }
+      saveAdminMapViewState(viewport);
+      activeAdminMap = nextMap;
+      adminMapZoom = adminMapViewStates[nextMap].zoom;
+      renderCachedAdminMapView();
+    });
+  });
+
+  if (viewport.dataset['adminMapBound'] === 'true') {
+    return;
+  }
+  viewport.dataset['adminMapBound'] = 'true';
+  viewport.addEventListener('wheel', (event) => {
+    event.preventDefault();
+    const direction = event.deltaY < 0 ? 1 : -1;
+    const nextZoom = Math.min(4, Math.max(1, adminMapZoom + direction * 0.25));
+    if (nextZoom === adminMapZoom) {
+      return;
+    }
+    const viewportBounds = viewport.getBoundingClientRect();
+    const pointerX = event.clientX - viewportBounds.left;
+    const pointerY = event.clientY - viewportBounds.top;
+    const anchorX = stage.offsetWidth > 0
+      ? (viewport.scrollLeft + pointerX) / stage.offsetWidth
+      : 0.5;
+    const anchorY = stage.offsetHeight > 0
+      ? (viewport.scrollTop + pointerY) / stage.offsetHeight
+      : 0.5;
+
+    adminMapZoom = nextZoom;
+    adminMapViewStates[activeAdminMap].zoom = nextZoom;
+    sizeAdminMapStage(viewport, stage);
+    window.requestAnimationFrame(() => {
+      drawAdminMapCanvas(stage);
+      viewport.scrollLeft = anchorX * stage.offsetWidth - pointerX;
+      viewport.scrollTop = anchorY * stage.offsetHeight - pointerY;
+      saveAdminMapViewState(viewport);
+    });
+  }, { passive: false });
+  viewport.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0 || (event.target instanceof Element && event.target.closest('button'))) {
+      return;
+    }
+    adminMapDrag = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      scrollLeft: viewport.scrollLeft,
+      scrollTop: viewport.scrollTop
+    };
+    viewport.setPointerCapture(event.pointerId);
+    viewport.classList.add('admin-map-viewport--dragging');
+  });
+  viewport.addEventListener('pointermove', (event) => {
+    if (!adminMapDrag || adminMapDrag.pointerId !== event.pointerId) {
+      return;
+    }
+    viewport.scrollLeft = adminMapDrag.scrollLeft - (event.clientX - adminMapDrag.startX);
+    viewport.scrollTop = adminMapDrag.scrollTop - (event.clientY - adminMapDrag.startY);
+    saveAdminMapViewState(viewport);
+  });
+  const stopDragging = (event: PointerEvent): void => {
+    if (!adminMapDrag || adminMapDrag.pointerId !== event.pointerId) {
+      return;
+    }
+    adminMapDrag = null;
+    viewport.classList.remove('admin-map-viewport--dragging');
+    if (viewport.hasPointerCapture(event.pointerId)) {
+      viewport.releasePointerCapture(event.pointerId);
+    }
+  };
+  viewport.addEventListener('pointerup', stopDragging);
+  viewport.addEventListener('pointercancel', stopDragging);
+
+  const viewportResizeObserver = new ResizeObserver(() => {
+    sizeAdminMapStage(viewport, stage);
+    drawAdminMapCanvas(stage);
+  });
+  viewportResizeObserver.observe(viewport);
+}
+
+function parsePalworldMapId(value: string | undefined): PalworldMapId | null {
+  return value === 'world' || value === 'tree' ? value : null;
+}
+
+function saveAdminMapViewState(viewport: HTMLElement): void {
+  const state = adminMapViewStates[activeAdminMap];
+  const maxScrollLeft = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
+  const maxScrollTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+  state.zoom = adminMapZoom;
+  state.scrollX = maxScrollLeft > 0 ? viewport.scrollLeft / maxScrollLeft : 0;
+  state.scrollY = maxScrollTop > 0 ? viewport.scrollTop / maxScrollTop : 0;
+}
+
+function renderCachedAdminMapView(): void {
+  if (!latestAdminStatus || !latestAdminPlayersStatus || !navigationState.is('admin')) {
+    return;
+  }
+  setContent(renderAdminStatus(
+    latestAdminStatus,
+    latestAdminPlayersStatus,
+    adminViewState.getTab(),
+    activeAdminMap
+  ));
+  bindAdminControls();
+}
+
+const adminMapImageCache = new Map<string, HTMLImageElement>();
+
+function bindAdminMapCanvas(stage: HTMLElement): void {
+  drawAdminMapCanvas(stage);
+  if (stage.dataset['adminMapCanvasBound'] === 'true') {
+    return;
+  }
+
+  stage.dataset['adminMapCanvasBound'] = 'true';
+  const resizeObserver = new ResizeObserver(() => {
+    drawAdminMapCanvas(stage);
+  });
+  resizeObserver.observe(stage);
+}
+
+function drawAdminMapCanvas(stage: HTMLElement): void {
+  const canvas = stage.querySelector<HTMLCanvasElement>('[data-admin-map-canvas]');
+  if (!canvas || stage.clientWidth <= 0 || stage.clientHeight <= 0) {
+    return;
+  }
+
+  const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+  const canvasWidth = Math.max(1, Math.round(stage.clientWidth * pixelRatio));
+  const canvasHeight = Math.max(1, Math.round(stage.clientHeight * pixelRatio));
+  if (canvas.width !== canvasWidth || canvas.height !== canvasHeight) {
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
+  }
+
+  const context = canvas.getContext('2d');
+  if (!context) {
+    return;
+  }
+
+  context.setTransform(1, 0, 0, 1, 0, 0);
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.fillStyle = '#071015';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+
+  const mapId = parsePalworldMapId(canvas.dataset['mapLayer']);
+  if (!mapId) {
+    return;
+  }
+  const layer = PALWORLD_MAP_LAYERS.find(({ id }) => id === mapId);
+  const imageUrl = canvas.dataset['mapUrl'];
+  if (!layer || !imageUrl) {
+    return;
+  }
+  const bounds = PALWORLD_MAP_LAYER_BOUNDS[mapId];
+  const worldWidth = bounds.maxX - bounds.minX;
+  const worldHeight = bounds.maxY - bounds.minY;
+  const scaleX = canvas.width / worldWidth;
+  const scaleY = canvas.height / worldHeight;
+
+  const image = getAdminMapImage(imageUrl, () => {
+    drawAdminMapCanvas(stage);
+  });
+  if (!image.complete || image.naturalWidth === 0) {
+    return;
+  }
+
+  const transform = layer.imageToWorld;
+  context.save();
+  context.setTransform(
+    scaleX * transform.a,
+    -scaleY * transform.d,
+    scaleX * transform.b,
+    -scaleY * transform.e,
+    scaleX * (transform.c - bounds.minX),
+    scaleY * (bounds.maxY - transform.f)
+  );
+  context.drawImage(image, 0, 0, layer.imageWidth, layer.imageHeight);
+  context.restore();
+}
+
+function getAdminMapImage(imageUrl: string, onLoad: () => void): HTMLImageElement {
+  const cachedImage = adminMapImageCache.get(imageUrl);
+  if (cachedImage) {
+    return cachedImage;
+  }
+
+  const image = new Image();
+  image.decoding = 'async';
+  image.addEventListener('load', onLoad, { once: true });
+  image.src = imageUrl;
+  adminMapImageCache.set(imageUrl, image);
+  return image;
+}
+
+function applyAdminMapZoom(
+  viewport: HTMLElement,
+  stage: HTMLElement,
+  options: { preserveCenter?: boolean; restorePosition?: boolean } = {}
+): void {
+  const centerX = viewport.scrollWidth > 0
+    ? (viewport.scrollLeft + viewport.clientWidth / 2) / viewport.scrollWidth
+    : 0.5;
+  const centerY = viewport.scrollHeight > 0
+    ? (viewport.scrollTop + viewport.clientHeight / 2) / viewport.scrollHeight
+    : 0.5;
+  sizeAdminMapStage(viewport, stage);
+
+  window.requestAnimationFrame(() => {
+    drawAdminMapCanvas(stage);
+    if (options.restorePosition) {
+      const state = adminMapViewStates[activeAdminMap];
+      viewport.scrollLeft = state.scrollX * Math.max(0, viewport.scrollWidth - viewport.clientWidth);
+      viewport.scrollTop = state.scrollY * Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+      return;
+    }
+    if (options.preserveCenter) {
+      viewport.scrollLeft = centerX * viewport.scrollWidth - viewport.clientWidth / 2;
+      viewport.scrollTop = centerY * viewport.scrollHeight - viewport.clientHeight / 2;
+      saveAdminMapViewState(viewport);
+    }
+  });
+}
+
+function sizeAdminMapStage(viewport: HTMLElement, stage: HTMLElement): void {
+  const mapId = parsePalworldMapId(stage.dataset['mapLayer']) ?? activeAdminMap;
+  const bounds = PALWORLD_MAP_LAYER_BOUNDS[mapId];
+  const mapRatio = (bounds.maxX - bounds.minX) / (bounds.maxY - bounds.minY);
+  const viewportWidth = Math.max(1, viewport.clientWidth);
+  const viewportHeight = Math.max(1, viewport.clientHeight);
+  const viewportRatio = viewportWidth / viewportHeight;
+  const baseWidth = viewportRatio >= mapRatio ? viewportWidth : viewportHeight * mapRatio;
+  const baseHeight = viewportRatio >= mapRatio ? viewportWidth / mapRatio : viewportHeight;
+  stage.style.width = `${String(baseWidth * adminMapZoom)}px`;
+  stage.style.height = `${String(baseHeight * adminMapZoom)}px`;
 }
 
 async function hydrateGeneralServerUpdate(renderId: number): Promise<void> {

@@ -1,6 +1,6 @@
 {
   "name": "palcm",
-  "version": "0.17.9",
+  "version": "0.17.12",
   "private": true,
   "description": "PSM Console by >GR477< - Palworld Server Manager",
   "author": "Alexis Joel Dávila (>GR477<)",
@@ -73,6 +73,10 @@
       {
         "from": "resources/remote-api-web",
         "to": "remote-api-web"
+      },
+      {
+        "from": "THIRD_PARTY_NOTICES.md",
+        "to": "THIRD_PARTY_NOTICES.md"
       }
     ],
     "directories": {

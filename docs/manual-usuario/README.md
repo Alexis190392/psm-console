@@ -238,9 +238,21 @@ Las acciones administrativas pueden requerir confirmación. El botón de expulsi
 
 ### Mapa
 
-Muestra una representación relativa de las coordenadas reportadas por la API REST. No reemplaza el mapa oficial del juego y solo aparecen jugadores con coordenadas disponibles.
+Muestra las coordenadas reportadas por la API REST sobre los mapas actuales de Palpagos y el Arbol del Mundo. Ambos mapas estan separados en pestañas para mantener su escala y sistema de coordenadas correctos. PSM Console convierte las coordenadas del servidor y muestra en cada mapa solamente los jugadores ubicados dentro de sus limites.
+
+Permite:
+
+- Usar la rueda del mouse para ampliar o alejar conservando bajo el cursor la zona señalada.
+- Desplazarse manteniendo presionado el botón principal y arrastrando el mapa.
+- Cambiar entre `Palpagos` y `Arbol del Mundo` desde las pestañas superiores.
+- Conservar de forma independiente el zoom y el sector visible de cada mapa mientras la vista permanezca abierta.
+- Ver el nombre del jugador directamente sobre su marcador.
+
+Los marcadores se actualizan automáticamente mientras la API REST del servidor permanezca disponible. La actualización no modifica el zoom, el mapa seleccionado ni el sector que estés observando. Si no hay jugadores conectados o no reportan coordenadas, el mapa sigue visible e informa que está esperando posiciones.
 
 ![Mapa administrativo sin jugadores conectados](../../resources/screenshots/administracion-mapa.png)
+
+Las capas se distribuyen localmente y no requieren una consulta externa durante el uso. Su procedencia y los avisos de derechos estan registrados en [Avisos de terceros](../../THIRD_PARTY_NOTICES.md).
 
 ## 8. Backups
 
