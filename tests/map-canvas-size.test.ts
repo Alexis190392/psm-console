@@ -7,8 +7,8 @@ import {
 describe('map canvas size', () => {
   it('uses a bounded pixel ratio for regular viewports', () => {
     expect(calculateMapCanvasSize(1_200, 800, 2)).toEqual({
-      width: 1_800,
-      height: 1_200
+      width: 1_500,
+      height: 1_000
     });
   });
 

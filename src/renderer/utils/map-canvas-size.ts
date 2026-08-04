@@ -1,5 +1,5 @@
-export const MAX_MAP_CANVAS_DIMENSION = 4_096;
-export const MAX_MAP_CANVAS_PIXEL_RATIO = 1.5;
+export const MAX_MAP_CANVAS_DIMENSION = 2_048;
+export const MAX_MAP_CANVAS_PIXEL_RATIO = 1.25;
 
 export interface MapCanvasSize {
   width: number;
