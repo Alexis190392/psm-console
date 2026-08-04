@@ -49,6 +49,7 @@ import {
 } from './config/palworld-settings-parser';
 import { formatBytes, formatLastVerification } from './utils/format';
 import { syncLiveElement } from './utils/dom-sync';
+import { calculateMapCanvasSize } from './utils/map-canvas-size';
 import { getOperationFailureMessage, isOperationSuccessful } from './utils/operation-result';
 import { cssEscape, escapeHtml, normalizeSearchText } from './utils/text';
 import { renderBackupsView as renderBackupsViewHtml } from './views/backups-view';
@@ -374,6 +375,8 @@ let adminMapDrag: {
   scrollLeft: number;
   scrollTop: number;
 } | null = null;
+let adminMapViewportResizeObserver: ResizeObserver | null = null;
+let adminMapImageCache: { url: string; image: HTMLImageElement } | null = null;
 let remoteApiConnectionRefreshTimer: number | null = null;
 let generalRemoteApiRefreshTimer: number | null = null;
 let remoteApiSaveStatusTimer: number | null = null;
@@ -2924,6 +2927,7 @@ function stopRuntimeViewRefreshers(): void {
     window.clearTimeout(generalRemoteApiRefreshTimer);
     generalRemoteApiRefreshTimer = null;
   }
+  releaseAdminMapResources();
 }
 
 async function renderAdminView(renderId = ++activeViewRenderId): Promise<void> {
@@ -2967,6 +2971,9 @@ async function refreshAdminView(options: { force?: boolean } = {}, renderId?: nu
       }
       const html = renderAdminStatus(adminStatus, playersStatus, activeTab, activeAdminMap);
       if (!updateAdminLiveRegions(html, activeTab)) {
+        if (activeTab === 'map') {
+          releaseAdminMapResources();
+        }
         setContent(html);
       }
       bindAdminControls();
@@ -3173,6 +3180,8 @@ function bindAdminMapControls(): void {
     sizeAdminMapStage(viewport, stage);
     drawAdminMapCanvas(stage);
   });
+  adminMapViewportResizeObserver?.disconnect();
+  adminMapViewportResizeObserver = viewportResizeObserver;
   viewportResizeObserver.observe(viewport);
 }
 
@@ -3193,6 +3202,7 @@ function renderCachedAdminMapView(): void {
   if (!latestAdminStatus || !latestAdminPlayersStatus || !navigationState.is('admin')) {
     return;
   }
+  releaseAdminMapResources();
   setContent(renderAdminStatus(
     latestAdminStatus,
     latestAdminPlayersStatus,
@@ -3202,19 +3212,13 @@ function renderCachedAdminMapView(): void {
   bindAdminControls();
 }
 
-const adminMapImageCache = new Map<string, HTMLImageElement>();
-
 function bindAdminMapCanvas(stage: HTMLElement): void {
-  drawAdminMapCanvas(stage);
   if (stage.dataset['adminMapCanvasBound'] === 'true') {
     return;
   }
 
   stage.dataset['adminMapCanvasBound'] = 'true';
-  const resizeObserver = new ResizeObserver(() => {
-    drawAdminMapCanvas(stage);
-  });
-  resizeObserver.observe(stage);
+  drawAdminMapCanvas(stage);
 }
 
 function drawAdminMapCanvas(stage: HTMLElement): void {
@@ -3223,9 +3227,11 @@ function drawAdminMapCanvas(stage: HTMLElement): void {
     return;
   }
 
-  const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
-  const canvasWidth = Math.max(1, Math.round(stage.clientWidth * pixelRatio));
-  const canvasHeight = Math.max(1, Math.round(stage.clientHeight * pixelRatio));
+  const { width: canvasWidth, height: canvasHeight } = calculateMapCanvasSize(
+    stage.clientWidth,
+    stage.clientHeight,
+    window.devicePixelRatio || 1
+  );
   if (canvas.width !== canvasWidth || canvas.height !== canvasHeight) {
     canvas.width = canvasWidth;
     canvas.height = canvasHeight;
@@ -3278,17 +3284,43 @@ function drawAdminMapCanvas(stage: HTMLElement): void {
 }
 
 function getAdminMapImage(imageUrl: string, onLoad: () => void): HTMLImageElement {
-  const cachedImage = adminMapImageCache.get(imageUrl);
-  if (cachedImage) {
-    return cachedImage;
+  if (adminMapImageCache?.url === imageUrl) {
+    return adminMapImageCache.image;
   }
+
+  releaseAdminMapImage();
 
   const image = new Image();
   image.decoding = 'async';
-  image.addEventListener('load', onLoad, { once: true });
+  image.addEventListener('load', () => {
+    if (adminMapImageCache?.image === image) {
+      onLoad();
+    }
+  }, { once: true });
   image.src = imageUrl;
-  adminMapImageCache.set(imageUrl, image);
+  adminMapImageCache = { url: imageUrl, image };
   return image;
+}
+
+function releaseAdminMapResources(): void {
+  adminMapDrag = null;
+  adminMapViewportResizeObserver?.disconnect();
+  adminMapViewportResizeObserver = null;
+
+  const canvas = document.querySelector<HTMLCanvasElement>('[data-admin-map-canvas]');
+  if (canvas) {
+    canvas.width = 1;
+    canvas.height = 1;
+  }
+  releaseAdminMapImage();
+}
+
+function releaseAdminMapImage(): void {
+  if (!adminMapImageCache) {
+    return;
+  }
+  adminMapImageCache.image.src = '';
+  adminMapImageCache = null;
 }
 
 function applyAdminMapZoom(

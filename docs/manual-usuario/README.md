@@ -250,6 +250,8 @@ Permite:
 
 Los marcadores se actualizan automáticamente mientras la API REST del servidor permanezca disponible. La actualización no modifica el zoom, el mapa seleccionado ni el sector que estés observando. Si no hay jugadores conectados o no reportan coordenadas, el mapa sigue visible e informa que está esperando posiciones.
 
+Para reducir el consumo de memoria, PSM Console mantiene cargado solamente el mapa activo y libera sus recursos al salir de la vista. Al volver, conserva el zoom y el sector guardados para cada mapa.
+
 ![Mapa administrativo sin jugadores conectados](../../resources/screenshots/administracion-mapa.png)
 
 Las capas se distribuyen localmente y no requieren una consulta externa durante el uso. Su procedencia y los avisos de derechos estan registrados en [Avisos de terceros](../../THIRD_PARTY_NOTICES.md).
