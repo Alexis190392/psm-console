@@ -31,4 +31,25 @@ describe('server configuration view', () => {
     expect(html).toContain('Servidor &lt;QA&gt;');
     expect(html).not.toContain('Servidor <QA>');
   });
+
+  it('renders a disabled zero-value switch and hides its numeric control', () => {
+    const zeroParsed = parsePalworldSettings(
+      'OptionSettings=(PalEggDefaultHatchingTime=0.000000,BuildObjectDamageRate=1.000000)'
+    );
+    const html = renderSettingsForm(zeroParsed);
+
+    expect(html).toContain('data-zero-toggle-key="PalEggDefaultHatchingTime"');
+    expect(html).toContain('aria-checked="false"');
+    expect(html).toContain('data-zero-value-key="PalEggDefaultHatchingTime" hidden');
+    expect(html).toContain('value="1.000000"');
+    expect(html).toContain('data-zero-toggle-key="BuildObjectDamageRate"');
+    expect(html).toContain('aria-checked="true"');
+  });
+
+  it('keeps ordinary numeric settings without the zero-value switch', () => {
+    const html = renderSettingsForm(parsePalworldSettings('OptionSettings=(DayTimeSpeedRate=1.000000)'));
+
+    expect(html).not.toContain('data-zero-toggle-key="DayTimeSpeedRate"');
+    expect(html).toContain('data-range-key="DayTimeSpeedRate"');
+  });
 });

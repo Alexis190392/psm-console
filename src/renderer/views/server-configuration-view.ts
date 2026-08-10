@@ -1,6 +1,7 @@
 import { CONFIGURATION_PRESETS } from '../config/configuration-presets';
 import type { PalworldSettingDefinition } from '../config/palworld-settings-catalog';
 import { formatSelectOptionLabel, getSettingDefinition } from '../config/setting-definition-resolver';
+import { getZeroToggleSetting, isZeroSettingValue } from '../config/zero-toggle-settings';
 import {
   unquoteSettingValue,
   type ParsedPalworldSetting,
@@ -114,6 +115,28 @@ function renderSettingInput(definition: PalworldSettingDefinition, key: string, 
     `;
   }
   if (definition.kind === 'number') {
+    const zeroToggle = getZeroToggleSetting(key);
+    if (zeroToggle) {
+      const isEnabled = !isZeroSettingValue(value);
+      const editableValue = isEnabled ? value : zeroToggle.defaultValue;
+      return `
+        <div class="setting-zero-control" data-zero-control-key="${escapeHtml(key)}">
+          <button class="setting-zero-toggle" data-zero-toggle-key="${escapeHtml(key)}" type="button" role="switch" aria-checked="${isEnabled ? 'true' : 'false'}">
+            <span class="setting-zero-toggle__track" aria-hidden="true"><span></span></span>
+            <span class="setting-zero-toggle__state">${escapeHtml(isEnabled ? zeroToggle.enabledLabel : zeroToggle.disabledLabel)}</span>
+          </button>
+          <div class="setting-zero-value" data-zero-value-key="${escapeHtml(key)}" ${isEnabled ? '' : 'hidden'}>
+            ${renderNumberInput(definition, key, editableValue)}
+          </div>
+        </div>
+      `;
+    }
+    return renderNumberInput(definition, key, value);
+  }
+  return `<input data-setting-key="${escapeHtml(key)}" type="text" value="${escapeHtml(value)}" />`;
+}
+
+function renderNumberInput(definition: PalworldSettingDefinition, key: string, value: string): string {
     const numericValue = Number(value);
     if (typeof definition.min === 'number' && typeof definition.max === 'number' && Number.isFinite(numericValue)) {
       return `
@@ -124,6 +147,4 @@ function renderSettingInput(definition: PalworldSettingDefinition, key: string, 
       `;
     }
     return `<input data-setting-key="${escapeHtml(key)}" type="number" step="any" value="${escapeHtml(value)}" />`;
-  }
-  return `<input data-setting-key="${escapeHtml(key)}" type="text" value="${escapeHtml(value)}" />`;
 }

@@ -35,6 +35,7 @@ import { renderIcon } from './components/icon';
 import { CONFIGURATION_PRESETS } from './config/configuration-presets';
 import { hasConfigurationChangedExternally } from './config/configuration-change-guard';
 import { getSettingDefinition } from './config/setting-definition-resolver';
+import { getZeroToggleSetting, isZeroSettingValue } from './config/zero-toggle-settings';
 import {
   PALWORLD_MAP_LAYER_BOUNDS,
   PALWORLD_MAP_LAYERS,
@@ -80,6 +81,8 @@ import { resolveServerActionState } from './state/server-action-state';
 
 const palcmLogoUrl = new URL('./assets/palcm-logo.png', import.meta.url).href;
 const palcmSymbolUrl = new URL('./assets/palcm-symbol.png', import.meta.url).href;
+
+const zeroSettingLastValues = new Map<string, string>();
 
 const appRoot = document.querySelector<HTMLDivElement>('#app');
 
@@ -5184,6 +5187,15 @@ function readSettingsFormValues(parsed: ParsedPalworldSettings): Map<string, str
 
   parsed.settings.forEach((setting) => {
     const definition = getSettingDefinition(setting.key, setting.value);
+    const zeroToggle = getZeroToggleSetting(setting.key);
+    const zeroToggleButton = zeroToggle
+      ? document.querySelector<HTMLButtonElement>(`[data-zero-toggle-key="${cssEscape(setting.key)}"]`)
+      : null;
+
+    if (zeroToggle && zeroToggleButton?.getAttribute('aria-checked') !== 'true') {
+      values.set(setting.key, zeroToggle.zeroValue);
+      return;
+    }
     const input = document.querySelector<HTMLInputElement | HTMLSelectElement | HTMLButtonElement>(
       `[data-setting-key="${cssEscape(setting.key)}"]`
     );
@@ -5254,11 +5266,59 @@ function bindSettingsControls(parsed: ParsedPalworldSettings): void {
     });
   });
 
+  document.querySelectorAll<HTMLButtonElement>('.setting-zero-toggle').forEach((button) => {
+    const key = button.dataset['zeroToggleKey'];
+    const setting = key ? getZeroToggleSetting(key) : undefined;
+    const state = button.querySelector<HTMLElement>('.setting-zero-toggle__state');
+    const valueContainer = key
+      ? document.querySelector<HTMLElement>(`[data-zero-value-key="${cssEscape(key)}"]`)
+      : null;
+    const numberInput = key
+      ? document.querySelector<HTMLInputElement>(`input[data-setting-key="${cssEscape(key)}"]`)
+      : null;
+    const rangeInput = key
+      ? document.querySelector<HTMLInputElement>(`input[data-range-key="${cssEscape(key)}"]`)
+      : null;
+
+    if (!key || !setting) {
+      return;
+    }
+
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      closeSettingInfoPanels();
+
+      const nextChecked = button.getAttribute('aria-checked') !== 'true';
+      if (!nextChecked && numberInput && !isZeroSettingValue(numberInput.value)) {
+        zeroSettingLastValues.set(key, numberInput.value);
+      }
+      if (nextChecked && numberInput) {
+        const restoredValue = zeroSettingLastValues.get(key) ?? setting.defaultValue;
+        numberInput.value = restoredValue;
+        if (rangeInput) {
+          rangeInput.value = restoredValue;
+        }
+      }
+
+      setZeroToggleControlState(key, nextChecked);
+      if (state) {
+        state.textContent = nextChecked ? setting.enabledLabel : setting.disabledLabel;
+      }
+      if (valueContainer) {
+        valueContainer.hidden = !nextChecked;
+      }
+      updateAdvancedIniPreview(parsed);
+    });
+  });
+
   document.querySelectorAll<HTMLInputElement | HTMLSelectElement>('input[data-setting-key], select[data-setting-key]').forEach((input) => {
     input.addEventListener('input', () => {
+      rememberZeroSettingValue(input);
       updateAdvancedIniPreview(parsed);
     });
     input.addEventListener('change', () => {
+      rememberZeroSettingValue(input);
       updateAdvancedIniPreview(parsed);
     });
   });
@@ -5412,6 +5472,8 @@ function applyConfigurationPreset(
     if (range) {
       range.value = value;
     }
+
+    syncZeroToggleControl(key, value);
   });
 
   appendConsoleLine(`Perfil aplicado en vista: ${preset.label}. Guarda para escribirlo en el INI.`);
@@ -5590,39 +5652,66 @@ function applySettingControlValue(key: string, value: string): void {
   if (range) {
     range.value = unquotedValue;
   }
+
+  syncZeroToggleControl(key, unquotedValue);
+}
+
+function rememberZeroSettingValue(input: HTMLInputElement | HTMLSelectElement): void {
+  const key = input.dataset['settingKey'];
+  if (!key || !getZeroToggleSetting(key) || input.value.length === 0 || isZeroSettingValue(input.value)) {
+    return;
+  }
+
+  zeroSettingLastValues.set(key, input.value);
+}
+
+function syncZeroToggleControl(key: string, value: string): void {
+  const setting = getZeroToggleSetting(key);
+  if (!setting) {
+    return;
+  }
+
+  const isEnabled = !isZeroSettingValue(value);
+  const numberInput = document.querySelector<HTMLInputElement>(`input[data-setting-key="${cssEscape(key)}"]`);
+  const rangeInput = document.querySelector<HTMLInputElement>(`input[data-range-key="${cssEscape(key)}"]`);
+
+  if (isEnabled) {
+    zeroSettingLastValues.set(key, value);
+  } else {
+    const editableValue = zeroSettingLastValues.get(key) ?? setting.defaultValue;
+    if (numberInput) {
+      numberInput.value = editableValue;
+    }
+    if (rangeInput) {
+      rangeInput.value = editableValue;
+    }
+  }
+
+  setZeroToggleControlState(key, isEnabled);
+}
+
+function setZeroToggleControlState(key: string, isEnabled: boolean): void {
+  const setting = getZeroToggleSetting(key);
+  const button = document.querySelector<HTMLButtonElement>(`[data-zero-toggle-key="${cssEscape(key)}"]`);
+  const state = button?.querySelector<HTMLElement>('.setting-zero-toggle__state');
+  const valueContainer = document.querySelector<HTMLElement>(`[data-zero-value-key="${cssEscape(key)}"]`);
+
+  if (!setting || !button) {
+    return;
+  }
+
+  button.setAttribute('aria-checked', isEnabled ? 'true' : 'false');
+  if (state) {
+    state.textContent = isEnabled ? setting.enabledLabel : setting.disabledLabel;
+  }
+  if (valueContainer) {
+    valueContainer.hidden = !isEnabled;
+  }
 }
 
 function discardServerChanges(parsed: ParsedPalworldSettings): void {
   parsed.settings.forEach((setting) => {
-    const definition = getSettingDefinition(setting.key, setting.value);
-    const value = unquoteSettingValue(setting.value);
-
-    if (definition.kind === 'boolean') {
-      const button = document.querySelector<HTMLButtonElement>(`button[data-setting-key="${cssEscape(setting.key)}"]`);
-      const state = button?.querySelector<HTMLElement>('.setting-toggle__state');
-      const isChecked = value.toLowerCase() === 'true';
-
-      if (!button) {
-        return;
-      }
-
-      button.setAttribute('aria-checked', isChecked ? 'true' : 'false');
-      if (state) {
-        state.textContent = isChecked ? 'Activo' : 'Inactivo';
-      }
-      return;
-    }
-
-    const control = document.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-setting-key="${cssEscape(setting.key)}"]`);
-    const range = document.querySelector<HTMLInputElement>(`input[data-range-key="${cssEscape(setting.key)}"]`);
-
-    if (control) {
-      control.value = value;
-    }
-
-    if (range) {
-      range.value = value;
-    }
+    applySettingControlValue(setting.key, setting.value);
   });
 
   const editor = document.querySelector<HTMLTextAreaElement>('#config-editor');

@@ -117,6 +117,12 @@ Las categorías permanecen plegadas para mantener una vista compacta. Presiona e
 - **Campo numérico o de texto:** permite introducir un valor específico.
 - **Icono de información:** abre la explicación del parámetro al hacer clic.
 
+### Valores que pueden desactivarse
+
+Algunos multiplicadores muestran un interruptor junto al valor numerico. Al desactivarlo, PSM Console escribe `0` en el INI y oculta el control numerico; al reactivarlo, recupera el ultimo valor distinto de cero usado durante la sesion.
+
+Esto permite configurar de forma directa, entre otros casos, incubacion instantanea, estructuras sin dano o deterioro, ausencia de hambre o consumo de estamina, objetos sin desgaste y limites sin espera. El cambio solo se aplica al archivo al presionar **Guardar**.
+
 ### Perfiles rápidos
 
 Los perfiles aplican un conjunto de valores al formulario. No modifican el archivo hasta presionar **Guardar**.
