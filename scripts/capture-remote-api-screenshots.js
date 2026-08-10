@@ -127,6 +127,88 @@ function createFixtureServer() {
       sendJson(response, 200, createStatus());
       return;
     }
+    if (url.pathname === `${apiRoot}/steamcmd`) {
+      sendJson(response, 200, {
+        status: 'READY',
+        message: 'SteamCMD instalado y listo.',
+        executablePath: 'D:\\PSM Console\\tools\\steamcmd\\steamcmd.exe'
+      });
+      return;
+    }
+    if (url.pathname === `${apiRoot}/installation`) {
+      sendJson(response, 200, {
+        status: 'READY',
+        message: 'Palworld Dedicated Server instalado.',
+        executablePath: 'D:\\PSM Console\\server\\palworld\\PalServer.exe'
+      });
+      return;
+    }
+    if (url.pathname === `${apiRoot}/installation/update`) {
+      sendJson(response, 200, {
+        status: 'UP_TO_DATE',
+        message: 'El servidor esta actualizado.',
+        localBuildId: '2466863'
+      });
+      return;
+    }
+    if (url.pathname === `${apiRoot}/configuration`) {
+      sendJson(response, 200, {
+        content: '[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(ServerName="Servidor de ejemplo",ServerPlayerMaxNum=12,PublicPort=8211)'
+      });
+      return;
+    }
+    if (url.pathname === `${apiRoot}/admin`) {
+      sendJson(response, 200, {
+        status: 'READY',
+        message: 'Administracion REST disponible.',
+        info: { version: 'v1.0.2', servername: 'Servidor de ejemplo', worldguid: 'EXAMPLE-WORLD' },
+        metrics: { currentplayernum: 1, serverfps: 60, serverfpsaverage: 59.8 },
+        settings: { Difficulty: 'Normal', ServerPlayerMaxNum: 12 }
+      });
+      return;
+    }
+    if (url.pathname === `${apiRoot}/firewall`) {
+      sendJson(response, 200, {
+        local: {
+          ports: [{ label: 'Jugadores', protocol: 'UDP', port: 8211, state: 'READY', message: 'Regla de Windows disponible.' }]
+        }
+      });
+      return;
+    }
+    if (url.pathname === `${apiRoot}/network/addresses`) {
+      sendJson(response, 200, { addresses: ['192.0.2.100'] });
+      return;
+    }
+    if (url.pathname === `${apiRoot}/network/public`) {
+      sendJson(response, 200, { publicIp: '203.0.113.25', message: 'IP publica de ejemplo.' });
+      return;
+    }
+    if (url.pathname === `${apiRoot}/backups`) {
+      sendJson(response, 200, {
+        configurationBackups: [], worldBackups: [], message: 'Sin backups de ejemplo.',
+        policy: { automaticEnabled: true, automaticIntervalHours: 6, automaticRetentionPerType: 5, compressWorldBackups: true }
+      });
+      return;
+    }
+    if (url.pathname === `${apiRoot}/app/settings`) {
+      sendJson(response, 200, { portableRoot: 'D:\\PSM Console', settingsRelativePath: 'config/app-settings.json' });
+      return;
+    }
+    if (url.pathname === `${apiRoot}/app/updates`) {
+      sendJson(response, 200, { state: 'UP_TO_DATE', message: 'PSM Console esta actualizado.' });
+      return;
+    }
+    if (url.pathname === `${apiRoot}/app/remote-api`) {
+      sendJson(response, 200, {
+        state: 'RUNNING', endpoint: 'http://192.0.2.100:8213/api/v1',
+        settings: { enabled: true, bindMode: 'LOCAL_NETWORK', port: 8213, username: 'admin', client: { enabled: true, username: 'cliente', permissions: ['GENERAL', 'PLAYERS_VIEW', 'LOGS'] } }
+      });
+      return;
+    }
+    if (url.pathname === `${apiRoot}/automation/idle`) {
+      sendJson(response, 200, { policy: { enabled: false, emptySeconds: 600 } });
+      return;
+    }
     if (url.pathname === `${apiRoot}/players`) {
       sendJson(response, 200, {
         currentPlayers: 1,
@@ -190,6 +272,10 @@ function createFixtureServer() {
           ]
         }]
       });
+      return;
+    }
+    if (url.pathname === `${apiRoot}/logs/files`) {
+      sendJson(response, 200, { files: [] });
       return;
     }
     if (url.pathname.startsWith(`${apiRoot}/server/`) && request.method === 'POST') {
@@ -303,6 +389,10 @@ async function main() {
 
     await login(window, 'admin');
     await capture(window, 'api-web-administrativa.png');
+
+    await selectWebView(window, 'server');
+    await wait(500);
+    await capture(window, 'api-web-administrativa-servidor.png', 'server');
 
     await logout(window);
     await login(window, 'cliente');

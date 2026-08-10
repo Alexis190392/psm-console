@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApplicationStateService } from '../src/backend/application-state/application-state.service';
 import { AppSettingsService } from '../src/backend/app-settings/app-settings.service';
 import { BackupService } from '../src/backend/backup/backup.service';
+import { FirewallService } from '../src/backend/firewall/firewall.service';
 import { LoggingService } from '../src/backend/logging/logging.service';
 import { NetworkService } from '../src/backend/network/network.service';
 import { OperationManagerService } from '../src/backend/operations/operation-manager.service';
@@ -12,13 +13,17 @@ import { PalworldAdminService } from '../src/backend/palworld-admin/palworld-adm
 import { PalworldConfigurationService } from '../src/backend/palworld-configuration/palworld-configuration.service';
 import { PalworldPlayersService } from '../src/backend/palworld-players/palworld-players.service';
 import { PalworldProcessService } from '../src/backend/palworld-process/palworld-process.service';
+import { PalworldInstallationService } from '../src/backend/palworld-installation/palworld-installation.service';
 import { PortablePathService } from '../src/backend/portable-path/portable-path.service';
+import { ReleaseUpdateService } from '../src/backend/release-update/release-update.service';
 import {
   isExternalRemoteAddress,
   RemoteApiService,
   selectPreferredLanAddress
 } from '../src/backend/remote-api/remote-api.service';
 import { ApplicationStatus } from '../src/shared/enums/application-status';
+import { ServerIdleShutdownService } from '../src/backend/server-idle-shutdown/server-idle-shutdown.service';
+import { SteamCmdService } from '../src/backend/steamcmd/steamcmd.service';
 
 describe('RemoteApiService', () => {
   const portableRoot = join(process.cwd(), '.tmp-tests', 'remote-api');
@@ -222,6 +227,11 @@ describe('RemoteApiService', () => {
     const adminHeaders = { authorization: `Bearer ${adminLogin.token}` };
     expect(adminLogin.profile).toBe('ADMIN');
     expect((await fetch(`${baseUrl}/status`, { headers: adminHeaders })).status).toBe(200);
+    expect((await fetch(`${baseUrl}/installation`, { headers: adminHeaders })).status).toBe(200);
+    expect((await fetch(`${baseUrl}/steamcmd`, { headers: adminHeaders })).status).toBe(200);
+    expect((await fetch(`${baseUrl}/firewall`, { headers: adminHeaders })).status).toBe(200);
+    expect((await fetch(`${baseUrl}/app/settings`, { headers: adminHeaders })).status).toBe(200);
+    expect((await fetch(`${baseUrl}/automation/idle`, { headers: adminHeaders })).status).toBe(200);
 
     const updatedStatus = await remoteApi.update({
       confirmed: true,
@@ -442,6 +452,7 @@ function createRemoteApiFixture(
     { getStatus: vi.fn(), execute } as unknown as PalworldAdminService,
     { readActive: vi.fn(), saveActive: vi.fn(), restoreDefault: vi.fn() } as unknown as PalworldConfigurationService,
     { getSummary: vi.fn(), createConfigurationBackup: vi.fn(), createWorldBackup: vi.fn() } as unknown as BackupService,
+    { getStatus: vi.fn(), applyRequiredRules: vi.fn() } as unknown as FirewallService,
     {
       write: vi.fn(),
       readRecent: vi.fn(() => ({
@@ -450,7 +461,11 @@ function createRemoteApiFixture(
       }))
     } as unknown as LoggingService,
     { getLocalAddresses: () => ['127.0.0.1'], getPublicAddress } as unknown as NetworkService,
-    { get: vi.fn() } as unknown as OperationManagerService
+    { get: vi.fn() } as unknown as OperationManagerService,
+    { getStatus: vi.fn() } as unknown as SteamCmdService,
+    { getStatus: vi.fn(), getUpdateStatus: vi.fn(), update: vi.fn(), repair: vi.fn() } as unknown as PalworldInstallationService,
+    { getStatus: vi.fn() } as unknown as ReleaseUpdateService,
+    { getStatus: vi.fn(), updatePolicy: vi.fn() } as unknown as ServerIdleShutdownService
   );
   return { service, start, restart, stop, execute, getPublicAddress };
 }

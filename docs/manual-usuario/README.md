@@ -429,9 +429,22 @@ Al habilitar la API cliente, selecciona las acciones disponibles:
 
 Los permisos se aplican en tiempo real. Si una función se deshabilita mientras el cliente conserva esa pantalla abierta, la siguiente operación devuelve **No permitido** y actualiza la vista.
 
-El perfil administrativo conserva todas las secciones y controles:
+El perfil administrativo conserva las mismas areas operativas de PSM Console desde el navegador:
+
+- **General:** estado, control de inicio, reinicio y detencion.
+- **Servidor:** SteamCMD, instalacion, actualizacion, mantenimiento y edicion de `PalWorldSettings.ini`.
+- **Administracion:** estado REST, anuncio global, guardado manual y apagado programado.
+- **Jugadores y mapa:** consulta, expulsion, baneo y ubicacion actual.
+- **Red y Firewall:** diagnostico, direcciones y creacion de reglas de Windows.
+- **Backups:** creacion, politica automatica, verificacion, restauracion y envio a la papelera.
+- **Logs:** actividad actual y lectura de archivos anteriores.
+- **Configuracion:** datos de la app, automatizaciones y configuracion de los perfiles de API web.
+
+Las operaciones que modifican el servidor, Windows o un backup solicitan confirmacion antes de ejecutarse. La cuenta administrativa debe usarse solo en dispositivos y redes de confianza.
 
 ![Panel administrativo de PSM Console Web](../../resources/screenshots/api-web-administrativa.png)
+
+![Servidor y mantenimiento desde PSM Console Web](../../resources/screenshots/api-web-administrativa-servidor.png)
 
 El perfil cliente muestra únicamente las secciones y acciones habilitadas. La interfaz también se adapta a navegadores móviles:
 

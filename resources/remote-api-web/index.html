@@ -81,6 +81,12 @@
               <button class="nav-button active" type="button" data-view="general" data-permission-any="GENERAL,SERVER_START,SERVER_RESTART,SERVER_STOP">
                 <svg aria-hidden="true"><use href="#icon-home"></use></svg><span>General</span>
               </button>
+              <button class="nav-button" type="button" data-view="server" data-admin-only>
+                <svg aria-hidden="true"><use href="#icon-terminal"></use></svg><span>Servidor</span>
+              </button>
+              <button class="nav-button" type="button" data-view="administration" data-admin-only>
+                <svg aria-hidden="true"><use href="#icon-power"></use></svg><span>Administracion</span>
+              </button>
               <button class="nav-button" type="button" data-view="players" data-permission-any="PLAYERS_VIEW,PLAYERS_KICK,PLAYERS_BAN">
                 <svg aria-hidden="true"><use href="#icon-users"></use></svg><span>Jugadores</span>
               </button>
@@ -89,6 +95,15 @@
               </button>
               <button class="nav-button" type="button" data-view="logs" data-permission="LOGS">
                 <svg aria-hidden="true"><use href="#icon-terminal"></use></svg><span>Logs</span>
+              </button>
+              <button class="nav-button" type="button" data-view="network" data-admin-only>
+                <svg aria-hidden="true"><use href="#icon-refresh"></use></svg><span>Red y Firewall</span>
+              </button>
+              <button class="nav-button" type="button" data-view="backups" data-admin-only>
+                <svg aria-hidden="true"><use href="#icon-map"></use></svg><span>Backups</span>
+              </button>
+              <button class="nav-button" type="button" data-view="settings" data-admin-only>
+                <svg aria-hidden="true"><use href="#icon-home"></use></svg><span>Configuracion</span>
               </button>
             </nav>
             <button id="logout-button" class="secondary-button logout-button" type="button">
@@ -163,6 +178,53 @@
               </div>
             </section>
 
+            <section id="server-view" class="content-view hud-panel" data-content-view="server" hidden data-admin-only>
+              <div class="page-heading">
+                <div><p class="eyebrow">SERVIDOR</p><h1>Configuracion y mantenimiento</h1></div>
+                <button class="icon-button refresh-button" type="button" data-refresh aria-label="Actualizar servidor" title="Actualizar servidor"><svg aria-hidden="true"><use href="#icon-refresh"></use></svg></button>
+              </div>
+              <div class="admin-summary-grid">
+                <article class="status-card status-card--cyan"><span>SteamCMD</span><strong id="steamcmd-status">Consultando</strong><small id="steamcmd-message">Leyendo dependencia...</small></article>
+                <article class="status-card status-card--cyan"><span>Instalacion</span><strong id="installation-status">Consultando</strong><small id="installation-message">Leyendo estado del servidor...</small></article>
+                <article class="status-card status-card--magenta"><span>Version</span><strong id="update-status">Consultando</strong><small id="update-message">Comprobando actualizaciones...</small></article>
+              </div>
+              <div class="action-panel action-panel--stacked">
+                <div><p class="eyebrow">MANTENIMIENTO</p><h2>Archivos del servidor</h2></div>
+                <div class="action-buttons">
+                  <button id="steamcmd-install-button" class="secondary-button" type="button">Instalar SteamCMD</button>
+                  <button id="server-install-button" class="secondary-button" type="button">Instalar servidor</button>
+                  <button id="server-update-button" class="secondary-button" type="button"><svg aria-hidden="true"><use href="#icon-refresh"></use></svg><span>Actualizar</span></button>
+                  <button id="server-repair-button" class="secondary-button" type="button"><svg aria-hidden="true"><use href="#icon-terminal"></use></svg><span>Mantenimiento</span></button>
+                </div>
+              </div>
+              <form id="configuration-form" class="editor-panel">
+                <div class="editor-panel__heading"><div><p class="eyebrow">CONFIGURACION</p><h2>PalWorldSettings.ini</h2></div><button id="configuration-default-button" class="secondary-button" type="button">Default</button></div>
+                <textarea id="configuration-content" spellcheck="false" aria-label="Contenido de PalWorldSettings.ini"></textarea>
+                <div class="editor-panel__footer"><span id="configuration-status">Sin cambios pendientes.</span><button class="primary-button" type="submit">Guardar configuracion</button></div>
+              </form>
+            </section>
+
+            <section id="administration-view" class="content-view hud-panel" data-content-view="administration" hidden data-admin-only>
+              <div class="page-heading"><div><p class="eyebrow">ADMINISTRACION</p><h1>Control del servidor</h1></div><button class="icon-button refresh-button" type="button" data-refresh aria-label="Actualizar administracion" title="Actualizar administracion"><svg aria-hidden="true"><use href="#icon-refresh"></use></svg></button></div>
+              <div id="admin-summary" class="admin-summary-grid"><p class="empty-state">Consultando administracion...</p></div>
+              <form id="announce-form" class="action-panel"><div><p class="eyebrow">ANUNCIO GLOBAL</p><h2>Mensaje para jugadores</h2></div><div class="announcement-row"><input id="announce-message" placeholder="Mensaje para todos los jugadores" maxlength="200"><button class="primary-button" type="submit">Enviar</button></div></form>
+              <div class="action-panel action-panel--stacked"><div><p class="eyebrow">MUNDO</p><h2>Acciones administrativas</h2></div><div class="action-buttons"><button id="admin-save-button" class="secondary-button" type="button">Guardar mundo</button><button id="admin-shutdown-button" class="danger-button" type="button">Apagado programado</button></div></div>
+            </section>
+
+            <section id="network-view" class="content-view hud-panel" data-content-view="network" hidden data-admin-only>
+              <div class="page-heading"><div><p class="eyebrow">RED Y FIREWALL</p><h1>Diagnostico de conectividad</h1></div><button class="icon-button refresh-button" type="button" data-refresh aria-label="Actualizar red y Firewall" title="Actualizar red y Firewall"><svg aria-hidden="true"><use href="#icon-refresh"></use></svg></button></div>
+              <div id="firewall-summary" class="data-list"><p class="empty-state">Consultando Firewall de Windows...</p></div>
+              <div class="action-panel"><div><p class="eyebrow">WINDOWS</p><h2>Reglas requeridas</h2></div><button id="firewall-configure-button" class="primary-button" type="button">Configurar Windows</button></div>
+              <div id="network-summary" class="admin-summary-grid"></div>
+            </section>
+
+            <section id="backups-view" class="content-view hud-panel" data-content-view="backups" hidden data-admin-only>
+              <div class="page-heading"><div><p class="eyebrow">BACKUPS</p><h1>Respaldo y restauracion</h1></div><button class="icon-button refresh-button" type="button" data-refresh aria-label="Actualizar backups" title="Actualizar backups"><svg aria-hidden="true"><use href="#icon-refresh"></use></svg></button></div>
+              <div class="action-panel"><div><p class="eyebrow">MANUAL</p><h2>Crear respaldo</h2></div><div class="action-buttons"><button id="backup-config-button" class="secondary-button" type="button">Backup INI</button><button id="backup-world-button" class="primary-button" type="button">Backup mundo</button></div></div>
+              <form id="backup-policy-form" class="form-grid"><label><span>Backups automaticos</span><select name="automaticEnabled"><option value="true">Activos</option><option value="false">Inactivos</option></select></label><label><span>Cada (h)</span><input name="automaticIntervalHours" type="number" min="1" max="168"></label><label><span>Conservar por tipo</span><input name="automaticRetentionPerType" type="number" min="1" max="100"></label><label class="checkbox-field"><input name="compressWorldBackups" type="checkbox"><span>Comprimir mundo</span></label><button class="secondary-button" type="submit">Guardar politica</button></form>
+              <div id="backup-list" class="data-list"><p class="empty-state">Consultando backups...</p></div>
+            </section>
+
             <section id="map-view" class="content-view content-view--map hud-panel" data-content-view="map" hidden>
               <div class="page-heading map-heading">
                 <div>
@@ -197,6 +259,35 @@
                 </button>
               </div>
               <pre id="logs-console" class="logs-console" tabindex="0">Consultando logs...</pre>
+              <div id="log-files" class="log-file-list"></div>
+            </section>
+
+            <section id="settings-view" class="content-view hud-panel" data-content-view="settings" hidden data-admin-only>
+              <div class="page-heading"><div><p class="eyebrow">CONFIGURACION</p><h1>Aplicacion y automatizaciones</h1></div><button class="icon-button refresh-button" type="button" data-refresh aria-label="Actualizar configuracion" title="Actualizar configuracion"><svg aria-hidden="true"><use href="#icon-refresh"></use></svg></button></div>
+              <div id="app-settings-summary" class="admin-summary-grid"><p class="empty-state">Consultando configuracion...</p></div>
+              <form id="idle-policy-form" class="action-panel"><div><p class="eyebrow">APAGADO AUTOMATICO</p><h2>Sin jugadores activos</h2></div><div class="inline-form"><label class="checkbox-field"><input name="enabled" type="checkbox"><span>Activo</span></label><input name="emptySeconds" type="number" min="10" max="86400" aria-label="Segundos sin jugadores"><button class="secondary-button" type="submit">Guardar</button></div></form>
+              <section class="editor-panel">
+                <div class="editor-panel__heading"><div><p class="eyebrow">API WEB</p><h2>Configuracion compartida</h2></div></div>
+                <div class="remote-api-form-grid">
+                  <form id="remote-api-admin-form" class="remote-api-form">
+                    <h2>API administrativa</h2>
+                    <label class="checkbox-field"><input name="enabled" type="checkbox"><span>Activa</span></label>
+                    <label><span>Acceso</span><select name="bindMode"><option value="LOCAL_ONLY">Solo este equipo</option><option value="LOCAL_NETWORK">Red local</option></select></label>
+                    <label><span>Puerto</span><input name="port" type="text" inputmode="numeric" pattern="[0-9]*"></label>
+                    <label><span>Usuario</span><input name="username" autocomplete="username"></label>
+                    <label><span>Nueva contrasena</span><input name="password" type="password" autocomplete="new-password" minlength="5" placeholder="Conservar actual"></label>
+                    <button class="secondary-button" type="submit">Guardar API administrativa</button>
+                  </form>
+                  <form id="remote-api-client-form" class="remote-api-form">
+                    <h2>API cliente</h2>
+                    <label class="checkbox-field"><input name="enabled" type="checkbox"><span>Activa</span></label>
+                    <label><span>Usuario</span><input name="username" autocomplete="username"></label>
+                    <label><span>Nueva contrasena</span><input name="password" type="password" autocomplete="new-password" minlength="5" placeholder="Conservar actual"></label>
+                    <fieldset><legend>Contenido y acciones permitidas</legend><div id="client-permissions" class="permission-list"></div></fieldset>
+                    <button class="secondary-button" type="submit">Guardar API cliente</button>
+                  </form>
+                </div>
+              </section>
             </section>
           </div>
         </section>

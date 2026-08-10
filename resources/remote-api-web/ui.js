@@ -137,6 +137,9 @@
       var permissions = (element.dataset.permissionAny || '').split(',');
       element.hidden = !permissions.some(hasPermission);
     });
+    document.querySelectorAll('[data-admin-only]').forEach(function (element) {
+      element.hidden = access.profile !== 'ADMIN';
+    });
     var visibleNavigation = Array.from(document.querySelectorAll('.nav-button')).filter(function (button) {
       return !button.hidden;
     });
@@ -636,6 +639,321 @@
     var consoleElement = document.getElementById('logs-console');
     consoleElement.textContent = lines.length ? lines.join('\n') : 'No hay actividad registrada en esta instancia.';
     consoleElement.scrollTop = consoleElement.scrollHeight;
+    if (access.profile === 'ADMIN') {
+      var files = await apiRequest('/logs/files');
+      renderLogFiles(files.files || []);
+    }
+  }
+
+  async function executeAdminAction(action, payload, confirmation) {
+    if (confirmation && !window.confirm(confirmation)) {
+      return;
+    }
+    try {
+      var result = await apiRequest('/admin/actions', {
+        method: 'POST',
+        body: JSON.stringify(Object.assign({ action: action }, payload || {}))
+      });
+      showToast(result.message || 'Accion completada.');
+      await refreshAdministration();
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
+  async function executeInstallationAction(action) {
+    if (!window.confirm(action === 'repair'
+      ? 'Se validaran y repararan los archivos del servidor. Continuar?'
+      : 'Se actualizara el servidor sin modificar el progreso del mundo. Continuar?')) {
+      return;
+    }
+    try {
+      var result = await apiRequest('/installation/' + action, { method: 'POST' });
+      if (result.operationId) {
+        await pollOperation(result.operationId);
+      }
+      await refreshServerView();
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
+  async function executeSetupAction(path, confirmation) {
+    if (!window.confirm(confirmation)) {
+      return;
+    }
+    try {
+      var result = await apiRequest(path, { method: 'POST' });
+      if (result.operationId) {
+        await pollOperation(result.operationId);
+      }
+      await refreshServerView();
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
+  async function executeBackupAction(id, action, name) {
+    var labels = { verify: 'verificar', restore: 'restaurar', delete: 'enviar a la papelera' };
+    if (!window.confirm('Confirmas ' + labels[action] + ' el backup ' + name + '?')) {
+      return;
+    }
+    try {
+      var result = await apiRequest('/backups/' + encodeURIComponent(id) + (action === 'delete' ? '' : '/' + action), {
+        method: action === 'delete' ? 'DELETE' : 'POST'
+      });
+      if (result.operationId) {
+        await pollOperation(result.operationId);
+      }
+      await refreshBackups();
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
+  function formatBytes(value) {
+    var bytes = Number(value || 0);
+    if (!Number.isFinite(bytes) || bytes <= 0) {
+      return '0 B';
+    }
+    var units = ['B', 'KB', 'MB', 'GB'];
+    var index = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
+    return (bytes / Math.pow(1024, index)).toFixed(index === 0 ? 0 : 1) + ' ' + units[index];
+  }
+
+  function createDataRow(label, value, detail) {
+    var item = document.createElement('article');
+    item.className = 'remote-data-row';
+    var heading = document.createElement('strong');
+    heading.textContent = label;
+    var content = document.createElement('span');
+    content.textContent = value;
+    item.append(heading, content);
+    if (detail) {
+      var small = document.createElement('small');
+      small.textContent = detail;
+      item.appendChild(small);
+    }
+    return item;
+  }
+
+  async function refreshServerView() {
+    var results = await Promise.all([
+      apiRequest('/steamcmd'),
+      apiRequest('/installation'),
+      apiRequest('/installation/update?force=true'),
+      apiRequest('/configuration')
+    ]);
+    var steamcmd = results[0];
+    var installation = results[1];
+    var update = results[2];
+    var configuration = results[3];
+    setText('steamcmd-status', formatState(steamcmd.status));
+    setText('steamcmd-message', steamcmd.message || 'Sin detalles.');
+    setText('installation-status', formatState(installation.status));
+    setText('installation-message', installation.message || 'Sin detalles.');
+    setText('update-status', formatState(update.status));
+    setText('update-message', update.message || 'Sin detalles.');
+    var content = typeof configuration.content === 'string' ? configuration.content : '';
+    var editor = document.getElementById('configuration-content');
+    if (document.activeElement !== editor || !editor.dataset.dirty) {
+      editor.value = content;
+      editor.dataset.dirty = '';
+      setText('configuration-status', 'Configuracion cargada.');
+    }
+  }
+
+  function renderAdminSnapshot(container, title, values) {
+    var card = document.createElement('article');
+    card.className = 'remote-snapshot-card';
+    var heading = document.createElement('strong');
+    heading.textContent = title;
+    card.appendChild(heading);
+    Object.keys(values || {}).slice(0, 12).forEach(function (key) {
+      var row = document.createElement('div');
+      var label = document.createElement('span');
+      label.textContent = key;
+      var value = document.createElement('b');
+      value.textContent = String(values[key]);
+      row.append(label, value);
+      card.appendChild(row);
+    });
+    container.appendChild(card);
+  }
+
+  async function refreshAdministration() {
+    var result = await apiRequest('/admin');
+    var container = document.getElementById('admin-summary');
+    container.replaceChildren();
+    container.appendChild(createDataRow('Estado', formatState(result.status), result.message));
+    if (result.info) {
+      renderAdminSnapshot(container, 'Servidor', result.info);
+    }
+    if (result.metrics) {
+      renderAdminSnapshot(container, 'Metricas', result.metrics);
+    }
+    if (result.settings) {
+      renderAdminSnapshot(container, 'Settings', result.settings);
+    }
+  }
+
+  async function refreshNetwork() {
+    var results = await Promise.all([apiRequest('/firewall'), apiRequest('/network/addresses'), apiRequest('/network/public')]);
+    var firewall = results[0];
+    var addresses = results[1];
+    var publicNetwork = results[2];
+    var container = document.getElementById('firewall-summary');
+    container.replaceChildren();
+    (firewall.local && firewall.local.ports || []).forEach(function (port) {
+      container.appendChild(createDataRow(
+        port.label + ' ' + port.protocol + ' ' + port.port,
+        formatState(port.state),
+        port.message
+      ));
+    });
+    var networkSummary = document.getElementById('network-summary');
+    networkSummary.replaceChildren();
+    networkSummary.appendChild(createDataRow('Red local', (addresses.addresses || []).join(', ') || 'No detectada'));
+    networkSummary.appendChild(createDataRow('IP publica', publicNetwork.publicIp || 'No disponible', publicNetwork.message));
+  }
+
+  function renderBackupEntries(summary) {
+    var container = document.getElementById('backup-list');
+    container.replaceChildren();
+    var backups = [].concat(summary.configurationBackups || [], summary.worldBackups || []);
+    if (!backups.length) {
+      container.appendChild(createDataRow('Backups', 'No hay respaldos disponibles.', summary.message));
+      return;
+    }
+    backups.forEach(function (backup) {
+      var item = createDataRow(backup.name, backup.kind === 'world' ? 'Mundo' : 'Configuracion', formatBytes(backup.sizeBytes) + ' · ' + backup.integrity);
+      var controls = document.createElement('div');
+      controls.className = 'backup-row-actions';
+      [['Verificar', 'verify'], ['Restaurar', 'restore'], ['Papelera', 'delete']].forEach(function (entry) {
+        var button = document.createElement('button');
+        button.type = 'button';
+        button.className = entry[1] === 'delete' ? 'danger-button compact-button' : 'secondary-button compact-button';
+        button.textContent = entry[0];
+        button.addEventListener('click', function () {
+          void executeBackupAction(backup.id, entry[1], backup.name);
+        });
+        controls.appendChild(button);
+      });
+      item.appendChild(controls);
+      container.appendChild(item);
+    });
+  }
+
+  async function refreshBackups() {
+    var summary = await apiRequest('/backups');
+    var form = document.getElementById('backup-policy-form');
+    form.elements.automaticEnabled.value = String(Boolean(summary.policy.automaticEnabled));
+    form.elements.automaticIntervalHours.value = String(summary.policy.automaticIntervalHours);
+    form.elements.automaticRetentionPerType.value = String(summary.policy.automaticRetentionPerType);
+    form.elements.compressWorldBackups.checked = Boolean(summary.policy.compressWorldBackups);
+    renderBackupEntries(summary);
+  }
+
+  function renderLogFiles(files) {
+    var container = document.getElementById('log-files');
+    if (!container) {
+      return;
+    }
+    container.replaceChildren();
+    files.forEach(function (file) {
+      var button = document.createElement('button');
+      button.className = 'log-file-button';
+      button.type = 'button';
+      button.textContent = file.relativePath + (file.isActiveFile ? ' · actual' : '');
+      button.addEventListener('click', function () {
+        void readLogFile(file.id);
+      });
+      container.appendChild(button);
+    });
+  }
+
+  async function readLogFile(id) {
+    var result = await apiRequest('/logs/files/' + encodeURIComponent(id) + '?maxLines=1000');
+    var consoleElement = document.getElementById('logs-console');
+    consoleElement.textContent = (result.lines || []).join('\n') || 'El archivo no contiene lineas.';
+    consoleElement.scrollTop = consoleElement.scrollHeight;
+  }
+
+  async function refreshSettings() {
+    var results = await Promise.all([apiRequest('/app/settings'), apiRequest('/app/updates'), apiRequest('/app/remote-api'), apiRequest('/automation/idle')]);
+    var app = results[0];
+    var update = results[1];
+    var remote = results[2];
+    var idle = results[3];
+    var container = document.getElementById('app-settings-summary');
+    container.replaceChildren();
+    container.appendChild(createDataRow('Raiz portable', app.portableRoot, app.settingsRelativePath));
+    container.appendChild(createDataRow('Actualizaciones', update.state, update.message));
+    container.appendChild(createDataRow('API web', remote.state, remote.endpoint || remote.message));
+    var form = document.getElementById('idle-policy-form');
+    form.elements.enabled.checked = Boolean(idle.policy.enabled);
+    form.elements.emptySeconds.value = String(idle.policy.emptySeconds);
+    renderRemoteApiForms(remote.settings);
+  }
+
+  function renderRemoteApiForms(settings) {
+    var adminForm = document.getElementById('remote-api-admin-form');
+    var clientForm = document.getElementById('remote-api-client-form');
+    adminForm.elements.enabled.checked = Boolean(settings.enabled);
+    adminForm.elements.bindMode.value = settings.bindMode;
+    adminForm.elements.port.value = String(settings.port);
+    adminForm.elements.username.value = settings.username || '';
+    adminForm.elements.password.value = '';
+    clientForm.elements.enabled.checked = Boolean(settings.client.enabled);
+    clientForm.elements.username.value = settings.client.username || '';
+    clientForm.elements.password.value = '';
+    var labels = {
+      GENERAL: 'Estado general',
+      SERVER_START: 'Iniciar',
+      SERVER_RESTART: 'Reiniciar',
+      SERVER_STOP: 'Detener',
+      PLAYERS_VIEW: 'Ver jugadores',
+      PLAYERS_KICK: 'Expulsar',
+      PLAYERS_BAN: 'Banear',
+      LOGS: 'Logs'
+    };
+    var permissions = document.getElementById('client-permissions');
+    permissions.replaceChildren();
+    Object.keys(labels).forEach(function (permission) {
+      var label = document.createElement('label');
+      label.className = 'checkbox-field';
+      var input = document.createElement('input');
+      input.type = 'checkbox';
+      input.name = 'permission';
+      input.value = permission;
+      input.checked = (settings.client.permissions || []).includes(permission);
+      var text = document.createElement('span');
+      text.textContent = labels[permission];
+      label.append(input, text);
+      permissions.appendChild(label);
+    });
+  }
+
+  async function saveRemoteApiProfile(profile, form) {
+    var adminForm = document.getElementById('remote-api-admin-form');
+    var source = profile === 'ADMIN' ? form : adminForm;
+    var body = {
+      profile: profile,
+      enabled: form.elements.enabled.checked,
+      bindMode: source.elements.bindMode.value,
+      port: Number(source.elements.port.value),
+      username: form.elements.username.value.trim(),
+      password: form.elements.password.value
+    };
+    if (profile === 'CLIENT') {
+      body.permissions = Array.from(form.querySelectorAll('input[name="permission"]:checked')).map(function (input) {
+        return input.value;
+      });
+    }
+    var result = await apiRequest('/app/remote-api', { method: 'PUT', body: JSON.stringify(body) });
+    form.elements.password.value = '';
+    showToast('Configuracion de API guardada.');
+    renderRemoteApiForms(result.settings);
   }
 
   async function refreshAll() {
@@ -690,6 +1008,16 @@
         await refreshMap();
       } else if (view === 'logs') {
         await refreshLogs();
+      } else if (view === 'server') {
+        await refreshServerView();
+      } else if (view === 'administration') {
+        await refreshAdministration();
+      } else if (view === 'network') {
+        await refreshNetwork();
+      } else if (view === 'backups') {
+        await refreshBackups();
+      } else if (view === 'settings') {
+        await refreshSettings();
       } else {
         await refreshStatus();
       }
@@ -802,6 +1130,156 @@
   });
   document.getElementById('stop-button').addEventListener('click', function () {
     void executeServerAction('stop');
+  });
+  document.getElementById('server-update-button').addEventListener('click', function () {
+    void executeInstallationAction('update');
+  });
+  document.getElementById('steamcmd-install-button').addEventListener('click', function () {
+    void executeSetupAction('/steamcmd/install', 'Se descargara SteamCMD desde la fuente oficial. Continuar?');
+  });
+  document.getElementById('server-install-button').addEventListener('click', function () {
+    void executeSetupAction('/installation/install', 'Se instalara Palworld Dedicated Server en la raiz portable. Continuar?');
+  });
+  document.getElementById('server-repair-button').addEventListener('click', function () {
+    void executeInstallationAction('repair');
+  });
+  document.getElementById('configuration-content').addEventListener('input', function () {
+    this.dataset.dirty = 'true';
+    setText('configuration-status', 'Cambios sin guardar.');
+  });
+  document.getElementById('configuration-form').addEventListener('submit', function (event) {
+    event.preventDefault();
+    void (async function () {
+      try {
+        var content = document.getElementById('configuration-content').value;
+        var result = await apiRequest('/configuration', { method: 'PUT', body: JSON.stringify({ content: content }) });
+        if (result.operationId) {
+          await pollOperation(result.operationId);
+        }
+        document.getElementById('configuration-content').dataset.dirty = '';
+        setText('configuration-status', 'Configuracion guardada.');
+        showToast('Configuracion guardada.');
+      } catch (error) {
+        showToast(error.message);
+      }
+    }());
+  });
+  document.getElementById('configuration-default-button').addEventListener('click', function () {
+    if (!window.confirm('Se restaurara la configuracion por defecto. Continuar?')) {
+      return;
+    }
+    void (async function () {
+      try {
+        var result = await apiRequest('/configuration/default', { method: 'POST' });
+        if (result.operationId) {
+          await pollOperation(result.operationId);
+        }
+        await refreshServerView();
+      } catch (error) {
+        showToast(error.message);
+      }
+    }());
+  });
+  document.getElementById('announce-form').addEventListener('submit', function (event) {
+    event.preventDefault();
+    var message = document.getElementById('announce-message').value.trim();
+    if (!message) {
+      return;
+    }
+    document.getElementById('announce-message').value = '';
+    void executeAdminAction('announce', { message: message });
+  });
+  document.getElementById('admin-save-button').addEventListener('click', function () {
+    void executeAdminAction('save', {}, 'Solicitar guardado manual del mundo?');
+  });
+  document.getElementById('admin-shutdown-button').addEventListener('click', function () {
+    var seconds = Number(window.prompt('Segundos antes del apagado programado:', '60'));
+    if (!Number.isFinite(seconds) || seconds < 0) {
+      return;
+    }
+    void executeAdminAction('shutdown', { seconds: Math.round(seconds), message: 'Apagado solicitado desde PSM Console Web.' }, 'Programar apagado del servidor?');
+  });
+  document.getElementById('firewall-configure-button').addEventListener('click', function () {
+    if (!window.confirm('Windows solicitara permisos de administrador para crear las reglas. Continuar?')) {
+      return;
+    }
+    void (async function () {
+      try {
+        var result = await apiRequest('/firewall/rules', { method: 'POST' });
+        if (result.operationId) {
+          await pollOperation(result.operationId);
+        }
+        await refreshNetwork();
+      } catch (error) {
+        showToast(error.message);
+      }
+    }());
+  });
+  document.getElementById('backup-config-button').addEventListener('click', function () {
+    void (async function () {
+      try {
+        var result = await apiRequest('/backups/configuration', { method: 'POST' });
+        if (result.operationId) { await pollOperation(result.operationId); }
+        await refreshBackups();
+      } catch (error) { showToast(error.message); }
+    }());
+  });
+  document.getElementById('backup-world-button').addEventListener('click', function () {
+    void (async function () {
+      try {
+        var result = await apiRequest('/backups/world', { method: 'POST' });
+        if (result.operationId) { await pollOperation(result.operationId); }
+        await refreshBackups();
+      } catch (error) { showToast(error.message); }
+    }());
+  });
+  document.getElementById('backup-policy-form').addEventListener('submit', function (event) {
+    event.preventDefault();
+    var form = event.currentTarget;
+    void (async function () {
+      try {
+        var result = await apiRequest('/backups/policy', {
+          method: 'PUT',
+          body: JSON.stringify({
+            automaticEnabled: form.elements.automaticEnabled.value === 'true',
+            automaticIntervalHours: Number(form.elements.automaticIntervalHours.value),
+            automaticRetentionPerType: Number(form.elements.automaticRetentionPerType.value),
+            compressWorldBackups: form.elements.compressWorldBackups.checked
+          })
+        });
+        if (result.operationId) { await pollOperation(result.operationId); }
+        await refreshBackups();
+      } catch (error) { showToast(error.message); }
+    }());
+  });
+  document.getElementById('idle-policy-form').addEventListener('submit', function (event) {
+    event.preventDefault();
+    var form = event.currentTarget;
+    void (async function () {
+      try {
+        await apiRequest('/automation/idle', {
+          method: 'PUT',
+          body: JSON.stringify({
+            enabled: form.elements.enabled.checked,
+            emptySeconds: Number(form.elements.emptySeconds.value)
+          })
+        });
+        showToast('Automatizacion guardada.');
+        await refreshSettings();
+      } catch (error) { showToast(error.message); }
+    }());
+  });
+  document.getElementById('remote-api-admin-form').addEventListener('submit', function (event) {
+    event.preventDefault();
+    void saveRemoteApiProfile('ADMIN', event.currentTarget).catch(function (error) {
+      showToast(error.message);
+    });
+  });
+  document.getElementById('remote-api-client-form').addEventListener('submit', function (event) {
+    event.preventDefault();
+    void saveRemoteApiProfile('CLIENT', event.currentTarget).catch(function (error) {
+      showToast(error.message);
+    });
   });
   bindWebMapControls();
 
