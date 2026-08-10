@@ -432,7 +432,7 @@ Los permisos se aplican en tiempo real. Si una función se deshabilita mientras 
 El perfil administrativo conserva las mismas areas operativas de PSM Console desde el navegador:
 
 - **General:** estado, control de inicio, reinicio y detencion.
-- **Servidor:** SteamCMD, instalacion, actualizacion, mantenimiento y edicion de `PalWorldSettings.ini`.
+- **Servidor:** SteamCMD, instalacion, actualizacion, mantenimiento y el mismo editor de `PalWorldSettings.ini` por categorias, filtros, perfiles, controles y vista INI avanzada.
 - **Administracion:** estado REST, anuncio global, guardado manual y apagado programado.
 - **Jugadores y mapa:** consulta, expulsion, baneo y ubicacion actual.
 - **Red y Firewall:** diagnostico, direcciones y creacion de reglas de Windows.

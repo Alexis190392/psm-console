@@ -232,6 +232,11 @@ describe('RemoteApiService', () => {
     expect((await fetch(`${baseUrl}/firewall`, { headers: adminHeaders })).status).toBe(200);
     expect((await fetch(`${baseUrl}/app/settings`, { headers: adminHeaders })).status).toBe(200);
     expect((await fetch(`${baseUrl}/automation/idle`, { headers: adminHeaders })).status).toBe(200);
+    const schemaResponse = await fetch(`${baseUrl}/configuration/schema`, { headers: adminHeaders });
+    expect(schemaResponse.status).toBe(200);
+    expect((await schemaResponse.json()) as { settings: unknown[] }).toEqual(expect.objectContaining({
+      settings: expect.arrayContaining([expect.objectContaining({ key: 'ServerName' })])
+    }));
 
     const updatedStatus = await remoteApi.update({
       confirmed: true,
@@ -450,7 +455,15 @@ function createRemoteApiFixture(
       }))
     } as unknown as PalworldPlayersService,
     { getStatus: vi.fn(), execute } as unknown as PalworldAdminService,
-    { readActive: vi.fn(), saveActive: vi.fn(), restoreDefault: vi.fn() } as unknown as PalworldConfigurationService,
+    {
+      readActive: vi.fn(async () => ({
+        path: 'PalWorldSettings.ini',
+        content: '[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(ServerName="Servidor de prueba",ServerPlayerMaxNum=12,bIsPvP=False)',
+        updatedAt: new Date().toISOString()
+      })),
+      saveActive: vi.fn(),
+      restoreDefault: vi.fn()
+    } as unknown as PalworldConfigurationService,
     { getSummary: vi.fn(), createConfigurationBackup: vi.fn(), createWorldBackup: vi.fn() } as unknown as BackupService,
     { getStatus: vi.fn(), applyRequiredRules: vi.fn() } as unknown as FirewallService,
     {

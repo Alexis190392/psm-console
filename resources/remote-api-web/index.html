@@ -199,7 +199,14 @@
               </div>
               <form id="configuration-form" class="editor-panel">
                 <div class="editor-panel__heading"><div><p class="eyebrow">CONFIGURACION</p><h2>PalWorldSettings.ini</h2></div><button id="configuration-default-button" class="secondary-button" type="button">Default</button></div>
-                <textarea id="configuration-content" spellcheck="false" aria-label="Contenido de PalWorldSettings.ini"></textarea>
+                <div class="configuration-filter" aria-label="Filtros de parametros">
+                  <label class="configuration-search"><span>Buscar</span><input id="configuration-search" type="search" placeholder="Nombre, clave o descripcion" autocomplete="off"></label>
+                  <label><span>Categoria</span><select id="configuration-category"><option value="">Todas</option></select></label>
+                  <span id="configuration-count" class="configuration-count">0 parametros</span>
+                </div>
+                <div id="configuration-presets" class="configuration-presets" aria-label="Perfiles rapidos"></div>
+                <div id="configuration-groups" class="configuration-groups" aria-live="polite"></div>
+                <details class="configuration-advanced"><summary>Ver INI avanzado</summary><textarea id="configuration-content" spellcheck="false" aria-label="Contenido de PalWorldSettings.ini"></textarea></details>
                 <div class="editor-panel__footer"><span id="configuration-status">Sin cambios pendientes.</span><button class="primary-button" type="submit">Guardar configuracion</button></div>
               </form>
             </section>

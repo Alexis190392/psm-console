@@ -157,6 +157,21 @@ function createFixtureServer() {
       });
       return;
     }
+    if (url.pathname === `${apiRoot}/configuration/schema`) {
+      sendJson(response, 200, {
+        prefix: '[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(',
+        suffix: ')',
+        content: '[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(ServerName="Servidor de ejemplo",ServerPlayerMaxNum=12,PublicPort=8211,bIsPvP=False)',
+        presets: [{ id: 'casual', label: 'Casual', values: { ServerPlayerMaxNum: '16' } }],
+        settings: [
+          { key: 'ServerName', value: '"Servidor de ejemplo"', definition: { label: 'Nombre del servidor', group: 'Datos del servidor', kind: 'text', help: 'Nombre visible para los jugadores.' } },
+          { key: 'ServerPlayerMaxNum', value: '12', definition: { label: 'Jugadores maximos', group: 'Datos del servidor', kind: 'number', help: 'Cantidad maxima de jugadores.', min: 1, max: 32, step: 1 } },
+          { key: 'PublicPort', value: '8211', definition: { label: 'Puerto de juego', group: 'Red', kind: 'number', help: 'Puerto principal del servidor.', min: 1, max: 65535, step: 1 } },
+          { key: 'bIsPvP', value: 'False', definition: { label: 'PvP', group: 'Jugadores', kind: 'boolean', help: 'Permite dano entre jugadores.' } }
+        ]
+      });
+      return;
+    }
     if (url.pathname === `${apiRoot}/admin`) {
       sendJson(response, 200, {
         status: 'READY',
@@ -392,7 +407,13 @@ async function main() {
 
     await selectWebView(window, 'server');
     await wait(500);
+    await wait(4_300);
+    await assertWebView(window, 'server');
     await capture(window, 'api-web-administrativa-servidor.png', 'server');
+
+    await selectWebView(window, 'network');
+    await wait(4_300);
+    await assertWebView(window, 'network');
 
     await logout(window);
     await login(window, 'cliente');

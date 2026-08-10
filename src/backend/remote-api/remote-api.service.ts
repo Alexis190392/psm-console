@@ -11,6 +11,10 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { APP_INFO } from '../../shared/constants/app-info';
+import { CONFIGURATION_PRESETS } from '../../renderer/config/configuration-presets';
+import { getSettingDefinition } from '../../renderer/config/setting-definition-resolver';
+import { getZeroToggleSetting } from '../../renderer/config/zero-toggle-settings';
+import { parsePalworldSettings } from '../../renderer/config/palworld-settings-parser';
 import {
   getPalworldMapPosition,
   isPalworldPositionInMap,
@@ -520,6 +524,11 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
       sendJson(response, 200, await this.palworldConfigurationService.readActive());
       return;
     }
+    if (method === 'GET' && path === `${API_PREFIX}/configuration/schema`) {
+      this.requireAdmin(session);
+      sendJson(response, 200, this.toConfigurationSchema(await this.palworldConfigurationService.readActive()));
+      return;
+    }
     if (method === 'PUT' && path === `${API_PREFIX}/configuration`) {
       this.requireAdmin(session);
       const body = await readJsonBody(request);
@@ -910,6 +919,25 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
     }
   }
 
+  private toConfigurationSchema(file: { path: string; content: string; updatedAt: string }): object {
+    const parsed = parsePalworldSettings(file.content);
+
+    return {
+      path: file.path,
+      content: file.content,
+      updatedAt: file.updatedAt,
+      prefix: parsed.prefix,
+      suffix: parsed.suffix,
+      presets: CONFIGURATION_PRESETS,
+      settings: parsed.settings.map((setting) => ({
+        key: setting.key,
+        value: setting.value,
+        definition: getSettingDefinition(setting.key, setting.value),
+        zeroToggle: getZeroToggleSetting(setting.key)
+      }))
+    };
+  }
+
   private requireAnyPermission(session: ApiSession, permissions: RemoteApiPermission[]): void {
     if (
       session.profile !== 'ADMIN'
@@ -1297,6 +1325,7 @@ function resolveMapAssetPath(filename: string): string {
   if (packagedPath && existsSync(packagedPath)) {
     return packagedPath;
   }
+
   return join(process.cwd(), 'src', 'renderer', 'assets', filename);
 }
 
