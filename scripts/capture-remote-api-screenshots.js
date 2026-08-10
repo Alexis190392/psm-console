@@ -377,6 +377,21 @@ async function assertWebView(window, view) {
   }
 }
 
+async function assertSidebarRemainsFixed(window) {
+  const initialTop = await window.webContents.executeJavaScript(`
+    document.querySelector('.sidebar')?.getBoundingClientRect().top
+  `);
+  await window.webContents.executeJavaScript(`window.scrollTo(0, document.documentElement.scrollHeight)`);
+  await wait(250);
+  const finalTop = await window.webContents.executeJavaScript(`
+    document.querySelector('.sidebar')?.getBoundingClientRect().top
+  `);
+  await window.webContents.executeJavaScript(`window.scrollTo(0, 0)`);
+  if (typeof initialTop !== 'number' || Math.abs(finalTop - initialTop) > 1) {
+    throw new Error(`La barra lateral se desplazo con el contenido: ${String(initialTop)} -> ${String(finalTop)}`);
+  }
+}
+
 async function main() {
   app.disableHardwareAcceleration();
   mkdirSync(outputDir, { recursive: true });
@@ -416,6 +431,7 @@ async function main() {
     `);
     await wait(4_300);
     await assertWebView(window, 'server');
+    await assertSidebarRemainsFixed(window);
     const configurationGroupState = await window.webContents.executeJavaScript(`
       document.querySelector('#configuration-groups details')?.open
     `);

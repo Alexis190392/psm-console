@@ -441,9 +441,12 @@ input:focus {
 }
 
 .sidebar {
-  position: sticky;
+  position: fixed;
   top: 69px;
+  left: 0;
+  z-index: 10;
   display: flex;
+  width: 210px;
   height: calc(100vh - 69px);
   height: calc(100dvh - 69px);
   flex-direction: column;
@@ -451,10 +454,14 @@ input:focus {
   padding: 24px 14px 18px;
   border-right: 1px solid rgba(17, 212, 229, 0.28);
   background: rgba(3, 11, 16, 0.94);
+  overflow: hidden;
 }
 
 .sidebar nav {
   display: grid;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 3px;
   gap: 7px;
 }
 
@@ -497,6 +504,7 @@ input:focus {
 }
 
 .workspace {
+  grid-column: 2;
   width: min(100%, 1340px);
   min-width: 0;
   margin: 0 auto;
@@ -1431,6 +1439,7 @@ input:focus {
   }
 
   .workspace {
+    grid-column: auto;
     padding: 16px;
   }
 
