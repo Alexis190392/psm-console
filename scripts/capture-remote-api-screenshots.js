@@ -378,17 +378,28 @@ async function assertWebView(window, view) {
 }
 
 async function assertSidebarRemainsFixed(window) {
-  const initialTop = await window.webContents.executeJavaScript(`
-    document.querySelector('.sidebar')?.getBoundingClientRect().top
+  const initial = await window.webContents.executeJavaScript(`
+    ({
+      sidebar: document.querySelector('.sidebar')?.getBoundingClientRect().top,
+      topbar: document.querySelector('.topbar')?.getBoundingClientRect().top
+    })
   `);
   await window.webContents.executeJavaScript(`window.scrollTo(0, document.documentElement.scrollHeight)`);
   await wait(250);
-  const finalTop = await window.webContents.executeJavaScript(`
-    document.querySelector('.sidebar')?.getBoundingClientRect().top
+  const final = await window.webContents.executeJavaScript(`
+    ({
+      sidebar: document.querySelector('.sidebar')?.getBoundingClientRect().top,
+      topbar: document.querySelector('.topbar')?.getBoundingClientRect().top
+    })
   `);
   await window.webContents.executeJavaScript(`window.scrollTo(0, 0)`);
-  if (typeof initialTop !== 'number' || Math.abs(finalTop - initialTop) > 1) {
-    throw new Error(`La barra lateral se desplazo con el contenido: ${String(initialTop)} -> ${String(finalTop)}`);
+  if (
+    typeof initial.sidebar !== 'number' ||
+    typeof initial.topbar !== 'number' ||
+    Math.abs(final.sidebar - initial.sidebar) > 1 ||
+    Math.abs(final.topbar - initial.topbar) > 1
+  ) {
+    throw new Error(`La navegación fija se desplazo con el contenido: ${JSON.stringify({ initial, final })}`);
   }
 }
 
@@ -459,9 +470,28 @@ async function main() {
     await assertWebView(window, 'map');
     await capture(window, 'api-web-mapa-movil.png', 'map');
 
+    const mobileMenuState = await window.webContents.executeJavaScript(`
+      (() => {
+        document.querySelector('#mobile-nav-toggle')?.click();
+        return {
+          expanded: document.querySelector('.sidebar')?.classList.contains('is-mobile-menu-open'),
+          moreVisible: getComputedStyle(document.querySelector('.nav-button[data-view="logs"]')).display !== 'none'
+        };
+      })()
+    `);
+    if (!mobileMenuState.expanded || !mobileMenuState.moreVisible) {
+      throw new Error(`El menú móvil no mostró las secciones adicionales: ${JSON.stringify(mobileMenuState)}`);
+    }
+
     await selectWebView(window, 'players');
     await wait(450);
     await assertWebView(window, 'players');
+    const mobileMenuClosed = await window.webContents.executeJavaScript(`
+      !document.querySelector('.sidebar')?.classList.contains('is-mobile-menu-open')
+    `);
+    if (!mobileMenuClosed) {
+      throw new Error('El menú móvil quedó abierto después de seleccionar una vista');
+    }
     await capture(window, 'api-web-cliente-movil.png', 'players');
   } finally {
     window.destroy();

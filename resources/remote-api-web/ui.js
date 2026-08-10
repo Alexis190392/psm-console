@@ -147,7 +147,7 @@
       element.hidden = access.profile !== 'ADMIN';
     });
     var visibleNavigation = Array.from(document.querySelectorAll('.nav-button')).filter(function (button) {
-      return !button.hidden;
+      return Boolean(button.dataset.view) && !button.hidden;
     });
     var activeNavigation = document.querySelector('.nav-button[data-view="' + activeView + '"]');
     if ((!activeNavigation || activeNavigation.hidden) && visibleNavigation[0]) {
@@ -1281,6 +1281,7 @@
     if (!view) {
       return;
     }
+    closeMobileNavigation();
     activeView = view;
     document.querySelectorAll('.nav-button').forEach(function (button) {
       button.classList.toggle('active', button.dataset.view === view);
@@ -1289,6 +1290,15 @@
       section.hidden = section.dataset.contentView !== view;
     });
     void refreshVisibleView(false);
+  }
+
+  function closeMobileNavigation() {
+    var sidebar = document.querySelector('.sidebar');
+    var toggle = document.getElementById('mobile-nav-toggle');
+    sidebar.classList.remove('is-mobile-menu-open');
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.setAttribute('aria-label', 'Abrir más secciones');
+    toggle.title = 'Más secciones';
   }
 
   async function executeServerAction(action) {
@@ -1362,8 +1372,17 @@
   });
   document.querySelectorAll('.nav-button').forEach(function (button) {
     button.addEventListener('click', function () {
-      selectView(button.dataset.view);
+      if (button.dataset.view) {
+        selectView(button.dataset.view);
+      }
     });
+  });
+  document.getElementById('mobile-nav-toggle').addEventListener('click', function () {
+    var sidebar = document.querySelector('.sidebar');
+    var open = sidebar.classList.toggle('is-mobile-menu-open');
+    this.setAttribute('aria-expanded', String(open));
+    this.setAttribute('aria-label', open ? 'Cerrar más secciones' : 'Abrir más secciones');
+    this.title = open ? 'Cerrar más secciones' : 'Más secciones';
   });
   document.querySelectorAll('[data-refresh]').forEach(function (button) {
     button.addEventListener('click', function () {
