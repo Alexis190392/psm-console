@@ -743,13 +743,17 @@
     return item;
   }
 
-  async function refreshServerView() {
-    var results = await Promise.all([
+  async function refreshServerView(options) {
+    var refreshConfiguration = Boolean(options && options.configuration);
+    var requests = [
       apiRequest('/steamcmd'),
       apiRequest('/installation'),
-      apiRequest('/installation/update?force=true'),
-      apiRequest('/configuration/schema')
-    ]);
+      apiRequest('/installation/update?force=true')
+    ];
+    if (!configurationSchema || refreshConfiguration) {
+      requests.push(apiRequest('/configuration/schema'));
+    }
+    var results = await Promise.all(requests);
     var steamcmd = results[0];
     var installation = results[1];
     var update = results[2];
@@ -761,7 +765,7 @@
     setText('update-status', formatState(update.status));
     setText('update-message', update.message || 'Sin detalles.');
     var editor = document.getElementById('configuration-content');
-    if (!editor.dataset.dirty) {
+    if (configuration && (!editor.dataset.dirty || refreshConfiguration)) {
       loadConfigurationSchema(configuration);
     }
   }
@@ -1404,7 +1408,7 @@
         document.getElementById('configuration-content').dataset.dirty = '';
         setText('configuration-status', 'Configuracion guardada.');
         showToast('Configuracion guardada.');
-        await refreshServerView();
+        await refreshServerView({ configuration: true });
       } catch (error) {
         showToast(error.message);
       }
@@ -1420,7 +1424,7 @@
         if (result.operationId) {
           await pollOperation(result.operationId);
         }
-        await refreshServerView();
+        await refreshServerView({ configuration: true });
       } catch (error) {
         showToast(error.message);
       }

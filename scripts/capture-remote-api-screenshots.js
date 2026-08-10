@@ -407,8 +407,21 @@ async function main() {
 
     await selectWebView(window, 'server');
     await wait(500);
+    await window.webContents.executeJavaScript(`
+      (() => {
+        const group = document.querySelector('#configuration-groups details');
+        if (!group) throw new Error('No se encontro una categoria de configuracion');
+        group.open = true;
+      })()
+    `);
     await wait(4_300);
     await assertWebView(window, 'server');
+    const configurationGroupState = await window.webContents.executeJavaScript(`
+      document.querySelector('#configuration-groups details')?.open
+    `);
+    if (!configurationGroupState) {
+      throw new Error('La actualizacion periodica cerro la categoria de configuracion');
+    }
     await capture(window, 'api-web-administrativa-servidor.png', 'server');
 
     await selectWebView(window, 'network');
