@@ -53,6 +53,7 @@ import type { LogFileReadRequestDto, LogsRecentRequestDto } from '../../shared/d
 import type { ServerIdlePolicyUpdateRequestDto } from '../../shared/dto/server-idle-policy.dto';
 import type { PublicAddressRequestDto } from '../../shared/dto/network-diagnostics.dto';
 import type { AppProcessKind, AppProcessMetricDto, AppProcessMetricsDto } from '../../shared/dto/app-process-metrics.dto';
+import type { AppStartupStatusDto } from '../../shared/dto/app-startup.dto';
 import type {
   RemoteApiFirewallCheckRequestDto,
   RemoteApiFirewallRuleRequestDto,
@@ -98,6 +99,16 @@ export function registerIpcHandlers(
   );
 
   ipcMain.handle(ipcChannels.appGetProcessMetrics, () => getAppProcessMetrics());
+
+  ipcMain.handle(ipcChannels.appGetStartupStatus, () => getAppStartupStatus());
+  ipcMain.handle(ipcChannels.appUpdateStartup, (_event, enabled: boolean) => {
+    const status = getAppStartupStatus();
+    if (!status.available) {
+      throw new Error('APP_STARTUP_NOT_AVAILABLE');
+    }
+    app.setLoginItemSettings({ openAtLogin: Boolean(enabled), openAsHidden: false });
+    return getAppStartupStatus();
+  });
 
   ipcMain.handle(ipcChannels.instancesGetStatus, () => {
     const status = portablePathService.getServerInstances();
@@ -349,6 +360,24 @@ export function registerIpcHandlers(
   ipcMain.handle(ipcChannels.windowClose, (event) => {
     getSenderWindow(event)?.close();
   });
+}
+
+function getAppStartupStatus(): AppStartupStatusDto {
+  const available = process.platform === 'win32'
+    && process.env['PALCM_MULTI_SERVER'] === 'true'
+    && process.env['PALCM_ELECTRON_IS_PACKAGED'] === 'true';
+  if (!available) {
+    return {
+      available: false,
+      enabled: false,
+      message: 'Disponible en la edicion instalable de Windows.'
+    };
+  }
+  return {
+    available: true,
+    enabled: app.getLoginItemSettings().openAtLogin,
+    message: 'Inicia PSM Console al ingresar a Windows.'
+  };
 }
 
 function getSenderWindow(event: IpcMainInvokeEvent): BrowserWindow | null {

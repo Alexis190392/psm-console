@@ -359,6 +359,10 @@ Cada tarjeta abre la subsección correspondiente.
 
 ### Aplicación
 
+#### Inicio con Windows
+
+En la edición instalable, abre **Configuración > Aplicación** y activa **Inicio con Windows**. PSM Console se iniciará al ingresar a Windows y conservará las instancias, preferencias, backups y rutas ya registradas. Esta opción no está disponible en la edición portable.
+
 Informa la raíz portable y las ubicaciones relativas de:
 
 ![Configuración general de la aplicación](../../resources/screenshots/configuracion-aplicacion.png)
@@ -390,6 +394,12 @@ Permite definir:
 Los cambios no se aplican hasta confirmar **Guardar**.
 
 ### API web
+
+#### Varias instancias desde la web
+
+La API administrativa muestra un selector de servidor en la cabecera cuando la edición instalable tiene más de una carpeta registrada. Selecciona una instancia para administrar su configuración, backups, red y ejecución. Para añadir otra carpeta desde la web administrativa, usa el campo **Carpetas registradas** e introduce una ruta absoluta existente del equipo donde se ejecuta PSM Console.
+
+La API cliente solo muestra el selector cuando el administrador habilita el permiso **Cambiar servidor**. El perfil cliente no puede registrar ni ver las rutas físicas de las carpetas.
 
 Esta opción habilita una única conexión web compartida por dos perfiles:
 

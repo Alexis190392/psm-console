@@ -2,6 +2,8 @@ export const ipcChannels = {
   appGetStatus: 'app:get-status',
   appGetActions: 'app:get-actions',
   appGetProcessMetrics: 'app:get-process-metrics',
+  appGetStartupStatus: 'app:get-startup-status',
+  appUpdateStartup: 'app:update-startup',
   instancesGetStatus: 'instances:get-status',
   instancesAddFolder: 'instances:add-folder',
   instancesSelect: 'instances:select',

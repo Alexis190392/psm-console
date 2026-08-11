@@ -3,6 +3,7 @@ import type { AllowedActionsDto } from '../../shared/dto/allowed-actions.dto';
 import type { ApplicationStatusDto } from '../../shared/dto/application-status.dto';
 import type { AppProcessMetricsDto } from '../../shared/dto/app-process-metrics.dto';
 import type { AppSettingsStatusDto } from '../../shared/dto/app-settings.dto';
+import type { AppStartupStatusDto } from '../../shared/dto/app-startup.dto';
 import type { ServerInstancesStatusDto } from '../../shared/dto/server-instance.dto';
 import type {
   BackupCreateRequestDto,
@@ -84,6 +85,8 @@ const ipcChannels = {
   appGetStatus: 'app:get-status',
   appGetActions: 'app:get-actions',
   appGetProcessMetrics: 'app:get-process-metrics',
+  appGetStartupStatus: 'app:get-startup-status',
+  appUpdateStartup: 'app:update-startup',
   instancesGetStatus: 'instances:get-status',
   instancesAddFolder: 'instances:add-folder',
   instancesSelect: 'instances:select',
@@ -146,6 +149,8 @@ export interface PalcmApi {
     getStatus: () => Promise<ApplicationStatusDto>;
     getActions: () => Promise<AllowedActionsDto>;
     getProcessMetrics: () => Promise<AppProcessMetricsDto>;
+    getStartupStatus: () => Promise<AppStartupStatusDto>;
+    updateStartup: (enabled: boolean) => Promise<AppStartupStatusDto>;
   };
   instances: {
     getStatus: () => Promise<ServerInstancesStatusDto>;
@@ -241,7 +246,9 @@ const api: PalcmApi = {
     getStatus: () => ipcRenderer.invoke(ipcChannels.appGetStatus) as Promise<ApplicationStatusDto>,
     getActions: () => ipcRenderer.invoke(ipcChannels.appGetActions) as Promise<AllowedActionsDto>,
     getProcessMetrics: () =>
-      ipcRenderer.invoke(ipcChannels.appGetProcessMetrics) as Promise<AppProcessMetricsDto>
+      ipcRenderer.invoke(ipcChannels.appGetProcessMetrics) as Promise<AppProcessMetricsDto>,
+    getStartupStatus: () => ipcRenderer.invoke(ipcChannels.appGetStartupStatus) as Promise<AppStartupStatusDto>,
+    updateStartup: (enabled) => ipcRenderer.invoke(ipcChannels.appUpdateStartup, enabled) as Promise<AppStartupStatusDto>
   },
   instances: {
     getStatus: () => ipcRenderer.invoke(ipcChannels.instancesGetStatus) as Promise<ServerInstancesStatusDto>,

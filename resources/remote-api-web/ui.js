@@ -1157,6 +1157,7 @@
       SERVER_START: 'Iniciar',
       SERVER_RESTART: 'Reiniciar',
       SERVER_STOP: 'Detener',
+      SERVER_SELECTION: 'Cambiar servidor',
       PLAYERS_VIEW: 'Ver jugadores',
       PLAYERS_KICK: 'Expulsar',
       PLAYERS_BAN: 'Banear',
@@ -1221,6 +1222,9 @@
       }
       if (hasPermission('LOGS')) {
         requests.push(refreshLogs());
+      }
+      if (hasPermission('SERVER_SELECTION')) {
+        requests.push(refreshServerInstances());
       }
       if (
         hasPermission('PLAYERS_VIEW')
@@ -1290,6 +1294,33 @@
       section.hidden = section.dataset.contentView !== view;
     });
     void refreshVisibleView(false);
+  }
+
+  async function refreshServerInstances() {
+    var picker = document.getElementById('server-instance-picker');
+    var select = document.getElementById('server-instance-select');
+    if (!picker || !select) return;
+    var status = await apiRequest('/instances');
+    if (status.mode !== 'MULTI_SERVER' || !status.instances.length) {
+      picker.hidden = true;
+      return;
+    }
+    var selectedValue = select.value;
+    var currentSignature = select.dataset.signature || '';
+    var nextSignature = status.instances.map(function (item) { return item.id + ':' + item.name + ':' + item.isRunning; }).join('|');
+    if (currentSignature !== nextSignature) {
+      select.replaceChildren();
+      status.instances.forEach(function (instance) {
+        var option = document.createElement('option');
+        option.value = instance.id;
+        option.textContent = (instance.isRunning ? '\u25cf ' : '\u25cb ') + instance.name;
+        option.selected = instance.isSelected;
+        select.appendChild(option);
+      });
+      select.dataset.signature = nextSignature;
+    }
+    select.value = status.selectedInstanceId || selectedValue || status.instances[0].id;
+    picker.hidden = false;
   }
 
   function closeMobileNavigation() {
@@ -1549,6 +1580,21 @@
     void saveRemoteApiProfile('CLIENT', event.currentTarget).catch(function (error) {
       showToast(error.message);
     });
+  });
+  document.getElementById('server-instance-select').addEventListener('change', function (event) {
+    var select = event.currentTarget;
+    void apiRequest('/instances/select', { method: 'POST', body: JSON.stringify({ instanceId: select.value }) })
+      .then(function () { showToast('Servidor seleccionado.'); return refreshAll(); })
+      .catch(function (error) { showToast(error.message); });
+  });
+  document.getElementById('server-instance-form').addEventListener('submit', function (event) {
+    event.preventDefault();
+    var form = event.currentTarget;
+    var rootPath = form.elements.rootPath.value.trim();
+    if (!rootPath) return;
+    void apiRequest('/instances', { method: 'POST', body: JSON.stringify({ rootPath: rootPath }) })
+      .then(function () { form.reset(); showToast('Carpeta registrada.'); return refreshAll(); })
+      .catch(function (error) { showToast(error.message); });
   });
   bindWebMapControls();
 

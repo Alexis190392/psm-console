@@ -371,6 +371,7 @@ function validateRemoteApiPermissions(
     'SERVER_START',
     'SERVER_RESTART',
     'SERVER_STOP',
+    'SERVER_SELECTION',
     'PLAYERS_VIEW',
     'PLAYERS_KICK',
     'PLAYERS_BAN',

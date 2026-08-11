@@ -123,6 +123,7 @@ function renderSettingsSummary(
 }
 
 function renderApplicationSettings(status: AppSettingsStatusDto, update: AppUpdateStatusDto | null): string {
+  const startup = status.startup;
   return `
     <section class="settings-overview-grid">
       <article class="content-card settings-overview-card">
@@ -133,6 +134,15 @@ function renderApplicationSettings(status: AppSettingsStatusDto, update: AppUpda
           <div><dt>Logs</dt><dd>${escapeHtml(status.logsRelativePath)}</dd></div>
           <div><dt>Backups</dt><dd>${escapeHtml(status.backupsRelativePath)}</dd></div>
         </dl>
+      </article>
+      <article class="content-card settings-overview-card">
+        <h4>Inicio con Windows</h4>
+        <label class="toggle-control">
+          <input id="settings-startup-enabled" type="checkbox" ${startup?.enabled ? 'checked' : ''} ${startup?.available ? '' : 'disabled'} />
+          <span class="toggle-control__track" aria-hidden="true"><span></span></span>
+          <span>${startup?.enabled ? 'Activo' : 'Inactivo'}</span>
+        </label>
+        <small>${escapeHtml(startup?.message ?? 'Consultando disponibilidad.')}</small>
       </article>
       <article class="content-card settings-overview-card">
         <h4>Actualizaciones</h4>
@@ -379,6 +389,7 @@ function renderClientPermissions(permissions: RemoteApiPermission[]): string {
     {
       label: 'Control del servidor',
       options: [
+        { value: 'SERVER_SELECTION', label: 'Cambiar servidor' },
         { value: 'SERVER_START', label: 'Iniciar' },
         { value: 'SERVER_RESTART', label: 'Reiniciar' },
         { value: 'SERVER_STOP', label: 'Detener' }

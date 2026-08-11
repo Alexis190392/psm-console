@@ -28,6 +28,7 @@ import type {
   RemoteApiPermission,
   RemoteApiProfile,
   RemoteApiProfileStatusDto,
+  RemoteServerInstancesStatusDto,
   RemoteApiStatusDto,
   RemoteApiUpdateRequestDto
 } from '../../shared/dto/remote-api.dto';
@@ -44,6 +45,7 @@ import { PalworldConfigurationService } from '../palworld-configuration/palworld
 import { PalworldPlayersService } from '../palworld-players/palworld-players.service';
 import { PalworldProcessService } from '../palworld-process/palworld-process.service';
 import { PalworldInstallationService } from '../palworld-installation/palworld-installation.service';
+import { PortablePathService } from '../portable-path/portable-path.service';
 import { ReleaseUpdateService } from '../release-update/release-update.service';
 import { ServerIdleShutdownService } from '../server-idle-shutdown/server-idle-shutdown.service';
 import { SteamCmdService } from '../steamcmd/steamcmd.service';
@@ -123,7 +125,8 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
     private readonly steamCmdService: SteamCmdService,
     private readonly palworldInstallationService: PalworldInstallationService,
     private readonly releaseUpdateService: ReleaseUpdateService,
-    private readonly serverIdleShutdownService: ServerIdleShutdownService
+    private readonly serverIdleShutdownService: ServerIdleShutdownService,
+    private readonly portablePathService: PortablePathService
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
@@ -361,6 +364,28 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
     response: ServerResponse
   ): Promise<void> {
     const path = requestUrl.pathname;
+
+    if (method === 'GET' && path === `${API_PREFIX}/instances`) {
+      this.requirePermission(session, 'SERVER_SELECTION');
+      sendJson(response, 200, this.getServerInstancesStatus());
+      return;
+    }
+    if (method === 'POST' && path === `${API_PREFIX}/instances/select`) {
+      this.requirePermission(session, 'SERVER_SELECTION');
+      const body = await readJsonBody(request);
+      this.portablePathService.selectServerInstance(requireString(body, 'instanceId'));
+      sendJson(response, 200, this.getServerInstancesStatus());
+      this.logMutation('Servidor seleccionado desde API web.');
+      return;
+    }
+    if (method === 'POST' && path === `${API_PREFIX}/instances`) {
+      this.requireAdmin(session);
+      const body = await readJsonBody(request);
+      this.portablePathService.addServerFolder(requireString(body, 'rootPath'));
+      sendJson(response, 201, this.getServerInstancesStatus());
+      this.logMutation('Carpeta de servidor registrada desde API web.');
+      return;
+    }
 
     if (method === 'GET' && path === `${API_PREFIX}/status`) {
       this.requireAnyPermission(session, [
@@ -938,6 +963,25 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
     };
   }
 
+  private getServerInstancesStatus(): RemoteServerInstancesStatusDto {
+    const status = this.portablePathService.getServerInstances();
+    const executablePaths = status.instances.map((instance) =>
+      this.portablePathService.getServerInstanceExecutablePath(instance.id)
+    );
+    const runningPaths = this.palworldProcessService.getRunningExecutablePaths(executablePaths);
+
+    return {
+      mode: status.mode,
+      ...(status.selectedInstanceId ? { selectedInstanceId: status.selectedInstanceId } : {}),
+      instances: status.instances.map((instance, index) => ({
+        id: instance.id,
+        name: instance.name,
+        isSelected: instance.isSelected,
+        isRunning: executablePaths[index] ? runningPaths.has(executablePaths[index] as string) : false
+      }))
+    };
+  }
+
   private requireAnyPermission(session: ApiSession, permissions: RemoteApiPermission[]): void {
     if (
       session.profile !== 'ADMIN'
@@ -1443,6 +1487,7 @@ function isRemoteApiPermission(value: unknown): value is RemoteApiPermission {
     'SERVER_START',
     'SERVER_RESTART',
     'SERVER_STOP',
+    'SERVER_SELECTION',
     'PLAYERS_VIEW',
     'PLAYERS_KICK',
     'PLAYERS_BAN',

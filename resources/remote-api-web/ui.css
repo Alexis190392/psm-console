@@ -460,6 +460,39 @@ input:focus {
   overflow: hidden;
 }
 
+.server-instance-picker {
+  display: flex;
+  min-width: 180px;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font: 11px Consolas, "Courier New", monospace;
+  text-transform: uppercase;
+}
+
+.server-instance-picker select {
+  max-width: 240px;
+  padding: 7px 26px 7px 9px;
+  border: 1px solid rgba(17, 212, 229, 0.35);
+  background: var(--surface-strong);
+  color: var(--cyan-soft);
+  font: inherit;
+}
+
+@media (max-width: 700px) {
+  .server-instance-picker {
+    min-width: 0;
+  }
+
+  .server-instance-picker > span {
+    display: none;
+  }
+
+  .server-instance-picker select {
+    max-width: 130px;
+  }
+}
+
 .sidebar nav {
   display: grid;
   min-height: 0;

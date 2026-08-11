@@ -2553,11 +2553,12 @@ async function renderAppSettings(renderId = ++activeViewRenderId): Promise<void>
   renderViewLoading('LEYENDO PREFERENCIAS');
   try {
     await loadReleaseUpdateStatus();
-    const [settingsStatus, backupSummary, idleStatus, remoteApiStatus] = await Promise.all([
+    const [settingsStatus, backupSummary, idleStatus, remoteApiStatus, startupStatus] = await Promise.all([
       palcmApi.appSettings.getStatus(),
       palcmApi.backup.getSummary(),
       palcmApi.serverIdle.getStatus(),
-      palcmApi.remoteApi.getStatus()
+      palcmApi.remoteApi.getStatus(),
+      palcmApi.app.getStartupStatus()
     ]);
     if (!isCurrentViewRender(renderId, 'settings')) {
       return;
@@ -2566,7 +2567,7 @@ async function renderAppSettings(renderId = ++activeViewRenderId): Promise<void>
     latestBackupSummary = backupSummary;
     latestRemoteApiStatus = remoteApiStatus;
     setContent(renderAppSettingsView(
-      settingsStatus,
+      { ...settingsStatus, startup: startupStatus },
       latestUpdateStatus,
       backupSummary,
       idleStatus,
@@ -3093,6 +3094,19 @@ function showServerInstanceSelection(): void {
   contentView.querySelector<HTMLButtonElement>('[data-add-server-instance="true"]')?.addEventListener('click', () => {
     addServerInstanceButton?.click();
   });
+
+  const startupToggle = document.querySelector<HTMLInputElement>('#settings-startup-enabled');
+  if (startupToggle) {
+    startupToggle.addEventListener('change', () => {
+      const previous = !startupToggle.checked;
+      void palcmApi?.app.updateStartup(startupToggle.checked)
+        .then(() => showToast('Cambio guardado.'))
+        .catch(() => {
+          startupToggle.checked = previous;
+          showToast('No se pudo guardar el cambio.', 'error');
+        });
+    });
+  }
 }
 
 async function renderAdminView(renderId = ++activeViewRenderId): Promise<void> {

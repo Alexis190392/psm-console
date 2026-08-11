@@ -479,7 +479,13 @@ function createRemoteApiFixture(
     { getStatus: vi.fn() } as unknown as SteamCmdService,
     { getStatus: vi.fn(), getUpdateStatus: vi.fn(), update: vi.fn(), repair: vi.fn() } as unknown as PalworldInstallationService,
     { getStatus: vi.fn() } as unknown as ReleaseUpdateService,
-    { getStatus: vi.fn(), updatePolicy: vi.fn() } as unknown as ServerIdleShutdownService
+    { getStatus: vi.fn(), updatePolicy: vi.fn() } as unknown as ServerIdleShutdownService,
+    {
+      getServerInstances: vi.fn(() => ({ mode: 'PORTABLE', instances: [] })),
+      getServerInstanceExecutablePath: vi.fn(),
+      selectServerInstance: vi.fn(),
+      addServerFolder: vi.fn()
+    } as unknown as PortablePathService
   );
   return { service, start, restart, stop, execute, getPublicAddress };
 }
