@@ -73,6 +73,12 @@ npm.cmd run start:dev
 
 `start:dev` utiliza `ejecucionPruebas/` como directorio aislado, por lo que las descargas y datos de prueba no afectan una instalación portable.
 
+Para probar en desarrollo la experiencia de la edición instalable multiservidor, sin generar un instalador:
+
+```powershell
+npm.cmd run start:multi:dev
+```
+
 ### Generar distribuciones
 
 ```powershell

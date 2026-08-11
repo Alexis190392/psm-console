@@ -40,6 +40,8 @@ protocol.registerSchemesAsPrivileged([
 
 function configureElectronRuntime(): void {
   const isPortableArtifact = Boolean(process.env['PORTABLE_EXECUTABLE_DIR']);
+  const useMultiServerMode = process.env['PALCM_MULTI_SERVER'] === 'true'
+    || (app.isPackaged && !isPortableArtifact);
   const userDataPath = app.isPackaged && !isPortableArtifact
     ? app.getPath('userData')
     : app.isPackaged
@@ -49,7 +51,7 @@ function configureElectronRuntime(): void {
   mkdirSync(userDataPath, { recursive: true });
   app.setPath('userData', userDataPath);
   process.env['PALCM_APP_DATA_PATH'] = userDataPath;
-  process.env['PALCM_MULTI_SERVER'] = app.isPackaged && !isPortableArtifact ? 'true' : 'false';
+  process.env['PALCM_MULTI_SERVER'] = useMultiServerMode ? 'true' : 'false';
   app.disableHardwareAcceleration();
 }
 
