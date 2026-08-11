@@ -108,6 +108,17 @@ export class PortablePathService {
     return this.getServerInstances();
   }
 
+  createServerFolder(name: string): ServerInstancesStatusDto {
+    if (!this.isMultiServerMode()) {
+      throw new Error('SERVER_INSTANCES_ONLY_AVAILABLE_IN_INSTALLABLE');
+    }
+
+    const folderName = sanitizeServerFolderName(name);
+    const rootPath = createUniqueServerFolder(join(this.getManagedServersRoot(), folderName));
+    mkdirSync(rootPath, { recursive: true });
+    return this.addServerFolder(rootPath);
+  }
+
   selectServerInstance(instanceId: string): ServerInstancesStatusDto {
     if (!this.isMultiServerMode()) {
       return this.getServerInstances();
@@ -227,6 +238,11 @@ export class PortablePathService {
     return process.env['PALCM_APP_DATA_PATH'] ?? join(this.getDefaultPortableRoot(), 'app-data');
   }
 
+  private getManagedServersRoot(): string {
+    const documentsPath = process.env['PALCM_DOCUMENTS_PATH'];
+    return join(documentsPath ?? this.getApplicationDataRoot(), 'PSM Console Servers');
+  }
+
   private getRegistryPath(): string {
     return join(this.getApplicationDataRoot(), 'server-instances.json');
   }
@@ -316,6 +332,27 @@ function createFolderDisplayName(rootPath: string): string {
 function createInstanceId(rootPath: string): string {
   const normalized = rootPath.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   return `${normalized || 'server'}-${Date.now().toString(36)}`;
+}
+
+function sanitizeServerFolderName(name: string): string {
+  const normalized = name.trim().replace(/[<>:"/\\|?*\x00-\x1F]/g, '-').replace(/[. ]+$/g, '');
+  if (!normalized || normalized === '.' || normalized === '..') {
+    return 'Nuevo servidor';
+  }
+  return normalized.slice(0, 80);
+}
+
+function createUniqueServerFolder(basePath: string): string {
+  if (!existsSync(basePath)) {
+    return basePath;
+  }
+  for (let index = 2; index < 10_000; index += 1) {
+    const candidate = `${basePath} (${String(index)})`;
+    if (!existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  throw new Error('SERVER_INSTANCE_FOLDER_CREATION_FAILED');
 }
 
 function refreshManagedServerInstance(instance: ManagedServerInstance): ManagedServerInstance {

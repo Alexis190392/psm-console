@@ -386,6 +386,14 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
       this.logMutation('Carpeta de servidor registrada desde API web.');
       return;
     }
+    if (method === 'POST' && path === `${API_PREFIX}/instances/create`) {
+      this.requireAdmin(session);
+      const body = await readJsonBody(request);
+      this.portablePathService.createServerFolder(requireString(body, 'name'));
+      sendJson(response, 201, this.getServerInstancesStatus());
+      this.logMutation('Nueva carpeta de servidor creada desde API web.');
+      return;
+    }
 
     if (method === 'GET' && path === `${API_PREFIX}/status`) {
       this.requireAnyPermission(session, [

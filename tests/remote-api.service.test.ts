@@ -484,7 +484,8 @@ function createRemoteApiFixture(
       getServerInstances: vi.fn(() => ({ mode: 'PORTABLE', instances: [] })),
       getServerInstanceExecutablePath: vi.fn(),
       selectServerInstance: vi.fn(),
-      addServerFolder: vi.fn()
+      addServerFolder: vi.fn(),
+      createServerFolder: vi.fn()
     } as unknown as PortablePathService
   );
   return { service, start, restart, stop, execute, getPublicAddress };

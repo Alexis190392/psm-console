@@ -1596,6 +1596,17 @@
       .then(function () { form.reset(); showToast('Carpeta registrada.'); return refreshAll(); })
       .catch(function (error) { showToast(error.message); });
   });
+  document.querySelector('[data-create-server]').addEventListener('click', function () {
+    var form = document.getElementById('server-instance-form');
+    var name = form.elements.name.value.trim();
+    if (!name) {
+      form.elements.name.focus();
+      return;
+    }
+    void apiRequest('/instances/create', { method: 'POST', body: JSON.stringify({ name: name }) })
+      .then(function () { form.elements.name.value = ''; showToast('Carpeta de servidor creada.'); return refreshAll(); })
+      .catch(function (error) { showToast(error.message); });
+  });
   bindWebMapControls();
 
   if (getToken()) {

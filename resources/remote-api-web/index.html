@@ -283,7 +283,8 @@
               <form id="idle-policy-form" class="action-panel"><div><p class="eyebrow">APAGADO AUTOMATICO</p><h2>Sin jugadores activos</h2></div><div class="inline-form"><label class="checkbox-field"><input name="enabled" type="checkbox"><span>Activo</span></label><input name="emptySeconds" type="number" min="10" max="86400" aria-label="Segundos sin jugadores"><button class="secondary-button" type="submit">Guardar</button></div></form>
               <form id="server-instance-form" class="action-panel" data-admin-only>
                 <div><p class="eyebrow">MULTISERVIDOR</p><h2>Carpetas registradas</h2></div>
-                <div class="inline-form"><input name="rootPath" type="text" placeholder="Ruta de una carpeta existente" autocomplete="off"><button class="secondary-button" type="submit">Agregar carpeta</button></div>
+                <div class="inline-form"><input name="name" type="text" placeholder="Nombre del nuevo servidor" maxlength="80" autocomplete="off"><button class="primary-button" type="button" data-create-server>Crear servidor</button></div>
+                <div class="inline-form"><input name="rootPath" type="text" placeholder="Ruta de una carpeta existente" autocomplete="off"><button class="secondary-button" type="submit">Registrar existente</button></div>
               </form>
               <section class="editor-panel">
                 <div class="editor-panel__heading"><div><p class="eyebrow">API WEB</p><h2>Configuracion compartida</h2></div></div>

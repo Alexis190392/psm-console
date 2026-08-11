@@ -225,6 +225,7 @@ async function bootstrap(): Promise<void> {
   process.env['PALCM_ELECTRON_EXE_PATH'] = app.getPath('exe');
 
   await app.whenReady();
+  process.env['PALCM_DOCUMENTS_PATH'] = app.getPath('documents');
   registerRendererProtocol();
   const splashSession = await createSplashWindow();
 
