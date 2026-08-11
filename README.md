@@ -100,6 +100,6 @@ La edición instalable conserva el registro de carpetas de servidor en la config
 
 ## Estado del proyecto
 
-Versión actual: `0.20.0 Dev`.
+Versión actual: `0.20.1 Dev`.
 
 Palworld, Steam y SteamCMD son marcas de sus respectivos propietarios. Este proyecto es una herramienta independiente y no está afiliado con Pocketpair ni Valve.

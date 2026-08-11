@@ -141,12 +141,26 @@ rootElement.innerHTML = `
       >${renderIcon('sidebar-collapse')}</button>
     </section>
     <section id="server-instance-selector" class="server-instance-selector hidden" aria-label="Servidor seleccionado">
-      <label for="server-instance-select">Servidor</label>
-      <div class="server-instance-selector__controls">
-        <select id="server-instance-select" aria-label="Seleccionar servidor">
-          <option value="">Seleccionar carpeta</option>
-        </select>
-        <button id="add-server-instance" class="server-instance-selector__add" type="button" title="Agregar carpeta de servidor" aria-label="Agregar carpeta de servidor">+ Agregar</button>
+      <label id="server-instance-label">Servidor</label>
+      <div class="server-instance-menu">
+        <button
+          id="server-instance-trigger"
+          class="server-instance-menu__trigger"
+          type="button"
+          aria-labelledby="server-instance-label server-instance-trigger-label"
+          aria-haspopup="listbox"
+          aria-expanded="false"
+          aria-controls="server-instance-options"
+          title="Seleccionar servidor"
+        >
+          ${renderIcon('server')}
+          <span id="server-instance-trigger-label">Seleccionar carpeta</span>
+          <span class="server-instance-menu__chevron" aria-hidden="true"></span>
+        </button>
+        <div id="server-instance-options" class="server-instance-menu__popover hidden" role="listbox" aria-label="Servidores registrados">
+          <div id="server-instance-options-list" class="server-instance-menu__list"></div>
+          <button id="add-server-instance" class="server-instance-menu__add" type="button">+ Agregar carpeta</button>
+        </div>
       </div>
     </section>
     <nav class="sidebar__nav" aria-label="Navegacion principal">
@@ -353,7 +367,10 @@ const sidebarRuntimeStatus = document.querySelector<HTMLElement>('#sidebar-runti
 const startServerAction = document.querySelector<HTMLButtonElement>('#start-server-action');
 const sidebarToggle = document.querySelector<HTMLButtonElement>('#sidebar-toggle');
 const serverInstanceSelector = document.querySelector<HTMLElement>('#server-instance-selector');
-const serverInstanceSelect = document.querySelector<HTMLSelectElement>('#server-instance-select');
+const serverInstanceTrigger = document.querySelector<HTMLButtonElement>('#server-instance-trigger');
+const serverInstanceTriggerLabel = document.querySelector<HTMLElement>('#server-instance-trigger-label');
+const serverInstanceOptions = document.querySelector<HTMLElement>('#server-instance-options');
+const serverInstanceOptionsList = document.querySelector<HTMLElement>('#server-instance-options-list');
 const addServerInstanceButton = document.querySelector<HTMLButtonElement>('#add-server-instance');
 const navLinks = Array.from(document.querySelectorAll<HTMLAnchorElement>('[data-nav]'));
 const adminNavGroup = document.querySelector<HTMLElement>('[data-nav-group="admin"]');
@@ -361,6 +378,7 @@ const settingsNavGroup = document.querySelector<HTMLElement>('[data-nav-group="s
 const consoleLines: string[] = [];
 const operationLogOffsets = new Map<string, number>();
 let latestFirewallStatus: FirewallStatusDto | null = null;
+let serverInstanceMenuOpen = false;
 let firewallStatusRequest: Promise<FirewallStatusDto> | null = null;
 let latestFirewallError: string | null = null;
 let activeFirewallRequestId: string | null = null;
@@ -465,21 +483,38 @@ if (!palcmApi) {
   await refreshState();
 
   addServerInstanceButton?.addEventListener('click', () => {
+    setServerInstanceMenuOpen(false);
     runUiAction('No se pudo agregar la carpeta del servidor', async () => {
       await palcmApi.instances.addFolder();
       await refreshState();
     });
   });
 
-  serverInstanceSelect?.addEventListener('change', () => {
-    const instanceId = serverInstanceSelect.value;
+  serverInstanceTrigger?.addEventListener('click', () => {
+    setServerInstanceMenuOpen(!serverInstanceMenuOpen);
+  });
+
+  serverInstanceOptionsList?.addEventListener('click', (event) => {
+    const target = event.target instanceof Element
+      ? event.target.closest<HTMLButtonElement>('[data-server-instance-id]')
+      : null;
+    const instanceId = target?.dataset.serverInstanceId;
     if (!instanceId) {
       return;
     }
+
+    setServerInstanceMenuOpen(false);
     runUiAction('No se pudo cambiar de servidor', async () => {
       await palcmApi.instances.select(instanceId);
       await refreshState();
     });
+  });
+
+  document.addEventListener('click', (event) => {
+    if (event.target instanceof Node && serverInstanceSelector?.contains(event.target)) {
+      return;
+    }
+    setServerInstanceMenuOpen(false);
   });
 
   confirmActionButton?.addEventListener('click', () => {
@@ -2997,18 +3032,37 @@ async function refreshServerInstanceSelector(): Promise<void> {
   latestServerInstances = status;
   serverInstanceSelector?.classList.toggle('hidden', status.mode !== 'MULTI_SERVER');
 
-  if (!serverInstanceSelect || status.mode !== 'MULTI_SERVER') {
+  if (!serverInstanceOptionsList || status.mode !== 'MULTI_SERVER') {
+    setServerInstanceMenuOpen(false);
     return;
   }
 
-  const selectedId = status.selectedInstanceId ?? '';
-  serverInstanceSelect.innerHTML = [
-    '<option value="">Seleccionar carpeta</option>',
-    ...status.instances.map((instance) => {
-      const state = instance.isRunning ? '●' : '○';
-      return `<option value="${escapeHtml(instance.id)}"${instance.id === selectedId ? ' selected' : ''}>${state} ${escapeHtml(instance.name)}</option>`;
-    })
-  ].join('');
+  const selectedInstance = status.instances.find((instance) => instance.id === status.selectedInstanceId);
+  if (serverInstanceTriggerLabel) {
+    serverInstanceTriggerLabel.textContent = selectedInstance?.name ?? 'Seleccionar carpeta';
+  }
+
+  serverInstanceOptionsList.innerHTML = status.instances.map((instance) => `
+    <button
+      class="server-instance-menu__option${instance.id === status.selectedInstanceId ? ' server-instance-menu__option--selected' : ''}"
+      type="button"
+      role="option"
+      aria-selected="${instance.id === status.selectedInstanceId ? 'true' : 'false'}"
+      data-server-instance-id="${escapeHtml(instance.id)}"
+    >
+      <span class="server-instance-menu__state${instance.isRunning ? ' server-instance-menu__state--running' : ''}" aria-hidden="true"></span>
+      <span class="server-instance-menu__option-name">${escapeHtml(instance.name)}</span>
+    </button>
+  `).join('');
+
+  setServerInstanceMenuOpen(serverInstanceMenuOpen);
+}
+
+function setServerInstanceMenuOpen(isOpen: boolean): void {
+  const isAvailable = serverInstanceSelector !== null && !serverInstanceSelector.classList.contains('hidden');
+  serverInstanceMenuOpen = isOpen && isAvailable;
+  serverInstanceOptions?.classList.toggle('hidden', !serverInstanceMenuOpen);
+  serverInstanceTrigger?.setAttribute('aria-expanded', serverInstanceMenuOpen ? 'true' : 'false');
 }
 
 function showServerInstanceSelection(): void {
@@ -3030,7 +3084,7 @@ function showServerInstanceSelection(): void {
         <p class="eyebrow">MULTISERVIDOR</p>
         <h3>Selecciona un servidor</h3>
         <p>${hasInstances
-          ? 'Elige una carpeta existente desde el menu lateral o agrega otra instancia.'
+          ? 'Elige una carpeta existente desde el selector lateral o agrega otra instancia.'
           : 'Agrega la carpeta donde quieres instalar o administrar un servidor Palworld.'}</p>
         <button class="primary-button" type="button" data-add-server-instance="true">+ Agregar carpeta</button>
       </section>
