@@ -4,13 +4,13 @@
   <img src="src/renderer/assets/palcm-logo.png" alt="Logo de PSM Console" width="128" />
 </p>
 
-PSM Console es una aplicación portable para Windows que instala, configura, inicia y administra un servidor dedicado de Palworld desde una única interfaz.
+PSM Console es una aplicación para Windows que instala, configura, inicia y administra servidores dedicados de Palworld desde una única interfaz. Incluye una edición portable para un servidor y una edición instalable para administrar varias carpetas de servidor.
 
 Está desarrollada con Electron, NestJS y TypeScript. La interfaz no accede directamente al sistema: utiliza una capa IPC tipada, restringida y aislada.
 
 ## Descargas
 
-Las versiones publicadas y sus archivos portables se distribuyen desde la página de Releases.
+Las versiones publicadas se distribuyen desde la página de Releases. Cada entrega incluye el portable y el instalador multiservidor.
 
 [Ver releases y descargar PSM Console](https://github.com/Alexis190392/psm-console/releases)
 
@@ -73,6 +73,23 @@ npm.cmd run start:dev
 
 `start:dev` utiliza `ejecucionPruebas/` como directorio aislado, por lo que las descargas y datos de prueba no afectan una instalación portable.
 
+### Generar distribuciones
+
+```powershell
+# Ejecutable portable: usa la carpeta donde se ubica el .exe.
+npm.cmd run dist:portable
+
+# Instalador multiservidor: permite registrar y alternar entre varias carpetas.
+npm.cmd run dist:multi
+```
+
+Los archivos se generan en `release/`:
+
+- `PSM-Console-vX.Y.Z.exe`: edición portable.
+- `PSM-Console-Setup-vX.Y.Z.exe`: edición instalable multiservidor.
+
+La edición instalable conserva el registro de carpetas de servidor en la configuración de PSM Console. Al iniciar, descarta únicamente las entradas cuya carpeta ya no exista.
+
 ## Uso rápido
 
 1. Abre PSM Console y revisa el estado del entorno.
@@ -83,6 +100,6 @@ npm.cmd run start:dev
 
 ## Estado del proyecto
 
-Versión actual: `0.19.0 Dev`.
+Versión actual: `0.20.0 Dev`.
 
 Palworld, Steam y SteamCMD son marcas de sus respectivos propietarios. Este proyecto es una herramienta independiente y no está afiliado con Pocketpair ni Valve.

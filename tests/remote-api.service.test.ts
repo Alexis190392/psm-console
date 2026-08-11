@@ -234,9 +234,10 @@ describe('RemoteApiService', () => {
     expect((await fetch(`${baseUrl}/automation/idle`, { headers: adminHeaders })).status).toBe(200);
     const schemaResponse = await fetch(`${baseUrl}/configuration/schema`, { headers: adminHeaders });
     expect(schemaResponse.status).toBe(200);
-    expect((await schemaResponse.json()) as { settings: unknown[] }).toEqual(expect.objectContaining({
-      settings: expect.arrayContaining([expect.objectContaining({ key: 'ServerName' })])
-    }));
+    const configurationSchema = await schemaResponse.json() as unknown as { settings: unknown[] };
+    expect(configurationSchema.settings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'ServerName' })
+    ]));
 
     const updatedStatus = await remoteApi.update({
       confirmed: true,
@@ -456,7 +457,7 @@ function createRemoteApiFixture(
     } as unknown as PalworldPlayersService,
     { getStatus: vi.fn(), execute } as unknown as PalworldAdminService,
     {
-      readActive: vi.fn(async () => ({
+      readActive: vi.fn(() => ({
         path: 'PalWorldSettings.ini',
         content: '[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(ServerName="Servidor de prueba",ServerPlayerMaxNum=12,bIsPvP=False)',
         updatedAt: new Date().toISOString()

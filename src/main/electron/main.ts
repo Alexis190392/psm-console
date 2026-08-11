@@ -39,12 +39,17 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 function configureElectronRuntime(): void {
-  const userDataPath = app.isPackaged
-    ? join(dirname(app.getPath('exe')), 'app-data')
-    : join(process.cwd(), 'ejecucionPruebas', 'app-data');
+  const isPortableArtifact = Boolean(process.env['PORTABLE_EXECUTABLE_DIR']);
+  const userDataPath = app.isPackaged && !isPortableArtifact
+    ? app.getPath('userData')
+    : app.isPackaged
+      ? join(dirname(app.getPath('exe')), 'app-data')
+      : join(process.cwd(), 'ejecucionPruebas', 'app-data');
 
   mkdirSync(userDataPath, { recursive: true });
   app.setPath('userData', userDataPath);
+  process.env['PALCM_APP_DATA_PATH'] = userDataPath;
+  process.env['PALCM_MULTI_SERVER'] = app.isPackaged && !isPortableArtifact ? 'true' : 'false';
   app.disableHardwareAcceleration();
 }
 

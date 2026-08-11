@@ -93,6 +93,21 @@ export class PalworldProcessService {
     return createQueryPortStatus(getUdpPortOwner(STEAM_QUERY_PORT), STEAM_QUERY_PORT);
   }
 
+  isRunningAt(executablePath: string): boolean {
+    return this.getActiveProcesses(executablePath, { forceScan: true }).length > 0;
+  }
+
+  getRunningExecutablePaths(executablePaths: string[]): Set<string> {
+    const detectedProcesses = scanPalServerProcesses();
+
+    return new Set(
+      executablePaths.filter((executablePath) => {
+        const expectedPaths = createExpectedRuntimePaths(executablePath);
+        return detectedProcesses.some((process) => expectedPaths.has(normalizePath(process.executablePath)));
+      })
+    );
+  }
+
   start(request: PalworldStartRequestDto): OperationAcceptedDto {
     if (!request.confirmed) {
       throw new Error('PALWORLD_START_REQUIRES_CONFIRMATION');
@@ -629,6 +644,12 @@ export function resolvePalworldRuntimeExecutable(executablePath: string): Palwor
 }
 
 function findPalServerProcesses(expectedExecutablePath: string): DetectedPalServerProcess[] {
+  const expectedPaths = createExpectedRuntimePaths(expectedExecutablePath);
+  return scanPalServerProcesses()
+    .filter((process) => expectedPaths.has(normalizePath(process.executablePath)));
+}
+
+function scanPalServerProcesses(): DetectedPalServerProcess[] {
   const result = spawnSync(
     'powershell.exe',
     [
@@ -651,13 +672,7 @@ function findPalServerProcesses(expectedExecutablePath: string): DetectedPalServ
     return [];
   }
 
-  const expectedPaths = createExpectedRuntimePaths(expectedExecutablePath);
-  return parsePowerShellProcesses(result.stdout)
-    .filter((process) => expectedPaths.has(normalizePath(process.executablePath)))
-    .map((process) => ({
-      pid: process.pid,
-      executablePath: process.executablePath
-    }));
+  return parsePowerShellProcesses(result.stdout);
 }
 
 function isPidRunning(pid: number): boolean {

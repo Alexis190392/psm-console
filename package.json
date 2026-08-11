@@ -1,6 +1,6 @@
 {
   "name": "palcm",
-  "version": "0.19.5",
+  "version": "0.20.0",
   "private": true,
   "description": "PSM Console by >GR477< - Palworld Server Manager",
   "author": "Alexis Joel Dávila (>GR477<)",
@@ -23,6 +23,7 @@
     "pack": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder --win nsis",
     "dist:portable": "npm run build && electron-builder --win portable",
+    "dist:multi": "npm run build && electron-builder --win nsis",
     "validate:portable": "npm run build:main && node dist/tools/portable-artifact-validator.js",
     "capture:responsive": "npm run build && electron scripts/capture-responsive-screenshots.js",
     "capture:manual": "set PALCM_CAPTURE_MODE=manual&& npm run build && electron scripts/capture-responsive-screenshots.js",
@@ -106,7 +107,7 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "PalCM",
-      "artifactName": "PalCM-Setup-${version}.${ext}"
+      "artifactName": "PSM-Console-Setup-v${version}.${ext}"
     },
     "portable": {
       "artifactName": "PSM-Console-v${version}.${ext}"

@@ -4,5 +4,6 @@ export interface ApplicationStatusDto {
   status: ApplicationStatus;
   portableRoot: string;
   isPortableRootWritable: boolean;
+  requiresServerSelection?: boolean;
   updatedAt: string;
 }

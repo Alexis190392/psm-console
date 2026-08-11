@@ -1,5 +1,5 @@
 import type { INestApplicationContext } from '@nestjs/common';
-import { app, BrowserWindow, shell, type IpcMain, type IpcMainInvokeEvent, type ProcessMetric } from 'electron';
+import { app, BrowserWindow, dialog, shell, type IpcMain, type IpcMainInvokeEvent, type ProcessMetric } from 'electron';
 import { ApplicationStateService } from '../../backend/application-state/application-state.service';
 import { AppSettingsService } from '../../backend/app-settings/app-settings.service';
 import { BackupService } from '../../backend/backup/backup.service';
@@ -16,6 +16,7 @@ import { SteamCmdService } from '../../backend/steamcmd/steamcmd.service';
 import { ReleaseUpdateService } from '../../backend/release-update/release-update.service';
 import { RemoteApiService } from '../../backend/remote-api/remote-api.service';
 import { ServerIdleShutdownService } from '../../backend/server-idle-shutdown/server-idle-shutdown.service';
+import { PortablePathService } from '../../backend/portable-path/portable-path.service';
 import { ipcChannels } from '../../shared/contracts/ipc-channels';
 import type {
   PalworldRestoreDefaultConfigurationRequestDto,
@@ -78,6 +79,7 @@ export function registerIpcHandlers(
   const releaseUpdateService = nestContext.get(ReleaseUpdateService);
   const remoteApiService = nestContext.get(RemoteApiService);
   const serverIdleShutdownService = nestContext.get(ServerIdleShutdownService);
+  const portablePathService = nestContext.get(PortablePathService);
 
   palworldProcessService.onRuntimeStateChanged(() => {
     BrowserWindow.getAllWindows().forEach((window) => {
@@ -96,6 +98,50 @@ export function registerIpcHandlers(
   );
 
   ipcMain.handle(ipcChannels.appGetProcessMetrics, () => getAppProcessMetrics());
+
+  ipcMain.handle(ipcChannels.instancesGetStatus, () => {
+    const status = portablePathService.getServerInstances();
+    const executablePaths = status.instances.map((instance) =>
+      portablePathService.getServerInstanceExecutablePath(instance.id)
+    );
+    const runningPaths = palworldProcessService.getRunningExecutablePaths(executablePaths);
+
+    return {
+      ...status,
+      instances: status.instances.map((instance, index) => {
+        const executablePath = executablePaths[index];
+        return {
+          ...instance,
+          isRunning: executablePath ? runningPaths.has(executablePath) : false
+        };
+      })
+    };
+  });
+
+  ipcMain.handle(ipcChannels.instancesAddFolder, async (event) => {
+    const parentWindow = getSenderWindow(event);
+    const result = parentWindow
+      ? await dialog.showOpenDialog(parentWindow, {
+        title: 'Agregar carpeta de servidor',
+        properties: ['openDirectory', 'createDirectory']
+      })
+      : await dialog.showOpenDialog({
+      title: 'Agregar carpeta de servidor',
+      properties: ['openDirectory', 'createDirectory']
+    });
+    if (result.canceled || result.filePaths.length === 0) {
+      return portablePathService.getServerInstances();
+    }
+    const folderPath = result.filePaths[0];
+    if (!folderPath) {
+      return portablePathService.getServerInstances();
+    }
+    return portablePathService.addServerFolder(folderPath);
+  });
+
+  ipcMain.handle(ipcChannels.instancesSelect, (_event, instanceId: string) =>
+    portablePathService.selectServerInstance(instanceId)
+  );
 
   ipcMain.handle(ipcChannels.appSettingsGetStatus, () => appSettingsService.getStatus());
 

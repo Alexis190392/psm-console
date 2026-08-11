@@ -14,6 +14,7 @@ import type {
   FirewallStatusDto
 } from '../shared/dto/firewall-status.dto';
 import type { NetworkDiagnosticsDto } from '../shared/dto/network-diagnostics.dto';
+import type { ServerInstancesStatusDto } from '../shared/dto/server-instance.dto';
 import type { LogFileSummaryDto, LogModule } from '../shared/dto/log-status.dto';
 import type { OperationProgressDto } from '../shared/dto/operation-progress.dto';
 import type { PalworldAdminAction, PalworldAdminStatusDto } from '../shared/dto/palworld-admin.dto';
@@ -138,6 +139,15 @@ rootElement.innerHTML = `
         aria-expanded="true"
         title="Contraer menu lateral"
       >${renderIcon('sidebar-collapse')}</button>
+    </section>
+    <section id="server-instance-selector" class="server-instance-selector hidden" aria-label="Servidor seleccionado">
+      <label for="server-instance-select">Servidor</label>
+      <div class="server-instance-selector__controls">
+        <select id="server-instance-select" aria-label="Seleccionar servidor">
+          <option value="">Seleccionar carpeta</option>
+        </select>
+        <button id="add-server-instance" class="server-instance-selector__add" type="button" title="Agregar carpeta de servidor" aria-label="Agregar carpeta de servidor">+ Agregar</button>
+      </div>
     </section>
     <nav class="sidebar__nav" aria-label="Navegacion principal">
       <a class="sidebar__link sidebar__link--active" data-nav="home" href="#">
@@ -342,6 +352,9 @@ const toastRegion = document.querySelector<HTMLElement>('#toast-region');
 const sidebarRuntimeStatus = document.querySelector<HTMLElement>('#sidebar-runtime-status');
 const startServerAction = document.querySelector<HTMLButtonElement>('#start-server-action');
 const sidebarToggle = document.querySelector<HTMLButtonElement>('#sidebar-toggle');
+const serverInstanceSelector = document.querySelector<HTMLElement>('#server-instance-selector');
+const serverInstanceSelect = document.querySelector<HTMLSelectElement>('#server-instance-select');
+const addServerInstanceButton = document.querySelector<HTMLButtonElement>('#add-server-instance');
 const navLinks = Array.from(document.querySelectorAll<HTMLAnchorElement>('[data-nav]'));
 const adminNavGroup = document.querySelector<HTMLElement>('[data-nav-group="admin"]');
 const settingsNavGroup = document.querySelector<HTMLElement>('[data-nav-group="settings"]');
@@ -411,6 +424,7 @@ let activeCancellableOperationId: string | null = null;
 const navigationState = new NavigationState();
 let latestStatus: ApplicationStatus = ApplicationStatus.BOOTSTRAPPING;
 let latestActions: AllowedActionsDto | null = null;
+let latestServerInstances: ServerInstancesStatusDto | null = null;
 let lastCopyToast: { value: string; copiedAt: number } | null = null;
 let confirmationReturnFocus: HTMLElement | null = null;
 let confirmationFocusActive = false;
@@ -449,6 +463,24 @@ if (!palcmApi) {
   palcmApi.firewall.onDiagnosticProgress(updateFirewallDiagnosticProgress);
   palcmApi.server.onRuntimeStatusChanged(scheduleRuntimeStateRefresh);
   await refreshState();
+
+  addServerInstanceButton?.addEventListener('click', () => {
+    runUiAction('No se pudo agregar la carpeta del servidor', async () => {
+      await palcmApi.instances.addFolder();
+      await refreshState();
+    });
+  });
+
+  serverInstanceSelect?.addEventListener('change', () => {
+    const instanceId = serverInstanceSelect.value;
+    if (!instanceId) {
+      return;
+    }
+    runUiAction('No se pudo cambiar de servidor', async () => {
+      await palcmApi.instances.select(instanceId);
+      await refreshState();
+    });
+  });
 
   confirmActionButton?.addEventListener('click', () => {
     runUiAction('No se pudo ejecutar la accion pendiente', runPendingAction);
@@ -749,6 +781,20 @@ async function refreshState(): Promise<void> {
   try {
     const status = await palcmApi.app.getStatus();
     const actions = await palcmApi.app.getActions();
+    await refreshServerInstanceSelector();
+    latestStatus = status.status;
+    latestActions = actions;
+    setText(statusLabel, status.status);
+    renderHero(status.status);
+    setProgressForStatus(status.status);
+    updateNavigation(status.status);
+    updateStartServerButton(actions);
+
+    if (status.requiresServerSelection) {
+      showServerInstanceSelection();
+      return;
+    }
+
     const steamCmd = await palcmApi.steamCmd.getStatus();
     const server = await palcmApi.server.getInstallationStatus();
     const config = await palcmApi.config.getStatus();
@@ -1069,6 +1115,12 @@ function showIpcError(message: string): void {
 }
 
 function renderHero(status: ApplicationStatus): void {
+  if (status === ApplicationStatus.SERVER_SELECTION_REQUIRED) {
+    setText(heroEyebrow, 'MULTISERVIDOR');
+    setText(heroTitle, 'Selecciona una carpeta');
+    setText(heroSubtitle, 'Cada carpeta conserva su propio servidor, configuracion, backups y logs.');
+    return;
+  }
   if (status === ApplicationStatus.SERVER_STARTING) {
     setText(heroEyebrow, 'SERVER');
     setText(heroTitle, 'Servidor iniciando');
@@ -1111,6 +1163,7 @@ function renderHero(status: ApplicationStatus): void {
 
 function setProgressForStatus(status: ApplicationStatus): void {
   const statusProgress: Partial<Record<ApplicationStatus, number>> = {
+    [ApplicationStatus.SERVER_SELECTION_REQUIRED]: 0,
     [ApplicationStatus.STEAMCMD_MISSING]: 25,
     [ApplicationStatus.STEAMCMD_INSTALLING]: 40,
     [ApplicationStatus.SERVER_MISSING]: 60,
@@ -1238,7 +1291,8 @@ function renderConsoleOutput(): void {
 function updateNavigation(status: ApplicationStatus): void {
   const serverAvailable = ![
     ApplicationStatus.STEAMCMD_MISSING,
-    ApplicationStatus.SERVER_MISSING
+    ApplicationStatus.SERVER_MISSING,
+    ApplicationStatus.SERVER_SELECTION_REQUIRED
   ].includes(status);
   const logsAvailable = serverAvailable;
   const serverRunning = status === ApplicationStatus.SERVER_RUNNING;
@@ -2932,6 +2986,59 @@ function stopRuntimeViewRefreshers(): void {
     generalRemoteApiRefreshTimer = null;
   }
   releaseAdminMapResources();
+}
+
+async function refreshServerInstanceSelector(): Promise<void> {
+  if (!palcmApi) {
+    return;
+  }
+
+  const status = await palcmApi.instances.getStatus();
+  latestServerInstances = status;
+  serverInstanceSelector?.classList.toggle('hidden', status.mode !== 'MULTI_SERVER');
+
+  if (!serverInstanceSelect || status.mode !== 'MULTI_SERVER') {
+    return;
+  }
+
+  const selectedId = status.selectedInstanceId ?? '';
+  serverInstanceSelect.innerHTML = [
+    '<option value="">Seleccionar carpeta</option>',
+    ...status.instances.map((instance) => {
+      const state = instance.isRunning ? '●' : '○';
+      return `<option value="${escapeHtml(instance.id)}"${instance.id === selectedId ? ' selected' : ''}>${state} ${escapeHtml(instance.name)}</option>`;
+    })
+  ].join('');
+}
+
+function showServerInstanceSelection(): void {
+  hideConfirmation();
+  showPreflight();
+  document.querySelector('.hero')?.classList.remove('hidden');
+  document.querySelector('.console-shell')?.classList.add('hidden');
+  panelStatusHeader?.classList.add('hidden');
+  progressBar?.parentElement?.classList.add('hidden');
+  contentView?.classList.remove('hidden');
+  if (!contentView) {
+    return;
+  }
+
+  const hasInstances = Boolean(latestServerInstances?.instances.length);
+  contentView.innerHTML = `
+    <div class="view-stack instance-selection-view">
+      <section class="instance-selection-card">
+        <p class="eyebrow">MULTISERVIDOR</p>
+        <h3>Selecciona un servidor</h3>
+        <p>${hasInstances
+          ? 'Elige una carpeta existente desde el menu lateral o agrega otra instancia.'
+          : 'Agrega la carpeta donde quieres instalar o administrar un servidor Palworld.'}</p>
+        <button class="primary-button" type="button" data-add-server-instance="true">+ Agregar carpeta</button>
+      </section>
+    </div>
+  `;
+  contentView.querySelector<HTMLButtonElement>('[data-add-server-instance="true"]')?.addEventListener('click', () => {
+    addServerInstanceButton?.click();
+  });
 }
 
 async function renderAdminView(renderId = ++activeViewRenderId): Promise<void> {

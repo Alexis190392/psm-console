@@ -26,7 +26,10 @@ Este manual explica cómo preparar, configurar y administrar un servidor dedicad
 - Espacio libre suficiente para el servidor, sus actualizaciones, partidas y backups.
 - Permisos de administrador solamente cuando Windows solicite configurar el Firewall.
 
-PSM Console es portable. Coloca el ejecutable en una carpeta propia antes de abrirlo, porque el servidor y sus datos se guardarán junto a la aplicación.
+PSM Console ofrece dos ediciones para Windows:
+
+- **Portable:** coloca el ejecutable en una carpeta propia antes de abrirlo. El servidor y sus datos se guardan junto a la aplicación.
+- **Instalable multiservidor:** instala PSM Console y registra una o más carpetas de servidores existentes o nuevas. El selector superior permite alternar entre ellas y marca en verde las que están ejecutándose.
 
 Ejemplo:
 
@@ -35,14 +38,14 @@ D:\PSM Console\
   PSM-Console-vX.Y.Z.exe
 ```
 
-No ejecutes el portable desde una carpeta temporal, dentro de un archivo comprimido ni desde una ubicación que se limpie automáticamente.
+No ejecutes el portable desde una carpeta temporal, dentro de un archivo comprimido ni desde una ubicación que se limpie automáticamente. En la edición instalable, no elimines una carpeta registrada mientras el servidor esté en ejecución.
 
 ## 2. Primer inicio
 
 Al abrir PSM Console por primera vez:
 
 1. El logo aparece mientras se prepara la ventana principal.
-2. La aplicación revisa la carpeta portable y las dependencias disponibles.
+2. En portable revisa su propia carpeta; en la edición instalable selecciona una carpeta registrada o usa **+ Agregar** para elegirla.
 3. Si SteamCMD no está instalado, muestra una confirmación antes de descargarlo desde el sitio oficial.
 4. Cuando SteamCMD esté listo, solicita confirmación para instalar Palworld Dedicated Server.
 5. Si falta `PalWorldSettings.ini`, crea una configuración inicial válida.

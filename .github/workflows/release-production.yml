@@ -15,8 +15,8 @@ permissions:
   contents: write
 
 jobs:
-  portable:
-    name: Generar portable estable
+  artifacts:
+    name: Generar versiones estables
     runs-on: windows-latest
 
     steps:
@@ -44,11 +44,14 @@ jobs:
       - name: Generar portable
         run: npm run dist:portable
 
+      - name: Generar instalable multiservidor
+        run: npm run dist:multi
+
       - name: Publicar artefacto estable
         uses: actions/upload-artifact@v4
         with:
-          name: PSM-Console-portable
-          path: release/PSM-Console-v*.exe
+          name: PSM-Console
+          path: release/PSM-Console-*.exe
           if-no-files-found: error
 
       - name: Crear release estable
@@ -57,4 +60,4 @@ jobs:
           tag_name: v${{ env.VERSION }}
           name: PSM Console v${{ env.VERSION }}
           generate_release_notes: true
-          files: release/PSM-Console-v*.exe
+          files: release/PSM-Console-*.exe

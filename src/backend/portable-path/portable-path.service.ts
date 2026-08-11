@@ -1,6 +1,7 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
-import { mkdirSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join, normalize, resolve } from 'node:path';
+import type { ServerInstancesStatusDto } from '../../shared/dto/server-instance.dto';
 
 export interface ElectronAppPathProvider {
   getPath(name: 'exe'): string;
@@ -12,6 +13,7 @@ export const ELECTRON_APP_PATH_PROVIDER = 'ELECTRON_APP_PATH_PROVIDER';
 @Injectable()
 export class PortablePathService {
   private readonly developmentRoot = process.cwd();
+  private selectedInstance: ManagedServerInstance | null = null;
 
   constructor(
     @Optional()
@@ -19,7 +21,129 @@ export class PortablePathService {
     private readonly appPathProvider?: ElectronAppPathProvider
   ) {}
 
+  isMultiServerMode(): boolean {
+    return process.env['PALCM_MULTI_SERVER'] === 'true';
+  }
+
   getPortableRoot(): string {
+    if (this.isMultiServerMode()) {
+      return this.getSelectedInstance()?.rootPath ?? join(this.getApplicationDataRoot(), 'unassigned-server');
+    }
+
+    return this.getDefaultPortableRoot();
+  }
+
+  getServerInstances(): ServerInstancesStatusDto {
+    if (!this.isMultiServerMode()) {
+      const rootPath = this.getDefaultPortableRoot();
+      return {
+        mode: 'PORTABLE',
+        instances: [{
+          id: 'portable',
+          rootPath,
+          name: 'Servidor portable',
+          isSelected: true,
+          isRunning: false,
+          addedAt: new Date(0).toISOString()
+        }]
+      };
+    }
+
+    const registry = this.readRegistry();
+    const instances = registry.instances
+      .filter((instance) => existsSync(instance.rootPath))
+      .map((instance) => refreshManagedServerInstance(instance));
+    if (JSON.stringify(instances) !== JSON.stringify(registry.instances)) {
+      registry.instances = instances;
+      if (registry.selectedInstanceId && !instances.some((instance) => instance.id === registry.selectedInstanceId)) {
+        registry.selectedInstanceId = undefined;
+      }
+      this.writeRegistry(registry);
+      this.selectedInstance = null;
+    }
+
+    return {
+      mode: 'MULTI_SERVER',
+      selectedInstanceId: registry.selectedInstanceId,
+      instances: instances.map((instance) => ({
+        id: instance.id,
+        rootPath: instance.rootPath,
+        name: instance.name,
+        isSelected: instance.id === registry.selectedInstanceId,
+        isRunning: false,
+        addedAt: instance.addedAt
+      }))
+    };
+  }
+
+  addServerFolder(folderPath: string): ServerInstancesStatusDto {
+    if (!this.isMultiServerMode()) {
+      throw new Error('SERVER_INSTANCES_ONLY_AVAILABLE_IN_INSTALLABLE');
+    }
+
+    const rootPath = normalize(resolve(folderPath));
+    if (!existsSync(rootPath)) {
+      throw new Error('SERVER_INSTANCE_FOLDER_NOT_FOUND');
+    }
+
+    const registry = this.readRegistry();
+    const existing = registry.instances.find((instance) => normalize(instance.rootPath).toLowerCase() === rootPath.toLowerCase());
+    const serverRoot = resolveExistingServerRoot(rootPath);
+    const next = existing ?? {
+      id: createInstanceId(rootPath),
+      rootPath,
+      name: readServerName(serverRoot) ?? createFolderDisplayName(rootPath),
+      serverRoot,
+      addedAt: new Date().toISOString()
+    };
+
+    next.serverRoot = serverRoot;
+    next.name = readServerName(serverRoot) ?? next.name;
+    if (!existing) {
+      registry.instances.push(next);
+    }
+    registry.selectedInstanceId = next.id;
+    this.writeRegistry(registry);
+    this.selectedInstance = next;
+    return this.getServerInstances();
+  }
+
+  selectServerInstance(instanceId: string): ServerInstancesStatusDto {
+    if (!this.isMultiServerMode()) {
+      return this.getServerInstances();
+    }
+
+    const registry = this.readRegistry();
+    const instance = registry.instances.find((entry) => entry.id === instanceId && existsSync(entry.rootPath));
+    if (!instance) {
+      throw new Error('SERVER_INSTANCE_NOT_FOUND');
+    }
+
+    instance.serverRoot = resolveExistingServerRoot(instance.rootPath);
+    instance.name = readServerName(instance.serverRoot) ?? instance.name;
+    registry.selectedInstanceId = instance.id;
+    this.writeRegistry(registry);
+    this.selectedInstance = instance;
+    return this.getServerInstances();
+  }
+
+  hasSelectedServerInstance(): boolean {
+    return !this.isMultiServerMode() || this.getSelectedInstance() !== null;
+  }
+
+  getSelectedServerInstanceName(): string | undefined {
+    return this.getSelectedInstance()?.name;
+  }
+
+  getServerInstanceExecutablePath(instanceId: string): string {
+    const instance = this.readRegistry().instances.find((entry) => entry.id === instanceId);
+    const serverRoot = instance?.serverRoot
+      ?? (instance ? resolveExistingServerRoot(instance.rootPath) ?? join(instance.rootPath, 'server', 'palworld') : undefined)
+      ?? this.getPalworldServerRoot();
+    return join(serverRoot, 'PalServer.exe');
+  }
+
+  private getDefaultPortableRoot(): string {
     const portableExecutableDirectory = process.env['PORTABLE_EXECUTABLE_DIR'];
     if (portableExecutableDirectory) {
       return portableExecutableDirectory;
@@ -50,6 +174,10 @@ export class PortablePathService {
   }
 
   getPalworldServerRoot(): string {
+    const selectedInstance = this.getSelectedInstance();
+    if (selectedInstance?.serverRoot) {
+      return selectedInstance.serverRoot;
+    }
     return join(this.getPortableRoot(), 'server', 'palworld');
   }
 
@@ -62,6 +190,9 @@ export class PortablePathService {
   }
 
   ensurePortableLayout(): void {
+    if (!this.hasSelectedServerInstance()) {
+      return;
+    }
     [
       this.getPortableRoot(),
       this.getToolsRoot(),
@@ -76,4 +207,124 @@ export class PortablePathService {
       mkdirSync(directory, { recursive: true });
     });
   }
+
+  private getSelectedInstance(): ManagedServerInstance | null {
+    if (!this.isMultiServerMode()) {
+      return null;
+    }
+
+    if (this.selectedInstance && existsSync(this.selectedInstance.rootPath)) {
+      return this.selectedInstance;
+    }
+
+    const registry = this.readRegistry();
+    const selected = registry.instances.find((instance) => instance.id === registry.selectedInstanceId && existsSync(instance.rootPath)) ?? null;
+    this.selectedInstance = selected;
+    return selected;
+  }
+
+  private getApplicationDataRoot(): string {
+    return process.env['PALCM_APP_DATA_PATH'] ?? join(this.getDefaultPortableRoot(), 'app-data');
+  }
+
+  private getRegistryPath(): string {
+    return join(this.getApplicationDataRoot(), 'server-instances.json');
+  }
+
+  private readRegistry(): ServerInstanceRegistry {
+    const path = this.getRegistryPath();
+    if (!existsSync(path)) {
+      return { version: 1, instances: [] };
+    }
+
+    try {
+      const parsed = JSON.parse(readFileSync(path, 'utf8')) as Partial<ServerInstanceRegistry>;
+      return {
+        version: 1,
+        selectedInstanceId: typeof parsed.selectedInstanceId === 'string' ? parsed.selectedInstanceId : undefined,
+        instances: Array.isArray(parsed.instances)
+          ? parsed.instances.filter(isManagedServerInstance)
+          : []
+      };
+    } catch {
+      return { version: 1, instances: [] };
+    }
+  }
+
+  private writeRegistry(registry: ServerInstanceRegistry): void {
+    const path = this.getRegistryPath();
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, `${JSON.stringify(registry, null, 2)}\n`, 'utf8');
+  }
+}
+
+interface ManagedServerInstance {
+  id: string;
+  rootPath: string;
+  name: string;
+  serverRoot?: string;
+  addedAt: string;
+}
+
+interface ServerInstanceRegistry {
+  version: 1;
+  selectedInstanceId?: string;
+  instances: ManagedServerInstance[];
+}
+
+function isManagedServerInstance(value: unknown): value is ManagedServerInstance {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const candidate = value as Partial<ManagedServerInstance>;
+  return typeof candidate.id === 'string'
+    && typeof candidate.rootPath === 'string'
+    && typeof candidate.name === 'string'
+    && typeof candidate.addedAt === 'string';
+}
+
+function resolveExistingServerRoot(rootPath: string): string | undefined {
+  const candidates = [
+    rootPath,
+    join(rootPath, 'server', 'palworld')
+  ];
+  return candidates.find((candidate) => existsSync(join(candidate, 'PalServer.exe')) || existsSync(join(candidate, 'Pal', 'Saved', 'Config', 'WindowsServer', 'PalWorldSettings.ini')));
+}
+
+function readServerName(serverRoot: string | undefined): string | undefined {
+  if (!serverRoot) {
+    return undefined;
+  }
+  const configurationPath = join(serverRoot, 'Pal', 'Saved', 'Config', 'WindowsServer', 'PalWorldSettings.ini');
+  if (!existsSync(configurationPath)) {
+    return undefined;
+  }
+  try {
+    const content = readFileSync(configurationPath, 'utf8');
+    const quoted = content.match(/ServerName\s*=\s*"([^"]*)"/i)?.[1];
+    const unquoted = content.match(/ServerName\s*=\s*([^,\)\r\n]+)/i)?.[1];
+    return (quoted ?? unquoted)?.trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function createFolderDisplayName(rootPath: string): string {
+  return rootPath.split(/[\\/]/).filter(Boolean).at(-1) || 'Nuevo servidor';
+}
+
+function createInstanceId(rootPath: string): string {
+  const normalized = rootPath.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return `${normalized || 'server'}-${Date.now().toString(36)}`;
+}
+
+function refreshManagedServerInstance(instance: ManagedServerInstance): ManagedServerInstance {
+  const serverRoot = resolveExistingServerRoot(instance.rootPath);
+  const name = readServerName(serverRoot) ?? instance.name;
+
+  return {
+    ...instance,
+    serverRoot,
+    name
+  };
 }
