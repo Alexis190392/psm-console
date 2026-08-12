@@ -10,6 +10,8 @@ export const ipcChannels = {
   instancesSelectBaseFolder: 'instances:select-base-folder',
   instancesSelect: 'instances:select',
   appSettingsGetStatus: 'app-settings:get-status',
+  palworldSettingsDefinitionsGet: 'palworld-settings-definitions:get',
+  palworldSettingsDefinitionsChanged: 'palworld-settings-definitions:changed',
   remoteApiGetStatus: 'remote-api:get-status',
   remoteApiUpdate: 'remote-api:update',
   remoteApiFirewallGetStatus: 'remote-api-firewall:get-status',

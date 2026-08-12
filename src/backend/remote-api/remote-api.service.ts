@@ -46,6 +46,7 @@ import { PalworldPlayersService } from '../palworld-players/palworld-players.ser
 import { PalworldProcessService } from '../palworld-process/palworld-process.service';
 import { PalworldInstallationService } from '../palworld-installation/palworld-installation.service';
 import { PortablePathService } from '../portable-path/portable-path.service';
+import { PalworldSettingsDefinitionsService } from '../palworld-settings/palworld-settings-definitions.service';
 import { ReleaseUpdateService } from '../release-update/release-update.service';
 import { ServerIdleShutdownService } from '../server-idle-shutdown/server-idle-shutdown.service';
 import { SteamCmdService } from '../steamcmd/steamcmd.service';
@@ -126,10 +127,12 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
     private readonly palworldInstallationService: PalworldInstallationService,
     private readonly releaseUpdateService: ReleaseUpdateService,
     private readonly serverIdleShutdownService: ServerIdleShutdownService,
-    private readonly portablePathService: PortablePathService
+    private readonly portablePathService: PortablePathService,
+    private readonly palworldSettingsDefinitionsService: PalworldSettingsDefinitionsService
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
+    await this.palworldSettingsDefinitionsService.ensureLoaded();
     await this.applyCurrentSettings();
   }
 
@@ -959,6 +962,7 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
       path: file.path,
       content: file.content,
       updatedAt: file.updatedAt,
+      definitionsRevision: this.palworldSettingsDefinitionsService.getRevision(),
       prefix: parsed.prefix,
       suffix: parsed.suffix,
       presets: CONFIGURATION_PRESETS,

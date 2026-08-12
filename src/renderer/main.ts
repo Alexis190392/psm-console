@@ -35,7 +35,7 @@ import { renderInlineConfirm } from './components/inline-confirm';
 import { renderIcon } from './components/icon';
 import { CONFIGURATION_PRESETS } from './config/configuration-presets';
 import { hasConfigurationChangedExternally } from './config/configuration-change-guard';
-import { getSettingDefinition } from './config/setting-definition-resolver';
+import { getSettingDefinition, setExternalSettingDefinitions } from './config/setting-definition-resolver';
 import { getZeroToggleSetting, isZeroSettingValue } from './config/zero-toggle-settings';
 import {
   PALWORLD_MAP_LAYER_BOUNDS,
@@ -501,6 +501,14 @@ if (!palcmApi) {
 } else {
   palcmApi.firewall.onDiagnosticProgress(updateFirewallDiagnosticProgress);
   palcmApi.server.onRuntimeStatusChanged(scheduleRuntimeStateRefresh);
+  palcmApi.palworldSettingsDefinitions.onChanged((status) => {
+    setExternalSettingDefinitions(status.definitions);
+    if (navigationState.is('server')) {
+      renderActiveView();
+    }
+  });
+  const settingsDefinitions = await palcmApi.palworldSettingsDefinitions.getStatus();
+  setExternalSettingDefinitions(settingsDefinitions.definitions);
   await refreshState();
 
   addServerInstanceButton?.addEventListener('click', () => {

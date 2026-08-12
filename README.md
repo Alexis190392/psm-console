@@ -28,6 +28,7 @@ El manual explica la preparación inicial, configuración, administración, back
 - Detecta, descarga y valida SteamCMD con confirmación explícita.
 - Instala, actualiza y repara Palworld Dedicated Server.
 - Crea y edita `PalWorldSettings.ini` mediante controles agrupados y perfiles.
+- Genera `config/palworld-settings.definitions.json` para mantener titulos, descripciones y tipos de parametros sin recompilar.
 - Crea backups, verifica su integridad y los restaura de forma segura.
 - Revisa Firewall de Windows, acceso local y datos de conexión pública.
 - Inicia, detiene y supervisa el servidor con logs en tiempo real.

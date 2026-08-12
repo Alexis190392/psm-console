@@ -17,6 +17,7 @@ import { ReleaseUpdateService } from '../../backend/release-update/release-updat
 import { RemoteApiService } from '../../backend/remote-api/remote-api.service';
 import { ServerIdleShutdownService } from '../../backend/server-idle-shutdown/server-idle-shutdown.service';
 import { PortablePathService } from '../../backend/portable-path/portable-path.service';
+import { PalworldSettingsDefinitionsService } from '../../backend/palworld-settings/palworld-settings-definitions.service';
 import { ipcChannels } from '../../shared/contracts/ipc-channels';
 import type {
   PalworldRestoreDefaultConfigurationRequestDto,
@@ -81,6 +82,7 @@ export function registerIpcHandlers(
   const remoteApiService = nestContext.get(RemoteApiService);
   const serverIdleShutdownService = nestContext.get(ServerIdleShutdownService);
   const portablePathService = nestContext.get(PortablePathService);
+  const palworldSettingsDefinitionsService = nestContext.get(PalworldSettingsDefinitionsService);
 
   palworldProcessService.onRuntimeStateChanged(() => {
     BrowserWindow.getAllWindows().forEach((window) => {
@@ -108,6 +110,14 @@ export function registerIpcHandlers(
     }
     app.setLoginItemSettings({ openAtLogin: enabled, openAsHidden: false });
     return getAppStartupStatus();
+  });
+
+  palworldSettingsDefinitionsService.onChanged((status) => {
+    BrowserWindow.getAllWindows().forEach((window) => {
+      if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
+        window.webContents.send(ipcChannels.palworldSettingsDefinitionsChanged, status);
+      }
+    });
   });
 
   ipcMain.handle(ipcChannels.instancesGetStatus, () => {
@@ -172,6 +182,10 @@ export function registerIpcHandlers(
   );
 
   ipcMain.handle(ipcChannels.appSettingsGetStatus, () => appSettingsService.getStatus());
+
+  ipcMain.handle(ipcChannels.palworldSettingsDefinitionsGet, () =>
+    palworldSettingsDefinitionsService.ensureLoaded()
+  );
 
   ipcMain.handle(ipcChannels.remoteApiGetStatus, () => remoteApiService.getStatus());
 
