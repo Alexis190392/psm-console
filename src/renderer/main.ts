@@ -3132,6 +3132,7 @@ async function refreshServerInstanceSelector(): Promise<void> {
 function setServerInstanceMenuOpen(isOpen: boolean): void {
   const isAvailable = serverInstanceSelector !== null && !serverInstanceSelector.classList.contains('hidden');
   serverInstanceMenuOpen = isOpen && isAvailable;
+  rootElement.classList.toggle('app--server-instance-menu-open', serverInstanceMenuOpen);
   serverInstanceOptions?.classList.toggle('hidden', !serverInstanceMenuOpen);
   serverInstanceTrigger?.setAttribute('aria-expanded', serverInstanceMenuOpen ? 'true' : 'false');
 }
