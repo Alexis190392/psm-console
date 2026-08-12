@@ -1506,8 +1506,43 @@ input[type="range"] {
   left: 50%;
   width: min(460px, calc(100vw - 36px));
   margin: 0;
+  padding: 24px;
+  overflow: visible;
+  border: 1px solid rgba(14, 225, 237, 0.86);
+  border-right-color: rgba(255, 35, 139, 0.9);
+  border-radius: 0;
+  background:
+    linear-gradient(135deg, rgba(0, 218, 231, 0.08), transparent 42%),
+    linear-gradient(315deg, rgba(255, 35, 139, 0.09), transparent 40%),
+    rgba(5, 14, 22, 0.985);
   transform: translate(-50%, -50%);
-  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.62), 0 0 32px rgba(0, 217, 232, 0.14);
+  box-shadow:
+    0 28px 80px rgba(0, 0, 0, 0.78),
+    0 0 0 9999px rgba(0, 0, 0, 0.42),
+    0 0 34px rgba(0, 217, 232, 0.2);
+}
+
+.new-server-panel::before,
+.new-server-panel::after {
+  position: absolute;
+  height: 3px;
+  content: '';
+}
+
+.new-server-panel::before {
+  top: -1px;
+  left: 24px;
+  width: 116px;
+  background: var(--accent-cyan);
+  box-shadow: 0 0 12px rgba(0, 217, 232, 0.72);
+}
+
+.new-server-panel::after {
+  right: 24px;
+  bottom: -1px;
+  width: 82px;
+  background: #ff238b;
+  box-shadow: 0 0 12px rgba(255, 35, 139, 0.66);
 }
 
 .new-server-panel__field {
@@ -1521,6 +1556,11 @@ input[type="range"] {
 .new-server-panel__field input {
   width: 100%;
   min-height: 42px;
+  border-color: rgba(16, 217, 232, 0.58);
+  border-radius: 0;
+  background: rgba(1, 8, 14, 0.94);
+  color: var(--text-primary);
+  box-shadow: inset 3px 0 rgba(0, 217, 232, 0.3);
 }
 
 .hidden {
