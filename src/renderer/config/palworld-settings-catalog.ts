@@ -11,6 +11,12 @@ export interface PalworldSettingDefinition {
   max?: number;
   step?: number;
   options?: string[];
+  zeroToggle?: {
+    zeroValue: string;
+    defaultValue: string;
+    enabledLabel: string;
+    disabledLabel: string;
+  };
 }
 
 export const PALWORLD_SETTING_DEFINITIONS: Record<string, PalworldSettingDefinition> = {

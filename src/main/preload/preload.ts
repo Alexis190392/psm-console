@@ -73,6 +73,7 @@ import type {
 } from '../../shared/dto/steamcmd-status.dto';
 import type { NetworkDiagnosticsDto, PublicAddressRequestDto } from '../../shared/dto/network-diagnostics.dto';
 import type { AppUpdateStatusDto } from '../../shared/dto/app-update-status.dto';
+import type { PalworldSettingsDefinitionsStatusDto } from '../../shared/dto/palworld-settings-definitions.dto';
 import type {
   RemoteApiFirewallCheckRequestDto,
   RemoteApiFirewallRuleRequestDto,
@@ -93,6 +94,7 @@ const ipcChannels = {
   instancesSelectBaseFolder: 'instances:select-base-folder',
   instancesSelect: 'instances:select',
   appSettingsGetStatus: 'app-settings:get-status',
+  palworldSettingsDefinitionsGet: 'palworld-settings-definitions:get',
   remoteApiGetStatus: 'remote-api:get-status',
   remoteApiUpdate: 'remote-api:update',
   remoteApiFirewallGetStatus: 'remote-api-firewall:get-status',
@@ -163,6 +165,9 @@ export interface PalcmApi {
   };
   appSettings: {
     getStatus: () => Promise<AppSettingsStatusDto>;
+  };
+  palworldSettingsDefinitions: {
+    getStatus: () => Promise<PalworldSettingsDefinitionsStatusDto>;
   };
   remoteApi: {
     getStatus: () => Promise<RemoteApiStatusDto>;
@@ -263,6 +268,9 @@ const api: PalcmApi = {
   },
   appSettings: {
     getStatus: () => ipcRenderer.invoke(ipcChannels.appSettingsGetStatus) as Promise<AppSettingsStatusDto>
+  },
+  palworldSettingsDefinitions: {
+    getStatus: () => ipcRenderer.invoke(ipcChannels.palworldSettingsDefinitionsGet) as Promise<PalworldSettingsDefinitionsStatusDto>
   },
   remoteApi: {
     getStatus: () => ipcRenderer.invoke(ipcChannels.remoteApiGetStatus) as Promise<RemoteApiStatusDto>,

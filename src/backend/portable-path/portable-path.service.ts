@@ -228,6 +228,12 @@ export class PortablePathService {
     return join(this.getPortableRoot(), 'config');
   }
 
+  getApplicationConfigRoot(): string {
+    return this.isMultiServerMode()
+      ? join(this.getApplicationDataRoot(), 'config')
+      : this.getConfigRoot();
+  }
+
   getLogsRoot(): string {
     return join(this.getPortableRoot(), 'logs');
   }

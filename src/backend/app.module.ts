@@ -11,6 +11,7 @@ import { LoggingService } from './logging/logging.service';
 import { OperationManagerService } from './operations/operation-manager.service';
 import { PalworldAdminService } from './palworld-admin/palworld-admin.service';
 import { PalworldConfigurationService } from './palworld-configuration/palworld-configuration.service';
+import { PalworldSettingsDefinitionsService } from './palworld-settings/palworld-settings-definitions.service';
 import { PalworldInstallationService } from './palworld-installation/palworld-installation.service';
 import { PalworldMaintenanceSnapshotService } from './palworld-maintenance/palworld-maintenance-snapshot.service';
 import { PalworldPlayersService } from './palworld-players/palworld-players.service';
@@ -45,6 +46,7 @@ import { ServerIdleShutdownService } from './server-idle-shutdown/server-idle-sh
     PalworldPlayersService,
     PalworldProcessService,
     PalworldConfigurationService,
+    PalworldSettingsDefinitionsService,
     NetworkService,
     FirewallService,
     LoggingService
@@ -70,6 +72,7 @@ import { ServerIdleShutdownService } from './server-idle-shutdown/server-idle-sh
     PalworldPlayersService,
     PalworldProcessService,
     PalworldConfigurationService,
+    PalworldSettingsDefinitionsService,
     NetworkService,
     FirewallService,
     LoggingService
