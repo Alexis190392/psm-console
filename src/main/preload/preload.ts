@@ -3,6 +3,8 @@ import type { AllowedActionsDto } from '../../shared/dto/allowed-actions.dto';
 import type { ApplicationStatusDto } from '../../shared/dto/application-status.dto';
 import type { AppProcessMetricsDto } from '../../shared/dto/app-process-metrics.dto';
 import type { AppSettingsStatusDto } from '../../shared/dto/app-settings.dto';
+import type { AppStartupStatusDto } from '../../shared/dto/app-startup.dto';
+import type { ServerInstancesStatusDto } from '../../shared/dto/server-instance.dto';
 import type {
   BackupCreateRequestDto,
   BackupDeleteRequestDto,
@@ -83,6 +85,13 @@ const ipcChannels = {
   appGetStatus: 'app:get-status',
   appGetActions: 'app:get-actions',
   appGetProcessMetrics: 'app:get-process-metrics',
+  appGetStartupStatus: 'app:get-startup-status',
+  appUpdateStartup: 'app:update-startup',
+  instancesGetStatus: 'instances:get-status',
+  instancesAddFolder: 'instances:add-folder',
+  instancesCreate: 'instances:create',
+  instancesSelectBaseFolder: 'instances:select-base-folder',
+  instancesSelect: 'instances:select',
   appSettingsGetStatus: 'app-settings:get-status',
   remoteApiGetStatus: 'remote-api:get-status',
   remoteApiUpdate: 'remote-api:update',
@@ -142,6 +151,15 @@ export interface PalcmApi {
     getStatus: () => Promise<ApplicationStatusDto>;
     getActions: () => Promise<AllowedActionsDto>;
     getProcessMetrics: () => Promise<AppProcessMetricsDto>;
+    getStartupStatus: () => Promise<AppStartupStatusDto>;
+    updateStartup: (enabled: boolean) => Promise<AppStartupStatusDto>;
+  };
+  instances: {
+    getStatus: () => Promise<ServerInstancesStatusDto>;
+    addFolder: () => Promise<ServerInstancesStatusDto>;
+    create: (name: string) => Promise<ServerInstancesStatusDto>;
+    selectBaseFolder: () => Promise<string | null>;
+    select: (instanceId: string) => Promise<ServerInstancesStatusDto>;
   };
   appSettings: {
     getStatus: () => Promise<AppSettingsStatusDto>;
@@ -232,7 +250,16 @@ const api: PalcmApi = {
     getStatus: () => ipcRenderer.invoke(ipcChannels.appGetStatus) as Promise<ApplicationStatusDto>,
     getActions: () => ipcRenderer.invoke(ipcChannels.appGetActions) as Promise<AllowedActionsDto>,
     getProcessMetrics: () =>
-      ipcRenderer.invoke(ipcChannels.appGetProcessMetrics) as Promise<AppProcessMetricsDto>
+      ipcRenderer.invoke(ipcChannels.appGetProcessMetrics) as Promise<AppProcessMetricsDto>,
+    getStartupStatus: () => ipcRenderer.invoke(ipcChannels.appGetStartupStatus) as Promise<AppStartupStatusDto>,
+    updateStartup: (enabled) => ipcRenderer.invoke(ipcChannels.appUpdateStartup, enabled) as Promise<AppStartupStatusDto>
+  },
+  instances: {
+    getStatus: () => ipcRenderer.invoke(ipcChannels.instancesGetStatus) as Promise<ServerInstancesStatusDto>,
+    addFolder: () => ipcRenderer.invoke(ipcChannels.instancesAddFolder) as Promise<ServerInstancesStatusDto>,
+    create: (name) => ipcRenderer.invoke(ipcChannels.instancesCreate, name) as Promise<ServerInstancesStatusDto>,
+    selectBaseFolder: () => ipcRenderer.invoke(ipcChannels.instancesSelectBaseFolder) as Promise<string | null>,
+    select: (instanceId) => ipcRenderer.invoke(ipcChannels.instancesSelect, instanceId) as Promise<ServerInstancesStatusDto>
   },
   appSettings: {
     getStatus: () => ipcRenderer.invoke(ipcChannels.appSettingsGetStatus) as Promise<AppSettingsStatusDto>

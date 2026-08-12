@@ -58,7 +58,10 @@ export class AppSettingsService {
       portableRoot: this.portablePathService.getPortableRoot(),
       settingsRelativePath: 'config/app-settings.json',
       logsRelativePath: 'logs/',
-      backupsRelativePath: 'backups/'
+      backupsRelativePath: 'backups/',
+      serverBaseFolder: this.portablePathService.isMultiServerMode()
+        ? this.portablePathService.getServerBaseFolder()
+        : undefined
     };
   }
 
@@ -371,6 +374,7 @@ function validateRemoteApiPermissions(
     'SERVER_START',
     'SERVER_RESTART',
     'SERVER_STOP',
+    'SERVER_SELECTION',
     'PLAYERS_VIEW',
     'PLAYERS_KICK',
     'PLAYERS_BAN',

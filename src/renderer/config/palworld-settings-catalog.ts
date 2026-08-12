@@ -436,8 +436,8 @@ export const PALWORLD_SETTING_DEFINITIONS: Record<string, PalworldSettingDefinit
     label: 'Dano a estructuras',
     group: 'Base',
     kind: 'number',
-    range: '0.1 a 20.0. Default: 1.0.',
-    min: 0.1,
+    range: '0 desactiva el dano. Hasta 20.0. Default: 1.0.',
+    min: 0,
     max: 20,
     step: 0.1,
     help: 'Multiplica el dano que reciben estructuras y objetos construidos.'

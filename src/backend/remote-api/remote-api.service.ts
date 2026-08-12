@@ -11,6 +11,10 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { APP_INFO } from '../../shared/constants/app-info';
+import { CONFIGURATION_PRESETS } from '../../renderer/config/configuration-presets';
+import { getSettingDefinition } from '../../renderer/config/setting-definition-resolver';
+import { getZeroToggleSetting } from '../../renderer/config/zero-toggle-settings';
+import { parsePalworldSettings } from '../../renderer/config/palworld-settings-parser';
 import {
   getPalworldMapPosition,
   isPalworldPositionInMap,
@@ -24,6 +28,7 @@ import type {
   RemoteApiPermission,
   RemoteApiProfile,
   RemoteApiProfileStatusDto,
+  RemoteServerInstancesStatusDto,
   RemoteApiStatusDto,
   RemoteApiUpdateRequestDto
 } from '../../shared/dto/remote-api.dto';
@@ -31,6 +36,7 @@ import type { NetworkDiagnosticsDto } from '../../shared/dto/network-diagnostics
 import { ApplicationStateService } from '../application-state/application-state.service';
 import { AppSettingsService } from '../app-settings/app-settings.service';
 import { BackupService } from '../backup/backup.service';
+import { FirewallService } from '../firewall/firewall.service';
 import { LoggingService } from '../logging/logging.service';
 import { NetworkService } from '../network/network.service';
 import { OperationManagerService } from '../operations/operation-manager.service';
@@ -38,6 +44,11 @@ import { PalworldAdminService } from '../palworld-admin/palworld-admin.service';
 import { PalworldConfigurationService } from '../palworld-configuration/palworld-configuration.service';
 import { PalworldPlayersService } from '../palworld-players/palworld-players.service';
 import { PalworldProcessService } from '../palworld-process/palworld-process.service';
+import { PalworldInstallationService } from '../palworld-installation/palworld-installation.service';
+import { PortablePathService } from '../portable-path/portable-path.service';
+import { ReleaseUpdateService } from '../release-update/release-update.service';
+import { ServerIdleShutdownService } from '../server-idle-shutdown/server-idle-shutdown.service';
+import { SteamCmdService } from '../steamcmd/steamcmd.service';
 import type {
   StoredRemoteApiSettings
 } from './remote-api-settings.types';
@@ -107,9 +118,15 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
     private readonly palworldAdminService: PalworldAdminService,
     private readonly palworldConfigurationService: PalworldConfigurationService,
     private readonly backupService: BackupService,
+    private readonly firewallService: FirewallService,
     private readonly loggingService: LoggingService,
     private readonly networkService: NetworkService,
-    private readonly operationManagerService: OperationManagerService
+    private readonly operationManagerService: OperationManagerService,
+    private readonly steamCmdService: SteamCmdService,
+    private readonly palworldInstallationService: PalworldInstallationService,
+    private readonly releaseUpdateService: ReleaseUpdateService,
+    private readonly serverIdleShutdownService: ServerIdleShutdownService,
+    private readonly portablePathService: PortablePathService
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
@@ -348,6 +365,36 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
   ): Promise<void> {
     const path = requestUrl.pathname;
 
+    if (method === 'GET' && path === `${API_PREFIX}/instances`) {
+      this.requirePermission(session, 'SERVER_SELECTION');
+      sendJson(response, 200, this.getServerInstancesStatus());
+      return;
+    }
+    if (method === 'POST' && path === `${API_PREFIX}/instances/select`) {
+      this.requirePermission(session, 'SERVER_SELECTION');
+      const body = await readJsonBody(request);
+      this.portablePathService.selectServerInstance(requireString(body, 'instanceId'));
+      sendJson(response, 200, this.getServerInstancesStatus());
+      this.logMutation('Servidor seleccionado desde API web.');
+      return;
+    }
+    if (method === 'POST' && path === `${API_PREFIX}/instances`) {
+      this.requireAdmin(session);
+      const body = await readJsonBody(request);
+      this.portablePathService.addServerFolder(requireString(body, 'rootPath'));
+      sendJson(response, 201, this.getServerInstancesStatus());
+      this.logMutation('Carpeta de servidor registrada desde API web.');
+      return;
+    }
+    if (method === 'POST' && path === `${API_PREFIX}/instances/create`) {
+      this.requireAdmin(session);
+      const body = await readJsonBody(request);
+      this.portablePathService.createServerFolder(requireString(body, 'name'));
+      sendJson(response, 201, this.getServerInstancesStatus());
+      this.logMutation('Nueva carpeta de servidor creada desde API web.');
+      return;
+    }
+
     if (method === 'GET' && path === `${API_PREFIX}/status`) {
       this.requireAnyPermission(session, [
         'GENERAL',
@@ -397,6 +444,59 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
         'PLAYERS_BAN'
       ]);
       sendJson(response, 200, await this.palworldPlayersService.getStatus());
+      return;
+    }
+    if (method === 'GET' && path === `${API_PREFIX}/installation`) {
+      this.requireAdmin(session);
+      sendJson(response, 200, this.palworldInstallationService.getStatus());
+      return;
+    }
+    if (method === 'GET' && path === `${API_PREFIX}/steamcmd`) {
+      this.requireAdmin(session);
+      sendJson(response, 200, this.steamCmdService.getStatus());
+      return;
+    }
+    if (method === 'POST' && path === `${API_PREFIX}/steamcmd/install`) {
+      this.requireAdmin(session);
+      sendJson(response, 202, this.steamCmdService.install({ confirmed: true }));
+      this.logMutation('Instalacion de SteamCMD solicitada desde API web.');
+      return;
+    }
+    if (method === 'POST' && path === `${API_PREFIX}/steamcmd/repair`) {
+      this.requireAdmin(session);
+      sendJson(response, 202, this.steamCmdService.repair({ confirmed: true }));
+      this.logMutation('Reparacion de SteamCMD solicitada desde API web.');
+      return;
+    }
+    if (method === 'POST' && path === `${API_PREFIX}/installation/install`) {
+      this.requireAdmin(session);
+      sendJson(response, 202, this.palworldInstallationService.install({ confirmed: true }));
+      this.logMutation('Instalacion del servidor solicitada desde API web.');
+      return;
+    }
+    if (method === 'GET' && path === `${API_PREFIX}/installation/update`) {
+      this.requireAdmin(session);
+      sendJson(response, 200, await this.palworldInstallationService.getUpdateStatus({
+        force: requestUrl.searchParams.get('force') === 'true'
+      }));
+      return;
+    }
+    if (method === 'POST' && path === `${API_PREFIX}/installation/update`) {
+      this.requireAdmin(session);
+      sendJson(response, 202, this.palworldInstallationService.update(
+        { confirmed: true },
+        () => this.palworldProcessService.getRuntimeStatus().state
+      ));
+      this.logMutation('Actualizacion del servidor solicitada desde API web.');
+      return;
+    }
+    if (method === 'POST' && path === `${API_PREFIX}/installation/repair`) {
+      this.requireAdmin(session);
+      sendJson(response, 202, this.palworldInstallationService.repair(
+        { confirmed: true },
+        () => this.palworldProcessService.getRuntimeStatus().state
+      ));
+      this.logMutation('Mantenimiento del servidor solicitado desde API web.');
       return;
     }
     if (method === 'GET' && path === `${API_PREFIX}/map`) {
@@ -457,6 +557,11 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
       sendJson(response, 200, await this.palworldConfigurationService.readActive());
       return;
     }
+    if (method === 'GET' && path === `${API_PREFIX}/configuration/schema`) {
+      this.requireAdmin(session);
+      sendJson(response, 200, this.toConfigurationSchema(await this.palworldConfigurationService.readActive()));
+      return;
+    }
     if (method === 'PUT' && path === `${API_PREFIX}/configuration`) {
       this.requireAdmin(session);
       const body = await readJsonBody(request);
@@ -471,6 +576,17 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
       this.requireAdmin(session);
       sendJson(response, 202, this.palworldConfigurationService.restoreDefault({ confirmed: true }));
       this.logMutation('Restauracion de configuracion solicitada desde API web.');
+      return;
+    }
+    if (method === 'GET' && path === `${API_PREFIX}/firewall`) {
+      this.requireAdmin(session);
+      sendJson(response, 200, await this.firewallService.getStatus());
+      return;
+    }
+    if (method === 'POST' && path === `${API_PREFIX}/firewall/rules`) {
+      this.requireAdmin(session);
+      sendJson(response, 202, this.firewallService.applyRequiredRules({ confirmed: true }));
+      this.logMutation('Reglas de Firewall solicitadas desde API web.');
       return;
     }
     if (method === 'GET' && path === `${API_PREFIX}/backups`) {
@@ -490,10 +606,63 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
       this.logMutation('Backup del mundo solicitado desde API web.');
       return;
     }
+    if (method === 'PUT' && path === `${API_PREFIX}/backups/policy`) {
+      this.requireAdmin(session);
+      const body = await readJsonBody(request);
+      sendJson(response, 202, this.backupService.updatePolicy({
+        confirmed: true,
+        automaticEnabled: requireBoolean(body, 'automaticEnabled'),
+        automaticIntervalHours: requireInteger(body, 'automaticIntervalHours', 1, 168),
+        automaticRetentionPerType: requireInteger(body, 'automaticRetentionPerType', 1, 100),
+        compressWorldBackups: requireBoolean(body, 'compressWorldBackups')
+      }));
+      this.logMutation('Politica de backups actualizada desde API web.');
+      return;
+    }
+    if (method === 'POST' && path.startsWith(`${API_PREFIX}/backups/`) && path.endsWith('/verify')) {
+      this.requireAdmin(session);
+      const backupId = decodeURIComponent(path.slice(`${API_PREFIX}/backups/`.length, -'/verify'.length));
+      sendJson(response, 202, this.backupService.verifyBackup({ backupId }));
+      return;
+    }
+    if (method === 'POST' && path.startsWith(`${API_PREFIX}/backups/`) && path.endsWith('/restore')) {
+      this.requireAdmin(session);
+      const backupId = decodeURIComponent(path.slice(`${API_PREFIX}/backups/`.length, -'/restore'.length));
+      sendJson(response, 202, this.backupService.restoreBackup({ confirmed: true, backupId }));
+      this.logMutation('Restauracion de backup solicitada desde API web.');
+      return;
+    }
+    if (method === 'DELETE' && path.startsWith(`${API_PREFIX}/backups/`)) {
+      this.requireAdmin(session);
+      const backupId = decodeURIComponent(path.slice(`${API_PREFIX}/backups/`.length));
+      sendJson(response, 202, this.backupService.deleteBackup(
+        { confirmed: true, backupId },
+        async (backupPath) => {
+          const { shell } = await import('electron');
+          await shell.trashItem(backupPath);
+        }
+      ));
+      this.logMutation('Backup enviado a la papelera desde API web.');
+      return;
+    }
     if (method === 'GET' && path === `${API_PREFIX}/logs`) {
       this.requirePermission(session, 'LOGS');
       const maxLines = parseBoundedInteger(requestUrl.searchParams.get('maxLines'), 200, 1, 1_000);
       sendJson(response, 200, await this.loggingService.readRecent({ maxLines }));
+      return;
+    }
+    if (method === 'GET' && path === `${API_PREFIX}/logs/files`) {
+      this.requirePermission(session, 'LOGS');
+      sendJson(response, 200, await this.loggingService.listFiles());
+      return;
+    }
+    if (method === 'GET' && path.startsWith(`${API_PREFIX}/logs/files/`)) {
+      this.requirePermission(session, 'LOGS');
+      const id = decodeURIComponent(path.slice(`${API_PREFIX}/logs/files/`.length));
+      sendJson(response, 200, await this.loggingService.readFile({
+        id,
+        maxLines: parseBoundedInteger(requestUrl.searchParams.get('maxLines'), 500, 1, 5_000)
+      }));
       return;
     }
     if (method === 'GET' && path === `${API_PREFIX}/network/addresses`) {
@@ -505,6 +674,44 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
       this.requireAdmin(session);
       const port = parseOptionalPort(requestUrl.searchParams.get('port'));
       sendJson(response, 200, await this.networkService.getPublicAddress(port ? { port } : undefined));
+      return;
+    }
+    if (method === 'GET' && path === `${API_PREFIX}/automation/idle`) {
+      this.requireAdmin(session);
+      sendJson(response, 200, await this.serverIdleShutdownService.getStatus());
+      return;
+    }
+    if (method === 'PUT' && path === `${API_PREFIX}/automation/idle`) {
+      this.requireAdmin(session);
+      const body = await readJsonBody(request);
+      sendJson(response, 200, await this.serverIdleShutdownService.updatePolicy({
+        confirmed: true,
+        enabled: requireBoolean(body, 'enabled'),
+        emptySeconds: requireInteger(body, 'emptySeconds', 10, 86_400)
+      }));
+      this.logMutation('Apagado automatico actualizado desde API web.');
+      return;
+    }
+    if (method === 'GET' && path === `${API_PREFIX}/app/settings`) {
+      this.requireAdmin(session);
+      sendJson(response, 200, await this.appSettingsService.getStatus());
+      return;
+    }
+    if (method === 'GET' && path === `${API_PREFIX}/app/updates`) {
+      this.requireAdmin(session);
+      sendJson(response, 200, await this.releaseUpdateService.getStatus());
+      return;
+    }
+    if (method === 'GET' && path === `${API_PREFIX}/app/remote-api`) {
+      this.requireAdmin(session);
+      sendJson(response, 200, await this.getStatus());
+      return;
+    }
+    if (method === 'PUT' && path === `${API_PREFIX}/app/remote-api`) {
+      this.requireAdmin(session);
+      const body = await readJsonBody(request);
+      sendJson(response, 200, await this.update(parseRemoteApiUpdate(body)));
+      this.logMutation('Configuracion de API web actualizada desde API web.');
       return;
     }
     if (method === 'GET' && path.startsWith(`${API_PREFIX}/operations/`)) {
@@ -743,6 +950,47 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
     if (session.profile !== 'ADMIN') {
       throw new ApiHttpError(403, 'REMOTE_API_ADMIN_REQUIRED');
     }
+  }
+
+  private toConfigurationSchema(file: { path: string; content: string; updatedAt: string }): object {
+    const parsed = parsePalworldSettings(file.content);
+
+    return {
+      path: file.path,
+      content: file.content,
+      updatedAt: file.updatedAt,
+      prefix: parsed.prefix,
+      suffix: parsed.suffix,
+      presets: CONFIGURATION_PRESETS,
+      settings: parsed.settings.map((setting) => ({
+        key: setting.key,
+        value: setting.value,
+        definition: getSettingDefinition(setting.key, setting.value),
+        zeroToggle: getZeroToggleSetting(setting.key)
+      }))
+    };
+  }
+
+  private getServerInstancesStatus(): RemoteServerInstancesStatusDto {
+    const status = this.portablePathService.getServerInstances();
+    const executablePaths = status.instances.map((instance) =>
+      this.portablePathService.getServerInstanceExecutablePath(instance.id)
+    );
+    const runningPaths = this.palworldProcessService.getRunningExecutablePaths(executablePaths);
+
+    return {
+      mode: status.mode,
+      ...(status.selectedInstanceId ? { selectedInstanceId: status.selectedInstanceId } : {}),
+      instances: status.instances.map((instance, index) => {
+        const executablePath = executablePaths[index];
+        return {
+          id: instance.id,
+          name: instance.name,
+          isSelected: instance.isSelected,
+          isRunning: executablePath ? runningPaths.has(executablePath) : false
+        };
+      })
+    };
   }
 
   private requireAnyPermission(session: ApiSession, permissions: RemoteApiPermission[]): void {
@@ -1132,6 +1380,7 @@ function resolveMapAssetPath(filename: string): string {
   if (packagedPath && existsSync(packagedPath)) {
     return packagedPath;
   }
+
   return join(process.cwd(), 'src', 'renderer', 'assets', filename);
 }
 
@@ -1202,6 +1451,59 @@ function requireString(body: Record<string, unknown>, key: string): string {
 function optionalString(body: Record<string, unknown>, key: string): string | undefined {
   const value = body[key];
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function requireBoolean(body: Record<string, unknown>, key: string): boolean {
+  const value = body[key];
+  if (typeof value !== 'boolean') {
+    throw new ApiHttpError(400, `REMOTE_API_${key.toUpperCase()}_INVALID`);
+  }
+  return value;
+}
+
+function requireInteger(
+  body: Record<string, unknown>,
+  key: string,
+  minimum: number,
+  maximum: number
+): number {
+  const value = body[key];
+  if (!Number.isInteger(value) || typeof value !== 'number' || value < minimum || value > maximum) {
+    throw new ApiHttpError(400, `REMOTE_API_${key.toUpperCase()}_INVALID`);
+  }
+  return value;
+}
+
+function parseRemoteApiUpdate(body: Record<string, unknown>): RemoteApiUpdateRequestDto {
+  const profile = body['profile'] === 'CLIENT' ? 'CLIENT' : 'ADMIN';
+  const permissions = Array.isArray(body['permissions'])
+    ? body['permissions'].filter(isRemoteApiPermission)
+    : undefined;
+
+  return {
+    confirmed: true,
+    profile,
+    enabled: requireBoolean(body, 'enabled'),
+    bindMode: body['bindMode'] === 'LOCAL_NETWORK' ? 'LOCAL_NETWORK' : 'LOCAL_ONLY',
+    port: requireInteger(body, 'port', 1, 65_535),
+    username: requireString(body, 'username'),
+    ...(optionalString(body, 'password') ? { password: optionalString(body, 'password') } : {}),
+    ...(permissions ? { permissions } : {})
+  };
+}
+
+function isRemoteApiPermission(value: unknown): value is RemoteApiPermission {
+  return typeof value === 'string' && [
+    'GENERAL',
+    'SERVER_START',
+    'SERVER_RESTART',
+    'SERVER_STOP',
+    'SERVER_SELECTION',
+    'PLAYERS_VIEW',
+    'PLAYERS_KICK',
+    'PLAYERS_BAN',
+    'LOGS'
+  ].includes(value);
 }
 
 function parseBoundedInteger(

@@ -26,7 +26,10 @@ Este manual explica cómo preparar, configurar y administrar un servidor dedicad
 - Espacio libre suficiente para el servidor, sus actualizaciones, partidas y backups.
 - Permisos de administrador solamente cuando Windows solicite configurar el Firewall.
 
-PSM Console es portable. Coloca el ejecutable en una carpeta propia antes de abrirlo, porque el servidor y sus datos se guardarán junto a la aplicación.
+PSM Console ofrece dos ediciones para Windows:
+
+- **Portable:** coloca el ejecutable en una carpeta propia antes de abrirlo. El servidor y sus datos se guardan junto a la aplicación.
+- **Instalable multiservidor:** instala PSM Console y registra una o más carpetas de servidores existentes o nuevas. El selector superior permite alternar entre ellas y marca en verde las que están ejecutándose.
 
 Ejemplo:
 
@@ -35,14 +38,14 @@ D:\PSM Console\
   PSM-Console-vX.Y.Z.exe
 ```
 
-No ejecutes el portable desde una carpeta temporal, dentro de un archivo comprimido ni desde una ubicación que se limpie automáticamente.
+No ejecutes el portable desde una carpeta temporal, dentro de un archivo comprimido ni desde una ubicación que se limpie automáticamente. En la edición instalable, no elimines una carpeta registrada mientras el servidor esté en ejecución.
 
 ## 2. Primer inicio
 
 Al abrir PSM Console por primera vez:
 
 1. El logo aparece mientras se prepara la ventana principal.
-2. La aplicación revisa la carpeta portable y las dependencias disponibles.
+2. En portable revisa su propia carpeta; en la edición instalable selecciona una carpeta registrada o usa **+ Agregar** para elegirla.
 3. Si SteamCMD no está instalado, muestra una confirmación antes de descargarlo desde el sitio oficial.
 4. Cuando SteamCMD esté listo, solicita confirmación para instalar Palworld Dedicated Server.
 5. Si falta `PalWorldSettings.ini`, crea una configuración inicial válida.
@@ -116,6 +119,12 @@ Las categorías permanecen plegadas para mantener una vista compacta. Presiona e
 - **Control deslizante:** ajusta valores dentro de un rango.
 - **Campo numérico o de texto:** permite introducir un valor específico.
 - **Icono de información:** abre la explicación del parámetro al hacer clic.
+
+### Valores que pueden desactivarse
+
+Algunos multiplicadores muestran un interruptor junto al valor numerico. Al desactivarlo, PSM Console escribe `0` en el INI y oculta el control numerico; al reactivarlo, recupera el ultimo valor distinto de cero usado durante la sesion.
+
+Esto permite configurar de forma directa, entre otros casos, incubacion instantanea, estructuras sin dano o deterioro, ausencia de hambre o consumo de estamina, objetos sin desgaste y limites sin espera. El cambio solo se aplica al archivo al presionar **Guardar**.
 
 ### Perfiles rápidos
 
@@ -350,6 +359,10 @@ Cada tarjeta abre la subsección correspondiente.
 
 ### Aplicación
 
+#### Inicio con Windows
+
+En la edición instalable, abre **Configuración > Aplicación** y activa **Inicio con Windows**. PSM Console se iniciará al ingresar a Windows y conservará las instancias, preferencias, backups y rutas ya registradas. Esta opción no está disponible en la edición portable.
+
 Informa la raíz portable y las ubicaciones relativas de:
 
 ![Configuración general de la aplicación](../../resources/screenshots/configuracion-aplicacion.png)
@@ -381,6 +394,14 @@ Permite definir:
 Los cambios no se aplican hasta confirmar **Guardar**.
 
 ### API web
+
+#### Varias instancias desde la web
+
+La API administrativa muestra un selector de servidor en la cabecera cuando la edición instalable tiene más de una carpeta registrada. Selecciona una instancia para administrar su configuración, backups, red y ejecución. En **Carpetas registradas**, **Crear servidor** genera una carpeta nueva dentro de la carpeta base configurada y la deja lista para instalar. El nombre indicado se aplica como nombre inicial del servidor al crear `PalWorldSettings.ini`; una configuración existente nunca se reemplaza. **Registrar existente** acepta una ruta absoluta de una carpeta ya creada en el equipo donde se ejecuta PSM Console.
+
+Desde la aplicación instalada, abre **Configuración > Aplicación** y usa **Elegir carpeta base** para cambiar el destino predeterminado de los nuevos servidores. Por defecto es `Documentos\PSM Console Servers`. Las instancias ya registradas permanecen disponibles aunque estén fuera de esa carpeta.
+
+La API cliente solo muestra el selector cuando el administrador habilita el permiso **Cambiar servidor**. El perfil cliente no puede registrar ni ver las rutas físicas de las carpetas.
 
 Esta opción habilita una única conexión web compartida por dos perfiles:
 
@@ -423,9 +444,22 @@ Al habilitar la API cliente, selecciona las acciones disponibles:
 
 Los permisos se aplican en tiempo real. Si una función se deshabilita mientras el cliente conserva esa pantalla abierta, la siguiente operación devuelve **No permitido** y actualiza la vista.
 
-El perfil administrativo conserva todas las secciones y controles:
+El perfil administrativo conserva las mismas areas operativas de PSM Console desde el navegador:
+
+- **General:** estado, control de inicio, reinicio y detencion.
+- **Servidor:** SteamCMD, instalacion, actualizacion, mantenimiento y el mismo editor de `PalWorldSettings.ini` por categorias, filtros, perfiles, controles y vista INI avanzada.
+- **Administracion:** estado REST, anuncio global, guardado manual y apagado programado.
+- **Jugadores y mapa:** consulta, expulsion, baneo y ubicacion actual.
+- **Red y Firewall:** diagnostico, direcciones y creacion de reglas de Windows.
+- **Backups:** creacion, politica automatica, verificacion, restauracion y envio a la papelera.
+- **Logs:** actividad actual y lectura de archivos anteriores.
+- **Configuracion:** datos de la app, automatizaciones y configuracion de los perfiles de API web.
+
+Las operaciones que modifican el servidor, Windows o un backup solicitan confirmacion antes de ejecutarse. La cuenta administrativa debe usarse solo en dispositivos y redes de confianza.
 
 ![Panel administrativo de PSM Console Web](../../resources/screenshots/api-web-administrativa.png)
+
+![Servidor y mantenimiento desde PSM Console Web](../../resources/screenshots/api-web-administrativa-servidor.png)
 
 El perfil cliente muestra únicamente las secciones y acciones habilitadas. La interfaz también se adapta a navegadores móviles:
 

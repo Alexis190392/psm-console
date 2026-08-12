@@ -6,7 +6,9 @@ export default defineConfig({
   root: 'src/renderer',
   build: {
     outDir: '../../dist/renderer',
-    emptyOutDir: true,
+    // The main-process build emits configuration helpers here for the remote API.
+    // Keep them when Vite refreshes renderer assets.
+    emptyOutDir: false,
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'src/renderer/index.html'),

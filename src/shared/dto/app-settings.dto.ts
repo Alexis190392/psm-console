@@ -1,6 +1,7 @@
 import type { BackupPolicyDto } from './backup-status.dto';
 import type { RemoteApiSettingsDto } from './remote-api.dto';
 import type { ServerIdlePolicyDto } from './server-idle-policy.dto';
+import type { AppStartupStatusDto } from './app-startup.dto';
 
 export interface AppSettingsDto {
   schemaVersion: 5;
@@ -17,4 +18,6 @@ export interface AppSettingsStatusDto {
   settingsRelativePath: string;
   logsRelativePath: string;
   backupsRelativePath: string;
+  serverBaseFolder?: string;
+  startup?: AppStartupStatusDto;
 }

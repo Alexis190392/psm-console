@@ -19,6 +19,15 @@ export class ApplicationStateService {
   ) {}
 
   getStatus(): ApplicationStatusDto {
+    if (!this.portablePathService.hasSelectedServerInstance()) {
+      return {
+        status: ApplicationStatus.SERVER_SELECTION_REQUIRED,
+        portableRoot: '',
+        isPortableRootWritable: false,
+        requiresServerSelection: true,
+        updatedAt: new Date().toISOString()
+      };
+    }
     this.portablePathService.ensurePortableLayout();
     const status = this.resolveStatus();
 
@@ -31,6 +40,9 @@ export class ApplicationStateService {
   }
 
   getAllowedActions(): AllowedActionsDto {
+    if (!this.portablePathService.hasSelectedServerInstance()) {
+      return createNoActions();
+    }
     const status = this.resolveStatus();
 
     return {
@@ -104,4 +116,17 @@ export class ApplicationStateService {
 
     return ApplicationStatus.READY;
   }
+}
+
+function createNoActions(): AllowedActionsDto {
+  return {
+    canInstallSteamCmd: false,
+    canInstallServer: false,
+    canEditConfiguration: false,
+    canManageFirewall: false,
+    canStartServer: false,
+    canStopServer: false,
+    canCreateBackup: false,
+    canRestoreBackup: false
+  };
 }

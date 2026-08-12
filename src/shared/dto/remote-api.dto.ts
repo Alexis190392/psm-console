@@ -13,6 +13,7 @@ export type RemoteApiPermission =
   | 'SERVER_START'
   | 'SERVER_RESTART'
   | 'SERVER_STOP'
+  | 'SERVER_SELECTION'
   | 'PLAYERS_VIEW'
   | 'PLAYERS_KICK'
   | 'PLAYERS_BAN'
@@ -94,4 +95,17 @@ export interface RemoteApiFirewallCheckRequestDto {
 
 export interface RemoteApiFirewallRuleRequestDto extends RemoteApiFirewallCheckRequestDto {
   confirmed: boolean;
+}
+
+export interface RemoteServerInstanceDto {
+  id: string;
+  name: string;
+  isSelected: boolean;
+  isRunning: boolean;
+}
+
+export interface RemoteServerInstancesStatusDto {
+  mode: 'PORTABLE' | 'MULTI_SERVER';
+  selectedInstanceId?: string;
+  instances: RemoteServerInstanceDto[];
 }

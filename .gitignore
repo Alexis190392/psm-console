@@ -11,7 +11,7 @@ ejecucionPruebas/
 app-data/
 tools/
 server/
-config/
+/config/
 logs/
 backups/
 .tmp-tests/

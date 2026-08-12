@@ -25,6 +25,7 @@
   --hud-cut-large: 16px;
   --titlebar-height: 48px;
   --sidebar-width: 292px;
+  --footer-safe-bottom: 22px;
   font-family: Inter, "Segoe UI", Arial, sans-serif;
   color: var(--color-text);
   background: var(--color-background);

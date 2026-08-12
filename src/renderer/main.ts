@@ -14,6 +14,7 @@ import type {
   FirewallStatusDto
 } from '../shared/dto/firewall-status.dto';
 import type { NetworkDiagnosticsDto } from '../shared/dto/network-diagnostics.dto';
+import type { ServerInstancesStatusDto } from '../shared/dto/server-instance.dto';
 import type { LogFileSummaryDto, LogModule } from '../shared/dto/log-status.dto';
 import type { OperationProgressDto } from '../shared/dto/operation-progress.dto';
 import type { PalworldAdminAction, PalworldAdminStatusDto } from '../shared/dto/palworld-admin.dto';
@@ -35,6 +36,7 @@ import { renderIcon } from './components/icon';
 import { CONFIGURATION_PRESETS } from './config/configuration-presets';
 import { hasConfigurationChangedExternally } from './config/configuration-change-guard';
 import { getSettingDefinition } from './config/setting-definition-resolver';
+import { getZeroToggleSetting, isZeroSettingValue } from './config/zero-toggle-settings';
 import {
   PALWORLD_MAP_LAYER_BOUNDS,
   PALWORLD_MAP_LAYERS,
@@ -80,6 +82,8 @@ import { resolveServerActionState } from './state/server-action-state';
 
 const palcmLogoUrl = new URL('./assets/palcm-logo.png', import.meta.url).href;
 const palcmSymbolUrl = new URL('./assets/palcm-symbol.png', import.meta.url).href;
+
+const zeroSettingLastValues = new Map<string, string>();
 
 const appRoot = document.querySelector<HTMLDivElement>('#app');
 
@@ -135,6 +139,30 @@ rootElement.innerHTML = `
         aria-expanded="true"
         title="Contraer menu lateral"
       >${renderIcon('sidebar-collapse')}</button>
+    </section>
+    <section id="server-instance-selector" class="server-instance-selector hidden" aria-label="Servidor seleccionado">
+      <label id="server-instance-label">Servidor</label>
+      <div class="server-instance-menu">
+        <button
+          id="server-instance-trigger"
+          class="server-instance-menu__trigger"
+          type="button"
+          aria-labelledby="server-instance-label server-instance-trigger-label"
+          aria-haspopup="listbox"
+          aria-expanded="false"
+          aria-controls="server-instance-options"
+          title="Seleccionar servidor"
+        >
+          ${renderIcon('server')}
+          <span id="server-instance-trigger-label">Seleccionar carpeta</span>
+          <span class="server-instance-menu__chevron" aria-hidden="true"></span>
+        </button>
+        <div id="server-instance-options" class="server-instance-menu__popover hidden" role="listbox" aria-label="Servidores registrados">
+          <div id="server-instance-options-list" class="server-instance-menu__list"></div>
+          <button id="create-server-instance" class="server-instance-menu__add" type="button">+ Nuevo servidor</button>
+          <button id="add-server-instance" class="server-instance-menu__add" type="button">+ Agregar carpeta</button>
+        </div>
+      </div>
     </section>
     <nav class="sidebar__nav" aria-label="Navegacion principal">
       <a class="sidebar__link sidebar__link--active" data-nav="home" href="#">
@@ -293,6 +321,21 @@ rootElement.innerHTML = `
           <span id="operation-message" class="operation-message" aria-live="polite">Sin operacion activa.</span>
         </div>
       </div>
+      <div id="new-server-panel" class="confirmation-panel new-server-panel hidden" role="dialog" aria-modal="true" aria-labelledby="new-server-title">
+        <div>
+          <div class="confirmation-panel__eyebrow">MULTISERVIDOR</div>
+          <h3 id="new-server-title">Crear servidor</h3>
+          <p>El nombre se aplicara al crear la configuracion inicial del servidor.</p>
+          <label class="new-server-panel__field" for="new-server-name">
+            <span>Nombre del servidor</span>
+            <input id="new-server-name" type="text" maxlength="80" autocomplete="off" placeholder="Mi servidor Palworld" />
+          </label>
+        </div>
+        <div class="action-row">
+          <button id="create-server-confirm" class="primary-button" type="button">Crear servidor</button>
+          <button id="create-server-cancel" class="secondary-button" type="button">Cancelar</button>
+        </div>
+      </div>
       <div id="content-view" class="content-view hidden" role="main" tabindex="-1"></div>
     </section>
   </main>
@@ -325,6 +368,10 @@ const progressBar = document.querySelector<HTMLDivElement>('#progress-bar');
 const steamCmdFooter = document.querySelector('#steamcmd-footer');
 const operationMessage = document.querySelector('#operation-message');
 const confirmationPanel = document.querySelector<HTMLDivElement>('#confirmation-panel');
+const newServerPanel = document.querySelector<HTMLDivElement>('#new-server-panel');
+const newServerName = document.querySelector<HTMLInputElement>('#new-server-name');
+const createServerConfirmButton = document.querySelector<HTMLButtonElement>('#create-server-confirm');
+const createServerCancelButton = document.querySelector<HTMLButtonElement>('#create-server-cancel');
 const confirmationKind = document.querySelector('#confirmation-kind');
 const confirmationTitle = document.querySelector('#confirmation-title');
 const confirmationMessage = document.querySelector('#confirmation-message');
@@ -339,12 +386,20 @@ const toastRegion = document.querySelector<HTMLElement>('#toast-region');
 const sidebarRuntimeStatus = document.querySelector<HTMLElement>('#sidebar-runtime-status');
 const startServerAction = document.querySelector<HTMLButtonElement>('#start-server-action');
 const sidebarToggle = document.querySelector<HTMLButtonElement>('#sidebar-toggle');
+const serverInstanceSelector = document.querySelector<HTMLElement>('#server-instance-selector');
+const serverInstanceTrigger = document.querySelector<HTMLButtonElement>('#server-instance-trigger');
+const serverInstanceTriggerLabel = document.querySelector<HTMLElement>('#server-instance-trigger-label');
+const serverInstanceOptions = document.querySelector<HTMLElement>('#server-instance-options');
+const serverInstanceOptionsList = document.querySelector<HTMLElement>('#server-instance-options-list');
+const addServerInstanceButton = document.querySelector<HTMLButtonElement>('#add-server-instance');
+const createServerInstanceButton = document.querySelector<HTMLButtonElement>('#create-server-instance');
 const navLinks = Array.from(document.querySelectorAll<HTMLAnchorElement>('[data-nav]'));
 const adminNavGroup = document.querySelector<HTMLElement>('[data-nav-group="admin"]');
 const settingsNavGroup = document.querySelector<HTMLElement>('[data-nav-group="settings"]');
 const consoleLines: string[] = [];
 const operationLogOffsets = new Map<string, number>();
 let latestFirewallStatus: FirewallStatusDto | null = null;
+let serverInstanceMenuOpen = false;
 let firewallStatusRequest: Promise<FirewallStatusDto> | null = null;
 let latestFirewallError: string | null = null;
 let activeFirewallRequestId: string | null = null;
@@ -408,6 +463,7 @@ let activeCancellableOperationId: string | null = null;
 const navigationState = new NavigationState();
 let latestStatus: ApplicationStatus = ApplicationStatus.BOOTSTRAPPING;
 let latestActions: AllowedActionsDto | null = null;
+let latestServerInstances: ServerInstancesStatusDto | null = null;
 let lastCopyToast: { value: string; copiedAt: number } | null = null;
 let confirmationReturnFocus: HTMLElement | null = null;
 let confirmationFocusActive = false;
@@ -446,6 +502,53 @@ if (!palcmApi) {
   palcmApi.firewall.onDiagnosticProgress(updateFirewallDiagnosticProgress);
   palcmApi.server.onRuntimeStatusChanged(scheduleRuntimeStateRefresh);
   await refreshState();
+
+  addServerInstanceButton?.addEventListener('click', () => {
+    setServerInstanceMenuOpen(false);
+    runUiAction('No se pudo agregar la carpeta del servidor', async () => {
+      await palcmApi.instances.addFolder();
+      await refreshState();
+    });
+  });
+
+  createServerInstanceButton?.addEventListener('click', showNewServerDialog);
+  createServerCancelButton?.addEventListener('click', hideNewServerDialog);
+  createServerConfirmButton?.addEventListener('click', () => {
+    createNewServerInstance();
+  });
+  newServerName?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      createNewServerInstance();
+    }
+  });
+
+  serverInstanceTrigger?.addEventListener('click', () => {
+    setServerInstanceMenuOpen(!serverInstanceMenuOpen);
+  });
+
+  serverInstanceOptionsList?.addEventListener('click', (event) => {
+    const target = event.target instanceof Element
+      ? event.target.closest<HTMLButtonElement>('[data-server-instance-id]')
+      : null;
+    const instanceId = target?.dataset.serverInstanceId;
+    if (!instanceId) {
+      return;
+    }
+
+    setServerInstanceMenuOpen(false);
+    runUiAction('No se pudo cambiar de servidor', async () => {
+      await palcmApi.instances.select(instanceId);
+      await refreshState();
+    });
+  });
+
+  document.addEventListener('click', (event) => {
+    if (event.target instanceof Node && serverInstanceSelector?.contains(event.target)) {
+      return;
+    }
+    setServerInstanceMenuOpen(false);
+  });
 
   confirmActionButton?.addEventListener('click', () => {
     runUiAction('No se pudo ejecutar la accion pendiente', runPendingAction);
@@ -746,6 +849,20 @@ async function refreshState(): Promise<void> {
   try {
     const status = await palcmApi.app.getStatus();
     const actions = await palcmApi.app.getActions();
+    await refreshServerInstanceSelector();
+    latestStatus = status.status;
+    latestActions = actions;
+    setText(statusLabel, status.status);
+    renderHero(status.status);
+    setProgressForStatus(status.status);
+    updateNavigation(status.status);
+    updateStartServerButton(actions);
+
+    if (status.requiresServerSelection) {
+      showServerInstanceSelection();
+      return;
+    }
+
     const steamCmd = await palcmApi.steamCmd.getStatus();
     const server = await palcmApi.server.getInstallationStatus();
     const config = await palcmApi.config.getStatus();
@@ -1066,6 +1183,12 @@ function showIpcError(message: string): void {
 }
 
 function renderHero(status: ApplicationStatus): void {
+  if (status === ApplicationStatus.SERVER_SELECTION_REQUIRED) {
+    setText(heroEyebrow, 'MULTISERVIDOR');
+    setText(heroTitle, 'Selecciona una carpeta');
+    setText(heroSubtitle, 'Cada carpeta conserva su propio servidor, configuracion, backups y logs.');
+    return;
+  }
   if (status === ApplicationStatus.SERVER_STARTING) {
     setText(heroEyebrow, 'SERVER');
     setText(heroTitle, 'Servidor iniciando');
@@ -1108,6 +1231,7 @@ function renderHero(status: ApplicationStatus): void {
 
 function setProgressForStatus(status: ApplicationStatus): void {
   const statusProgress: Partial<Record<ApplicationStatus, number>> = {
+    [ApplicationStatus.SERVER_SELECTION_REQUIRED]: 0,
     [ApplicationStatus.STEAMCMD_MISSING]: 25,
     [ApplicationStatus.STEAMCMD_INSTALLING]: 40,
     [ApplicationStatus.SERVER_MISSING]: 60,
@@ -1235,7 +1359,8 @@ function renderConsoleOutput(): void {
 function updateNavigation(status: ApplicationStatus): void {
   const serverAvailable = ![
     ApplicationStatus.STEAMCMD_MISSING,
-    ApplicationStatus.SERVER_MISSING
+    ApplicationStatus.SERVER_MISSING,
+    ApplicationStatus.SERVER_SELECTION_REQUIRED
   ].includes(status);
   const logsAvailable = serverAvailable;
   const serverRunning = status === ApplicationStatus.SERVER_RUNNING;
@@ -2461,11 +2586,12 @@ async function renderAppSettings(renderId = ++activeViewRenderId): Promise<void>
   renderViewLoading('LEYENDO PREFERENCIAS');
   try {
     await loadReleaseUpdateStatus();
-    const [settingsStatus, backupSummary, idleStatus, remoteApiStatus] = await Promise.all([
+    const [settingsStatus, backupSummary, idleStatus, remoteApiStatus, startupStatus] = await Promise.all([
       palcmApi.appSettings.getStatus(),
       palcmApi.backup.getSummary(),
       palcmApi.serverIdle.getStatus(),
-      palcmApi.remoteApi.getStatus()
+      palcmApi.remoteApi.getStatus(),
+      palcmApi.app.getStartupStatus()
     ]);
     if (!isCurrentViewRender(renderId, 'settings')) {
       return;
@@ -2474,7 +2600,7 @@ async function renderAppSettings(renderId = ++activeViewRenderId): Promise<void>
     latestBackupSummary = backupSummary;
     latestRemoteApiStatus = remoteApiStatus;
     setContent(renderAppSettingsView(
-      settingsStatus,
+      { ...settingsStatus, startup: startupStatus },
       latestUpdateStatus,
       backupSummary,
       idleStatus,
@@ -2507,6 +2633,35 @@ function bindAppSettingsControls(): void {
   document.querySelector<HTMLButtonElement>('#settings-open-release')?.addEventListener('click', () => {
     void palcmApi?.update.openRelease();
   });
+
+  document.querySelector<HTMLButtonElement>('#settings-select-server-base')?.addEventListener('click', () => {
+    void palcmApi?.instances.selectBaseFolder()
+      .then((folderPath) => {
+        if (!folderPath) {
+          return;
+        }
+        showToast('Carpeta base actualizada.');
+        return renderAppSettings();
+      })
+      .catch(() => {
+        showToast('No se pudo cambiar la carpeta base.', 'error');
+      });
+  });
+
+  const startupToggle = document.querySelector<HTMLInputElement>('#settings-startup-enabled');
+  if (startupToggle) {
+    startupToggle.addEventListener('change', () => {
+      const previous = !startupToggle.checked;
+      void palcmApi?.app.updateStartup(startupToggle.checked)
+        .then(() => {
+          showToast('Cambio guardado.');
+        })
+        .catch(() => {
+          startupToggle.checked = previous;
+          showToast('No se pudo guardar el cambio.', 'error');
+        });
+    });
+  }
 
   const idleForm = document.querySelector<HTMLFormElement>('[data-idle-policy-form]');
   const idleEnabled = idleForm?.elements.namedItem('enabled');
@@ -2929,6 +3084,111 @@ function stopRuntimeViewRefreshers(): void {
     generalRemoteApiRefreshTimer = null;
   }
   releaseAdminMapResources();
+}
+
+async function refreshServerInstanceSelector(): Promise<void> {
+  if (!palcmApi) {
+    return;
+  }
+
+  const status = await palcmApi.instances.getStatus();
+  latestServerInstances = status;
+  serverInstanceSelector?.classList.toggle('hidden', status.mode !== 'MULTI_SERVER');
+
+  if (!serverInstanceOptionsList || status.mode !== 'MULTI_SERVER') {
+    setServerInstanceMenuOpen(false);
+    return;
+  }
+
+  const selectedInstance = status.instances.find((instance) => instance.id === status.selectedInstanceId);
+  if (serverInstanceTriggerLabel) {
+    serverInstanceTriggerLabel.textContent = selectedInstance?.name ?? 'Seleccionar carpeta';
+  }
+
+  serverInstanceOptionsList.innerHTML = status.instances.map((instance) => `
+    <button
+      class="server-instance-menu__option${instance.id === status.selectedInstanceId ? ' server-instance-menu__option--selected' : ''}"
+      type="button"
+      role="option"
+      aria-selected="${instance.id === status.selectedInstanceId ? 'true' : 'false'}"
+      data-server-instance-id="${escapeHtml(instance.id)}"
+    >
+      <span class="server-instance-menu__state${instance.isRunning ? ' server-instance-menu__state--running' : ''}" aria-hidden="true"></span>
+      <span class="server-instance-menu__option-name">${escapeHtml(instance.name)}</span>
+    </button>
+  `).join('');
+
+  setServerInstanceMenuOpen(serverInstanceMenuOpen);
+}
+
+function setServerInstanceMenuOpen(isOpen: boolean): void {
+  const isAvailable = serverInstanceSelector !== null && !serverInstanceSelector.classList.contains('hidden');
+  serverInstanceMenuOpen = isOpen && isAvailable;
+  serverInstanceOptions?.classList.toggle('hidden', !serverInstanceMenuOpen);
+  serverInstanceTrigger?.setAttribute('aria-expanded', serverInstanceMenuOpen ? 'true' : 'false');
+}
+
+function showServerInstanceSelection(): void {
+  hideConfirmation();
+  showPreflight();
+  document.querySelector('.hero')?.classList.remove('hidden');
+  document.querySelector('.console-shell')?.classList.add('hidden');
+  panelStatusHeader?.classList.add('hidden');
+  progressBar?.parentElement?.classList.add('hidden');
+  contentView?.classList.remove('hidden');
+  if (!contentView) {
+    return;
+  }
+
+  const hasInstances = Boolean(latestServerInstances?.instances.length);
+  contentView.innerHTML = `
+    <div class="view-stack instance-selection-view">
+      <section class="instance-selection-card">
+        <p class="eyebrow">MULTISERVIDOR</p>
+        <h3>Selecciona un servidor</h3>
+        <p>${hasInstances
+          ? 'Elige una instancia desde el selector lateral o crea otra.'
+          : 'Crea un servidor nuevo o registra una carpeta existente.'}</p>
+        <div class="action-row">
+          <button class="primary-button" type="button" data-create-server-instance="true">+ Nuevo servidor</button>
+          <button class="secondary-button" type="button" data-add-server-instance="true">Agregar carpeta</button>
+        </div>
+      </section>
+    </div>
+  `;
+  contentView.querySelector<HTMLButtonElement>('[data-add-server-instance="true"]')?.addEventListener('click', () => {
+    addServerInstanceButton?.click();
+  });
+  contentView.querySelector<HTMLButtonElement>('[data-create-server-instance="true"]')?.addEventListener('click', showNewServerDialog);
+}
+
+function showNewServerDialog(): void {
+  setServerInstanceMenuOpen(false);
+  newServerPanel?.classList.remove('hidden');
+  requestAnimationFrame(() => newServerName?.focus());
+}
+
+function hideNewServerDialog(): void {
+  newServerPanel?.classList.add('hidden');
+  if (newServerName) {
+    newServerName.value = '';
+  }
+}
+
+function createNewServerInstance(): void {
+  const name = newServerName?.value.trim() ?? '';
+  if (!name) {
+    newServerName?.focus();
+    showToast('Ingresa un nombre para el servidor.', 'error');
+    return;
+  }
+
+  runUiAction('No se pudo crear el servidor', async () => {
+    await palcmApi?.instances.create(name);
+    hideNewServerDialog();
+    await refreshState();
+    showToast('Servidor creado. Completa la instalacion desde esta instancia.');
+  });
 }
 
 async function renderAdminView(renderId = ++activeViewRenderId): Promise<void> {
@@ -5184,6 +5444,15 @@ function readSettingsFormValues(parsed: ParsedPalworldSettings): Map<string, str
 
   parsed.settings.forEach((setting) => {
     const definition = getSettingDefinition(setting.key, setting.value);
+    const zeroToggle = getZeroToggleSetting(setting.key);
+    const zeroToggleButton = zeroToggle
+      ? document.querySelector<HTMLButtonElement>(`[data-zero-toggle-key="${cssEscape(setting.key)}"]`)
+      : null;
+
+    if (zeroToggle && zeroToggleButton?.getAttribute('aria-checked') !== 'true') {
+      values.set(setting.key, zeroToggle.zeroValue);
+      return;
+    }
     const input = document.querySelector<HTMLInputElement | HTMLSelectElement | HTMLButtonElement>(
       `[data-setting-key="${cssEscape(setting.key)}"]`
     );
@@ -5254,11 +5523,59 @@ function bindSettingsControls(parsed: ParsedPalworldSettings): void {
     });
   });
 
+  document.querySelectorAll<HTMLButtonElement>('.setting-zero-toggle').forEach((button) => {
+    const key = button.dataset['zeroToggleKey'];
+    const setting = key ? getZeroToggleSetting(key) : undefined;
+    const state = button.querySelector<HTMLElement>('.setting-zero-toggle__state');
+    const valueContainer = key
+      ? document.querySelector<HTMLElement>(`[data-zero-value-key="${cssEscape(key)}"]`)
+      : null;
+    const numberInput = key
+      ? document.querySelector<HTMLInputElement>(`input[data-setting-key="${cssEscape(key)}"]`)
+      : null;
+    const rangeInput = key
+      ? document.querySelector<HTMLInputElement>(`input[data-range-key="${cssEscape(key)}"]`)
+      : null;
+
+    if (!key || !setting) {
+      return;
+    }
+
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      closeSettingInfoPanels();
+
+      const nextChecked = button.getAttribute('aria-checked') !== 'true';
+      if (!nextChecked && numberInput && !isZeroSettingValue(numberInput.value)) {
+        zeroSettingLastValues.set(key, numberInput.value);
+      }
+      if (nextChecked && numberInput) {
+        const restoredValue = zeroSettingLastValues.get(key) ?? setting.defaultValue;
+        numberInput.value = restoredValue;
+        if (rangeInput) {
+          rangeInput.value = restoredValue;
+        }
+      }
+
+      setZeroToggleControlState(key, nextChecked);
+      if (state) {
+        state.textContent = nextChecked ? setting.enabledLabel : setting.disabledLabel;
+      }
+      if (valueContainer) {
+        valueContainer.hidden = !nextChecked;
+      }
+      updateAdvancedIniPreview(parsed);
+    });
+  });
+
   document.querySelectorAll<HTMLInputElement | HTMLSelectElement>('input[data-setting-key], select[data-setting-key]').forEach((input) => {
     input.addEventListener('input', () => {
+      rememberZeroSettingValue(input);
       updateAdvancedIniPreview(parsed);
     });
     input.addEventListener('change', () => {
+      rememberZeroSettingValue(input);
       updateAdvancedIniPreview(parsed);
     });
   });
@@ -5412,6 +5729,8 @@ function applyConfigurationPreset(
     if (range) {
       range.value = value;
     }
+
+    syncZeroToggleControl(key, value);
   });
 
   appendConsoleLine(`Perfil aplicado en vista: ${preset.label}. Guarda para escribirlo en el INI.`);
@@ -5590,39 +5909,66 @@ function applySettingControlValue(key: string, value: string): void {
   if (range) {
     range.value = unquotedValue;
   }
+
+  syncZeroToggleControl(key, unquotedValue);
+}
+
+function rememberZeroSettingValue(input: HTMLInputElement | HTMLSelectElement): void {
+  const key = input.dataset['settingKey'];
+  if (!key || !getZeroToggleSetting(key) || input.value.length === 0 || isZeroSettingValue(input.value)) {
+    return;
+  }
+
+  zeroSettingLastValues.set(key, input.value);
+}
+
+function syncZeroToggleControl(key: string, value: string): void {
+  const setting = getZeroToggleSetting(key);
+  if (!setting) {
+    return;
+  }
+
+  const isEnabled = !isZeroSettingValue(value);
+  const numberInput = document.querySelector<HTMLInputElement>(`input[data-setting-key="${cssEscape(key)}"]`);
+  const rangeInput = document.querySelector<HTMLInputElement>(`input[data-range-key="${cssEscape(key)}"]`);
+
+  if (isEnabled) {
+    zeroSettingLastValues.set(key, value);
+  } else {
+    const editableValue = zeroSettingLastValues.get(key) ?? setting.defaultValue;
+    if (numberInput) {
+      numberInput.value = editableValue;
+    }
+    if (rangeInput) {
+      rangeInput.value = editableValue;
+    }
+  }
+
+  setZeroToggleControlState(key, isEnabled);
+}
+
+function setZeroToggleControlState(key: string, isEnabled: boolean): void {
+  const setting = getZeroToggleSetting(key);
+  const button = document.querySelector<HTMLButtonElement>(`[data-zero-toggle-key="${cssEscape(key)}"]`);
+  const state = button?.querySelector<HTMLElement>('.setting-zero-toggle__state');
+  const valueContainer = document.querySelector<HTMLElement>(`[data-zero-value-key="${cssEscape(key)}"]`);
+
+  if (!setting || !button) {
+    return;
+  }
+
+  button.setAttribute('aria-checked', isEnabled ? 'true' : 'false');
+  if (state) {
+    state.textContent = isEnabled ? setting.enabledLabel : setting.disabledLabel;
+  }
+  if (valueContainer) {
+    valueContainer.hidden = !isEnabled;
+  }
 }
 
 function discardServerChanges(parsed: ParsedPalworldSettings): void {
   parsed.settings.forEach((setting) => {
-    const definition = getSettingDefinition(setting.key, setting.value);
-    const value = unquoteSettingValue(setting.value);
-
-    if (definition.kind === 'boolean') {
-      const button = document.querySelector<HTMLButtonElement>(`button[data-setting-key="${cssEscape(setting.key)}"]`);
-      const state = button?.querySelector<HTMLElement>('.setting-toggle__state');
-      const isChecked = value.toLowerCase() === 'true';
-
-      if (!button) {
-        return;
-      }
-
-      button.setAttribute('aria-checked', isChecked ? 'true' : 'false');
-      if (state) {
-        state.textContent = isChecked ? 'Activo' : 'Inactivo';
-      }
-      return;
-    }
-
-    const control = document.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-setting-key="${cssEscape(setting.key)}"]`);
-    const range = document.querySelector<HTMLInputElement>(`input[data-range-key="${cssEscape(setting.key)}"]`);
-
-    if (control) {
-      control.value = value;
-    }
-
-    if (range) {
-      range.value = value;
-    }
+    applySettingControlValue(setting.key, setting.value);
   });
 
   const editor = document.querySelector<HTMLTextAreaElement>('#config-editor');

@@ -1,5 +1,5 @@
 import type { INestApplicationContext } from '@nestjs/common';
-import { app, BrowserWindow, shell, type IpcMain, type IpcMainInvokeEvent, type ProcessMetric } from 'electron';
+import { app, BrowserWindow, dialog, shell, type IpcMain, type IpcMainInvokeEvent, type OpenDialogOptions, type ProcessMetric } from 'electron';
 import { ApplicationStateService } from '../../backend/application-state/application-state.service';
 import { AppSettingsService } from '../../backend/app-settings/app-settings.service';
 import { BackupService } from '../../backend/backup/backup.service';
@@ -16,6 +16,7 @@ import { SteamCmdService } from '../../backend/steamcmd/steamcmd.service';
 import { ReleaseUpdateService } from '../../backend/release-update/release-update.service';
 import { RemoteApiService } from '../../backend/remote-api/remote-api.service';
 import { ServerIdleShutdownService } from '../../backend/server-idle-shutdown/server-idle-shutdown.service';
+import { PortablePathService } from '../../backend/portable-path/portable-path.service';
 import { ipcChannels } from '../../shared/contracts/ipc-channels';
 import type {
   PalworldRestoreDefaultConfigurationRequestDto,
@@ -52,6 +53,7 @@ import type { LogFileReadRequestDto, LogsRecentRequestDto } from '../../shared/d
 import type { ServerIdlePolicyUpdateRequestDto } from '../../shared/dto/server-idle-policy.dto';
 import type { PublicAddressRequestDto } from '../../shared/dto/network-diagnostics.dto';
 import type { AppProcessKind, AppProcessMetricDto, AppProcessMetricsDto } from '../../shared/dto/app-process-metrics.dto';
+import type { AppStartupStatusDto } from '../../shared/dto/app-startup.dto';
 import type {
   RemoteApiFirewallCheckRequestDto,
   RemoteApiFirewallRuleRequestDto,
@@ -78,6 +80,7 @@ export function registerIpcHandlers(
   const releaseUpdateService = nestContext.get(ReleaseUpdateService);
   const remoteApiService = nestContext.get(RemoteApiService);
   const serverIdleShutdownService = nestContext.get(ServerIdleShutdownService);
+  const portablePathService = nestContext.get(PortablePathService);
 
   palworldProcessService.onRuntimeStateChanged(() => {
     BrowserWindow.getAllWindows().forEach((window) => {
@@ -96,6 +99,77 @@ export function registerIpcHandlers(
   );
 
   ipcMain.handle(ipcChannels.appGetProcessMetrics, () => getAppProcessMetrics());
+
+  ipcMain.handle(ipcChannels.appGetStartupStatus, () => getAppStartupStatus());
+  ipcMain.handle(ipcChannels.appUpdateStartup, (_event, enabled: boolean) => {
+    const status = getAppStartupStatus();
+    if (!status.available) {
+      throw new Error('APP_STARTUP_NOT_AVAILABLE');
+    }
+    app.setLoginItemSettings({ openAtLogin: enabled, openAsHidden: false });
+    return getAppStartupStatus();
+  });
+
+  ipcMain.handle(ipcChannels.instancesGetStatus, () => {
+    const status = portablePathService.getServerInstances();
+    const executablePaths = status.instances.map((instance) =>
+      portablePathService.getServerInstanceExecutablePath(instance.id)
+    );
+    const runningPaths = palworldProcessService.getRunningExecutablePaths(executablePaths);
+
+    return {
+      ...status,
+      instances: status.instances.map((instance, index) => {
+        const executablePath = executablePaths[index];
+        return {
+          ...instance,
+          isRunning: executablePath ? runningPaths.has(executablePath) : false
+        };
+      })
+    };
+  });
+
+  ipcMain.handle(ipcChannels.instancesAddFolder, async (event) => {
+    const parentWindow = getSenderWindow(event);
+    const result = parentWindow
+      ? await dialog.showOpenDialog(parentWindow, {
+        title: 'Agregar carpeta de servidor',
+        properties: ['openDirectory', 'createDirectory']
+      })
+      : await dialog.showOpenDialog({
+      title: 'Agregar carpeta de servidor',
+      properties: ['openDirectory', 'createDirectory']
+    });
+    if (result.canceled || result.filePaths.length === 0) {
+      return portablePathService.getServerInstances();
+    }
+    const folderPath = result.filePaths[0];
+    if (!folderPath) {
+      return portablePathService.getServerInstances();
+    }
+    return portablePathService.addServerFolder(folderPath);
+  });
+
+  ipcMain.handle(ipcChannels.instancesCreate, (_event, name: string) =>
+    portablePathService.createServerFolder(name)
+  );
+
+  ipcMain.handle(ipcChannels.instancesSelectBaseFolder, async (event) => {
+    const parentWindow = getSenderWindow(event);
+    const options: OpenDialogOptions = {
+      title: 'Elegir carpeta base de servidores',
+      properties: ['openDirectory', 'createDirectory']
+    };
+    const result = parentWindow
+      ? await dialog.showOpenDialog(parentWindow, options)
+      : await dialog.showOpenDialog(options);
+    const folderPath = result.canceled ? undefined : result.filePaths[0];
+    return folderPath ? portablePathService.setServerBaseFolder(folderPath) : null;
+  });
+
+  ipcMain.handle(ipcChannels.instancesSelect, (_event, instanceId: string) =>
+    portablePathService.selectServerInstance(instanceId)
+  );
 
   ipcMain.handle(ipcChannels.appSettingsGetStatus, () => appSettingsService.getStatus());
 
@@ -303,6 +377,24 @@ export function registerIpcHandlers(
   ipcMain.handle(ipcChannels.windowClose, (event) => {
     getSenderWindow(event)?.close();
   });
+}
+
+function getAppStartupStatus(): AppStartupStatusDto {
+  const available = process.platform === 'win32'
+    && process.env['PALCM_MULTI_SERVER'] === 'true'
+    && process.env['PALCM_ELECTRON_IS_PACKAGED'] === 'true';
+  if (!available) {
+    return {
+      available: false,
+      enabled: false,
+      message: 'Disponible en la edicion instalable de Windows.'
+    };
+  }
+  return {
+    available: true,
+    enabled: app.getLoginItemSettings().openAtLogin,
+    message: 'Inicia PSM Console al ingresar a Windows.'
+  };
 }
 
 function getSenderWindow(event: IpcMainInvokeEvent): BrowserWindow | null {

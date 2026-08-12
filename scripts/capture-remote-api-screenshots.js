@@ -127,6 +127,103 @@ function createFixtureServer() {
       sendJson(response, 200, createStatus());
       return;
     }
+    if (url.pathname === `${apiRoot}/steamcmd`) {
+      sendJson(response, 200, {
+        status: 'READY',
+        message: 'SteamCMD instalado y listo.',
+        executablePath: 'D:\\PSM Console\\tools\\steamcmd\\steamcmd.exe'
+      });
+      return;
+    }
+    if (url.pathname === `${apiRoot}/installation`) {
+      sendJson(response, 200, {
+        status: 'READY',
+        message: 'Palworld Dedicated Server instalado.',
+        executablePath: 'D:\\PSM Console\\server\\palworld\\PalServer.exe'
+      });
+      return;
+    }
+    if (url.pathname === `${apiRoot}/installation/update`) {
+      sendJson(response, 200, {
+        status: 'UP_TO_DATE',
+        message: 'El servidor esta actualizado.',
+        localBuildId: '2466863'
+      });
+      return;
+    }
+    if (url.pathname === `${apiRoot}/configuration`) {
+      sendJson(response, 200, {
+        content: '[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(ServerName="Servidor de ejemplo",ServerPlayerMaxNum=12,PublicPort=8211)'
+      });
+      return;
+    }
+    if (url.pathname === `${apiRoot}/configuration/schema`) {
+      sendJson(response, 200, {
+        prefix: '[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(',
+        suffix: ')',
+        content: '[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(ServerName="Servidor de ejemplo",ServerPlayerMaxNum=12,PublicPort=8211,bIsPvP=False)',
+        presets: [{ id: 'casual', label: 'Casual', values: { ServerPlayerMaxNum: '16' } }],
+        settings: [
+          { key: 'ServerName', value: '"Servidor de ejemplo"', definition: { label: 'Nombre del servidor', group: 'Datos del servidor', kind: 'text', help: 'Nombre visible para los jugadores.' } },
+          { key: 'ServerPlayerMaxNum', value: '12', definition: { label: 'Jugadores maximos', group: 'Datos del servidor', kind: 'number', help: 'Cantidad maxima de jugadores.', min: 1, max: 32, step: 1 } },
+          { key: 'PublicPort', value: '8211', definition: { label: 'Puerto de juego', group: 'Red', kind: 'number', help: 'Puerto principal del servidor.', min: 1, max: 65535, step: 1 } },
+          { key: 'bIsPvP', value: 'False', definition: { label: 'PvP', group: 'Jugadores', kind: 'boolean', help: 'Permite dano entre jugadores.' } }
+        ]
+      });
+      return;
+    }
+    if (url.pathname === `${apiRoot}/admin`) {
+      sendJson(response, 200, {
+        status: 'READY',
+        message: 'Administracion REST disponible.',
+        info: { version: 'v1.0.2', servername: 'Servidor de ejemplo', worldguid: 'EXAMPLE-WORLD' },
+        metrics: { currentplayernum: 1, serverfps: 60, serverfpsaverage: 59.8 },
+        settings: { Difficulty: 'Normal', ServerPlayerMaxNum: 12 }
+      });
+      return;
+    }
+    if (url.pathname === `${apiRoot}/firewall`) {
+      sendJson(response, 200, {
+        local: {
+          ports: [{ label: 'Jugadores', protocol: 'UDP', port: 8211, state: 'READY', message: 'Regla de Windows disponible.' }]
+        }
+      });
+      return;
+    }
+    if (url.pathname === `${apiRoot}/network/addresses`) {
+      sendJson(response, 200, { addresses: ['192.0.2.100'] });
+      return;
+    }
+    if (url.pathname === `${apiRoot}/network/public`) {
+      sendJson(response, 200, { publicIp: '203.0.113.25', message: 'IP publica de ejemplo.' });
+      return;
+    }
+    if (url.pathname === `${apiRoot}/backups`) {
+      sendJson(response, 200, {
+        configurationBackups: [], worldBackups: [], message: 'Sin backups de ejemplo.',
+        policy: { automaticEnabled: true, automaticIntervalHours: 6, automaticRetentionPerType: 5, compressWorldBackups: true }
+      });
+      return;
+    }
+    if (url.pathname === `${apiRoot}/app/settings`) {
+      sendJson(response, 200, { portableRoot: 'D:\\PSM Console', settingsRelativePath: 'config/app-settings.json' });
+      return;
+    }
+    if (url.pathname === `${apiRoot}/app/updates`) {
+      sendJson(response, 200, { state: 'UP_TO_DATE', message: 'PSM Console esta actualizado.' });
+      return;
+    }
+    if (url.pathname === `${apiRoot}/app/remote-api`) {
+      sendJson(response, 200, {
+        state: 'RUNNING', endpoint: 'http://192.0.2.100:8213/api/v1',
+        settings: { enabled: true, bindMode: 'LOCAL_NETWORK', port: 8213, username: 'admin', client: { enabled: true, username: 'cliente', permissions: ['GENERAL', 'PLAYERS_VIEW', 'LOGS'] } }
+      });
+      return;
+    }
+    if (url.pathname === `${apiRoot}/automation/idle`) {
+      sendJson(response, 200, { policy: { enabled: false, emptySeconds: 600 } });
+      return;
+    }
     if (url.pathname === `${apiRoot}/players`) {
       sendJson(response, 200, {
         currentPlayers: 1,
@@ -190,6 +287,10 @@ function createFixtureServer() {
           ]
         }]
       });
+      return;
+    }
+    if (url.pathname === `${apiRoot}/logs/files`) {
+      sendJson(response, 200, { files: [] });
       return;
     }
     if (url.pathname.startsWith(`${apiRoot}/server/`) && request.method === 'POST') {
@@ -276,6 +377,32 @@ async function assertWebView(window, view) {
   }
 }
 
+async function assertSidebarRemainsFixed(window) {
+  const initial = await window.webContents.executeJavaScript(`
+    ({
+      sidebar: document.querySelector('.sidebar')?.getBoundingClientRect().top,
+      topbar: document.querySelector('.topbar')?.getBoundingClientRect().top
+    })
+  `);
+  await window.webContents.executeJavaScript(`window.scrollTo(0, document.documentElement.scrollHeight)`);
+  await wait(250);
+  const final = await window.webContents.executeJavaScript(`
+    ({
+      sidebar: document.querySelector('.sidebar')?.getBoundingClientRect().top,
+      topbar: document.querySelector('.topbar')?.getBoundingClientRect().top
+    })
+  `);
+  await window.webContents.executeJavaScript(`window.scrollTo(0, 0)`);
+  if (
+    typeof initial.sidebar !== 'number' ||
+    typeof initial.topbar !== 'number' ||
+    Math.abs(final.sidebar - initial.sidebar) > 1 ||
+    Math.abs(final.topbar - initial.topbar) > 1
+  ) {
+    throw new Error(`La navegación fija se desplazo con el contenido: ${JSON.stringify({ initial, final })}`);
+  }
+}
+
 async function main() {
   app.disableHardwareAcceleration();
   mkdirSync(outputDir, { recursive: true });
@@ -304,6 +431,30 @@ async function main() {
     await login(window, 'admin');
     await capture(window, 'api-web-administrativa.png');
 
+    await selectWebView(window, 'server');
+    await wait(500);
+    await window.webContents.executeJavaScript(`
+      (() => {
+        const group = document.querySelector('#configuration-groups details');
+        if (!group) throw new Error('No se encontro una categoria de configuracion');
+        group.open = true;
+      })()
+    `);
+    await wait(4_300);
+    await assertWebView(window, 'server');
+    await assertSidebarRemainsFixed(window);
+    const configurationGroupState = await window.webContents.executeJavaScript(`
+      document.querySelector('#configuration-groups details')?.open
+    `);
+    if (!configurationGroupState) {
+      throw new Error('La actualizacion periodica cerro la categoria de configuracion');
+    }
+    await capture(window, 'api-web-administrativa-servidor.png', 'server');
+
+    await selectWebView(window, 'network');
+    await wait(4_300);
+    await assertWebView(window, 'network');
+
     await logout(window);
     await login(window, 'cliente');
     await capture(window, 'api-web-cliente.png');
@@ -319,9 +470,28 @@ async function main() {
     await assertWebView(window, 'map');
     await capture(window, 'api-web-mapa-movil.png', 'map');
 
+    const mobileMenuState = await window.webContents.executeJavaScript(`
+      (() => {
+        document.querySelector('#mobile-nav-toggle')?.click();
+        return {
+          expanded: document.querySelector('.sidebar')?.classList.contains('is-mobile-menu-open'),
+          moreVisible: getComputedStyle(document.querySelector('.nav-button[data-view="logs"]')).display !== 'none'
+        };
+      })()
+    `);
+    if (!mobileMenuState.expanded || !mobileMenuState.moreVisible) {
+      throw new Error(`El menú móvil no mostró las secciones adicionales: ${JSON.stringify(mobileMenuState)}`);
+    }
+
     await selectWebView(window, 'players');
     await wait(450);
     await assertWebView(window, 'players');
+    const mobileMenuClosed = await window.webContents.executeJavaScript(`
+      !document.querySelector('.sidebar')?.classList.contains('is-mobile-menu-open')
+    `);
+    if (!mobileMenuClosed) {
+      throw new Error('El menú móvil quedó abierto después de seleccionar una vista');
+    }
     await capture(window, 'api-web-cliente-movil.png', 'players');
   } finally {
     window.destroy();

@@ -39,12 +39,19 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 function configureElectronRuntime(): void {
-  const userDataPath = app.isPackaged
-    ? join(dirname(app.getPath('exe')), 'app-data')
-    : join(process.cwd(), 'ejecucionPruebas', 'app-data');
+  const isPortableArtifact = Boolean(process.env['PORTABLE_EXECUTABLE_DIR']);
+  const useMultiServerMode = process.env['PALCM_MULTI_SERVER'] === 'true'
+    || (app.isPackaged && !isPortableArtifact);
+  const userDataPath = app.isPackaged && !isPortableArtifact
+    ? app.getPath('userData')
+    : app.isPackaged
+      ? join(dirname(app.getPath('exe')), 'app-data')
+      : join(process.cwd(), 'ejecucionPruebas', 'app-data');
 
   mkdirSync(userDataPath, { recursive: true });
   app.setPath('userData', userDataPath);
+  process.env['PALCM_APP_DATA_PATH'] = userDataPath;
+  process.env['PALCM_MULTI_SERVER'] = useMultiServerMode ? 'true' : 'false';
   app.disableHardwareAcceleration();
 }
 
@@ -218,6 +225,7 @@ async function bootstrap(): Promise<void> {
   process.env['PALCM_ELECTRON_EXE_PATH'] = app.getPath('exe');
 
   await app.whenReady();
+  process.env['PALCM_DOCUMENTS_PATH'] = app.getPath('documents');
   registerRendererProtocol();
   const splashSession = await createSplashWindow();
 
