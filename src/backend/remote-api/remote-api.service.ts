@@ -962,6 +962,7 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
       path: file.path,
       content: file.content,
       updatedAt: file.updatedAt,
+      definitionsRevision: this.palworldSettingsDefinitionsService.getRevision(),
       prefix: parsed.prefix,
       suffix: parsed.suffix,
       presets: CONFIGURATION_PRESETS,

@@ -1,5 +1,5 @@
-import { Injectable, type OnApplicationBootstrap } from '@nestjs/common';
-import { existsSync } from 'node:fs';
+import { Injectable, type OnApplicationBootstrap, type OnApplicationShutdown } from '@nestjs/common';
+import { existsSync, watch, type FSWatcher } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import {
@@ -17,16 +17,32 @@ import { PortablePathService } from '../portable-path/portable-path.service';
 
 const DEFINITIONS_FILE_NAME = 'palworld-settings.definitions.json';
 const SETTING_TYPES = new Set(['text', 'number', 'boolean', 'select']);
+const RELOAD_DEBOUNCE_MS = 300;
 
 @Injectable()
-export class PalworldSettingsDefinitionsService implements OnApplicationBootstrap {
+export class PalworldSettingsDefinitionsService implements OnApplicationBootstrap, OnApplicationShutdown {
   private status: PalworldSettingsDefinitionsStatusDto | null = null;
   private loading: Promise<PalworldSettingsDefinitionsStatusDto> | null = null;
+  private definitionsPath: string | null = null;
+  private watcher: FSWatcher | null = null;
+  private reloadTimer: NodeJS.Timeout | null = null;
+  private revision = 0;
+  private readonly changeListeners = new Set<(status: PalworldSettingsDefinitionsStatusDto) => void>();
 
   constructor(private readonly portablePathService: PortablePathService) {}
 
   async onApplicationBootstrap(): Promise<void> {
     await this.ensureLoaded();
+  }
+
+  onApplicationShutdown(): void {
+    if (this.reloadTimer) {
+      clearTimeout(this.reloadTimer);
+      this.reloadTimer = null;
+    }
+    this.watcher?.close();
+    this.watcher = null;
+    this.changeListeners.clear();
   }
 
   async ensureLoaded(): Promise<PalworldSettingsDefinitionsStatusDto> {
@@ -39,6 +55,45 @@ export class PalworldSettingsDefinitionsService implements OnApplicationBootstra
     return this.status;
   }
 
+  onChanged(listener: (status: PalworldSettingsDefinitionsStatusDto) => void): () => void {
+    this.changeListeners.add(listener);
+    return () => {
+      this.changeListeners.delete(listener);
+    };
+  }
+
+  getRevision(): number {
+    return this.revision;
+  }
+
+  async reload(): Promise<PalworldSettingsDefinitionsStatusDto> {
+    const current = await this.ensureLoaded();
+    if (!this.definitionsPath) {
+      return current;
+    }
+
+    const definitions = await this.readDefinitions(this.definitionsPath);
+    if (!definitions || areDefinitionsEqual(current.definitions, definitions)) {
+      return current;
+    }
+
+    const nextStatus: PalworldSettingsDefinitionsStatusDto = {
+      ...current,
+      definitions
+    };
+    this.status = nextStatus;
+    this.revision += 1;
+    setExternalSettingDefinitions(definitions);
+    this.changeListeners.forEach((listener) => {
+      try {
+        listener(nextStatus);
+      } catch {
+        // Una vista que se esta cerrando no debe interrumpir la recarga del catalogo.
+      }
+    });
+    return nextStatus;
+  }
+
   private async load(): Promise<PalworldSettingsDefinitionsStatusDto> {
     const configRoot = this.portablePathService.getApplicationConfigRoot();
     const path = join(configRoot, DEFINITIONS_FILE_NAME);
@@ -49,8 +104,10 @@ export class PalworldSettingsDefinitionsService implements OnApplicationBootstra
       await writeFile(path, `${JSON.stringify(bundled, null, 2)}\n`, 'utf8');
     }
 
-    const definitions = await this.readDefinitions(path);
+    this.definitionsPath = path;
+    const definitions = (await this.readDefinitions(path)) ?? {};
     setExternalSettingDefinitions(definitions);
+    this.watchDefinitionsFile(configRoot);
 
     return {
       relativePath: relative(this.portablePathService.getPortableRoot(), path) || DEFINITIONS_FILE_NAME,
@@ -58,11 +115,31 @@ export class PalworldSettingsDefinitionsService implements OnApplicationBootstra
     };
   }
 
-  private async readDefinitions(path: string): Promise<Record<string, PalworldSettingDefinitionOverrideDto>> {
+  private watchDefinitionsFile(configRoot: string): void {
+    this.watcher?.close();
+    this.watcher = watch(configRoot, { persistent: false }, (_eventType, filename) => {
+      if (filename && filename !== DEFINITIONS_FILE_NAME) {
+        return;
+      }
+      this.scheduleReload();
+    });
+  }
+
+  private scheduleReload(): void {
+    if (this.reloadTimer) {
+      clearTimeout(this.reloadTimer);
+    }
+    this.reloadTimer = setTimeout(() => {
+      this.reloadTimer = null;
+      void this.reload().catch(() => undefined);
+    }, RELOAD_DEBOUNCE_MS);
+  }
+
+  private async readDefinitions(path: string): Promise<Record<string, PalworldSettingDefinitionOverrideDto> | undefined> {
     try {
       const parsed = JSON.parse(await readFile(path, 'utf8')) as unknown;
       if (!isDefinitionsFile(parsed)) {
-        return {};
+        return undefined;
       }
 
       return Object.entries(parsed.parametros).reduce<Record<string, PalworldSettingDefinitionOverrideDto>>(
@@ -76,9 +153,16 @@ export class PalworldSettingsDefinitionsService implements OnApplicationBootstra
         {}
       );
     } catch {
-      return {};
+      return undefined;
     }
   }
+}
+
+function areDefinitionsEqual(
+  left: Record<string, PalworldSettingDefinitionOverrideDto>,
+  right: Record<string, PalworldSettingDefinitionOverrideDto>
+): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function isDefinitionsFile(value: unknown): value is PalworldSettingsDefinitionsFileDto {

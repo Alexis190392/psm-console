@@ -501,6 +501,12 @@ if (!palcmApi) {
 } else {
   palcmApi.firewall.onDiagnosticProgress(updateFirewallDiagnosticProgress);
   palcmApi.server.onRuntimeStatusChanged(scheduleRuntimeStateRefresh);
+  palcmApi.palworldSettingsDefinitions.onChanged((status) => {
+    setExternalSettingDefinitions(status.definitions);
+    if (navigationState.is('server')) {
+      renderActiveView();
+    }
+  });
   const settingsDefinitions = await palcmApi.palworldSettingsDefinitions.getStatus();
   setExternalSettingDefinitions(settingsDefinitions.definitions);
   await refreshState();

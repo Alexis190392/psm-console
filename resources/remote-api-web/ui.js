@@ -748,11 +748,9 @@
     var requests = [
       apiRequest('/steamcmd'),
       apiRequest('/installation'),
-      apiRequest('/installation/update?force=true')
+      apiRequest('/installation/update?force=true'),
+      apiRequest('/configuration/schema')
     ];
-    if (!configurationSchema || refreshConfiguration) {
-      requests.push(apiRequest('/configuration/schema'));
-    }
     var results = await Promise.all(requests);
     var steamcmd = results[0];
     var installation = results[1];
@@ -765,7 +763,11 @@
     setText('update-status', formatState(update.status));
     setText('update-message', update.message || 'Sin detalles.');
     var editor = document.getElementById('configuration-content');
-    if (configuration && (!editor.dataset.dirty || refreshConfiguration)) {
+    if (configuration && (!editor.dataset.dirty || refreshConfiguration) && (
+      !configurationSchema
+      || refreshConfiguration
+      || configuration.definitionsRevision !== configurationSchema.definitionsRevision
+    )) {
       loadConfigurationSchema(configuration);
     }
   }

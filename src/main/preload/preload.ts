@@ -95,6 +95,7 @@ const ipcChannels = {
   instancesSelect: 'instances:select',
   appSettingsGetStatus: 'app-settings:get-status',
   palworldSettingsDefinitionsGet: 'palworld-settings-definitions:get',
+  palworldSettingsDefinitionsChanged: 'palworld-settings-definitions:changed',
   remoteApiGetStatus: 'remote-api:get-status',
   remoteApiUpdate: 'remote-api:update',
   remoteApiFirewallGetStatus: 'remote-api-firewall:get-status',
@@ -168,6 +169,7 @@ export interface PalcmApi {
   };
   palworldSettingsDefinitions: {
     getStatus: () => Promise<PalworldSettingsDefinitionsStatusDto>;
+    onChanged: (listener: (status: PalworldSettingsDefinitionsStatusDto) => void) => () => void;
   };
   remoteApi: {
     getStatus: () => Promise<RemoteApiStatusDto>;
@@ -270,7 +272,16 @@ const api: PalcmApi = {
     getStatus: () => ipcRenderer.invoke(ipcChannels.appSettingsGetStatus) as Promise<AppSettingsStatusDto>
   },
   palworldSettingsDefinitions: {
-    getStatus: () => ipcRenderer.invoke(ipcChannels.palworldSettingsDefinitionsGet) as Promise<PalworldSettingsDefinitionsStatusDto>
+    getStatus: () => ipcRenderer.invoke(ipcChannels.palworldSettingsDefinitionsGet) as Promise<PalworldSettingsDefinitionsStatusDto>,
+    onChanged: (listener) => {
+      const handler = (_event: Electron.IpcRendererEvent, status: PalworldSettingsDefinitionsStatusDto): void => {
+        listener(status);
+      };
+      ipcRenderer.on(ipcChannels.palworldSettingsDefinitionsChanged, handler);
+      return () => {
+        ipcRenderer.removeListener(ipcChannels.palworldSettingsDefinitionsChanged, handler);
+      };
+    }
   },
   remoteApi: {
     getStatus: () => ipcRenderer.invoke(ipcChannels.remoteApiGetStatus) as Promise<RemoteApiStatusDto>,

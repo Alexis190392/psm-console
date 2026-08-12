@@ -53,6 +53,41 @@ describe('PalworldSettingsDefinitionsService', () => {
       kind: 'boolean'
     });
   });
+
+  it('applies a valid external change and preserves the latest valid definitions on an invalid save', async () => {
+    const root = await createRoot();
+    const path = join(root, 'config', 'palworld-settings.definitions.json');
+    const service = new PalworldSettingsDefinitionsService(createPaths(root));
+    const updates: string[] = [];
+    service.onChanged((status) => {
+      updates.push(status.definitions['FutureOption']?.label ?? '');
+    });
+    await service.ensureLoaded();
+
+    await writeFile(path, JSON.stringify({
+      version: 1,
+      parametros: {
+        FutureOption: { titulo: 'Opcion futura', categoria: 'Experimental', tipo: 'boolean' }
+      }
+    }), 'utf8');
+    await service.reload();
+
+    expect(getSettingDefinition('FutureOption', 'false')).toMatchObject({
+      label: 'Opcion futura',
+      group: 'Experimental',
+      kind: 'boolean'
+    });
+    expect(updates).toEqual(['Opcion futura']);
+    expect(service.getRevision()).toBe(1);
+
+    await writeFile(path, '{', 'utf8');
+    await service.reload();
+
+    expect(getSettingDefinition('FutureOption', 'false')).toMatchObject({ label: 'Opcion futura' });
+    expect(updates).toEqual(['Opcion futura']);
+    expect(service.getRevision()).toBe(1);
+    service.onApplicationShutdown();
+  });
 });
 
 async function createRoot(): Promise<string> {

@@ -487,7 +487,10 @@ function createRemoteApiFixture(
       addServerFolder: vi.fn(),
       createServerFolder: vi.fn()
     } as unknown as PortablePathService,
-    { ensureLoaded: vi.fn() } as unknown as import('../src/backend/palworld-settings/palworld-settings-definitions.service').PalworldSettingsDefinitionsService
+    {
+      ensureLoaded: vi.fn(),
+      getRevision: vi.fn(() => 0)
+    } as unknown as import('../src/backend/palworld-settings/palworld-settings-definitions.service').PalworldSettingsDefinitionsService
   );
   return { service, start, restart, stop, execute, getPublicAddress };
 }

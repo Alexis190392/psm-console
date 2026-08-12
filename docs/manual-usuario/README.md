@@ -124,9 +124,9 @@ Las categorías permanecen plegadas para mantener una vista compacta. Presiona e
 
 Al abrir PSM Console por primera vez se crea `config/palworld-settings.definitions.json`. En la edicion instalable multiserver se guarda en la configuracion global de la aplicacion para que todos los servidores registrados usen el mismo catalogo.
 
-Puedes editar este archivo con PSM Console cerrado para cambiar textos o preparar ajustes incorporados por una actualizacion de Palworld. Cada entrada admite `titulo`, `descripcion`, `categoria`, `tipo` (`text`, `number`, `boolean` o `select`), `rango`, `minimo`, `maximo`, `paso`, `opciones` y, cuando corresponde, `cero` para usar el interruptor que escribe `0`.
+Puedes editar este archivo para cambiar textos o preparar ajustes incorporados por una actualizacion de Palworld. Al guardar, PSM Console recarga las definiciones automaticamente en unos instantes, sin reiniciar la aplicacion; la vista de configuracion se actualiza al momento y la API web las toma en su siguiente ciclo de actualizacion. Cada entrada admite `titulo`, `descripcion`, `categoria`, `tipo` (`text`, `number`, `boolean` o `select`), `rango`, `minimo`, `maximo`, `paso`, `opciones` y, cuando corresponde, `cero` para usar el interruptor que escribe `0`.
 
-Las claves nuevas que aparezcan en el INI sin definicion siguen siendo editables en la categoria **Otros**. Se muestra su nombre tecnico y un control inferido por el valor actual. Una definicion malformada se ignora sin impedir que la aplicacion inicie.
+Las claves nuevas que aparezcan en el INI sin definicion siguen siendo editables en la categoria **Otros**. Se muestra su nombre tecnico y un control inferido por el valor actual. Si el archivo queda temporalmente malformado durante la edicion, PSM Console conserva la ultima definicion valida y sigue funcionando.
 
 ### Valores que pueden desactivarse
 

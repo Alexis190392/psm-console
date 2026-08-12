@@ -112,6 +112,14 @@ export function registerIpcHandlers(
     return getAppStartupStatus();
   });
 
+  palworldSettingsDefinitionsService.onChanged((status) => {
+    BrowserWindow.getAllWindows().forEach((window) => {
+      if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
+        window.webContents.send(ipcChannels.palworldSettingsDefinitionsChanged, status);
+      }
+    });
+  });
+
   ipcMain.handle(ipcChannels.instancesGetStatus, () => {
     const status = portablePathService.getServerInstances();
     const executablePaths = status.instances.map((instance) =>
