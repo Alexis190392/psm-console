@@ -290,19 +290,21 @@
                 <div class="editor-panel__heading"><div><p class="eyebrow">API WEB</p><h2>Configuracion compartida</h2></div></div>
                 <div class="remote-api-form-grid">
                   <form id="remote-api-admin-form" class="remote-api-form">
-                    <h2>API administrativa</h2>
-                    <label class="checkbox-field"><input name="enabled" type="checkbox"><span>Activa</span></label>
-                    <label><span>Acceso</span><select name="bindMode"><option value="LOCAL_ONLY">Solo este equipo</option><option value="LOCAL_NETWORK">Red local</option></select></label>
-                    <label><span>Puerto</span><input name="port" type="text" inputmode="numeric" pattern="[0-9]*"></label>
-                    <label><span>Usuario</span><input name="username" autocomplete="username"></label>
-                    <label><span>Nueva contrasena</span><input name="password" type="password" autocomplete="new-password" minlength="5" placeholder="Conservar actual"></label>
+                    <div class="remote-api-form__header"><h2>API administrativa</h2><label class="checkbox-field"><input name="enabled" type="checkbox"><span>Activa</span></label></div>
+                    <div class="remote-api-form__fields">
+                      <label><span>Acceso</span><select name="bindMode"><option value="LOCAL_ONLY">Solo este equipo</option><option value="LOCAL_NETWORK">Red local</option></select></label>
+                      <label><span>Puerto</span><input name="port" type="text" inputmode="numeric" pattern="[0-9]*"></label>
+                      <label><span>Usuario</span><input name="username" autocomplete="username"></label>
+                      <label><span>Nueva contrasena</span><input name="password" type="password" autocomplete="new-password" minlength="5" placeholder="Conservar actual"></label>
+                    </div>
                     <button class="secondary-button" type="submit">Guardar API administrativa</button>
                   </form>
                   <form id="remote-api-client-form" class="remote-api-form">
-                    <h2>API cliente</h2>
-                    <label class="checkbox-field"><input name="enabled" type="checkbox"><span>Activa</span></label>
-                    <label><span>Usuario</span><input name="username" autocomplete="username"></label>
-                    <label><span>Nueva contrasena</span><input name="password" type="password" autocomplete="new-password" minlength="5" placeholder="Conservar actual"></label>
+                    <div class="remote-api-form__header"><h2>API cliente</h2><label class="checkbox-field"><input name="enabled" type="checkbox"><span>Activa</span></label></div>
+                    <div class="remote-api-form__fields">
+                      <label><span>Usuario</span><input name="username" autocomplete="username"></label>
+                      <label><span>Nueva contrasena</span><input name="password" type="password" autocomplete="new-password" minlength="5" placeholder="Conservar actual"></label>
+                    </div>
                     <fieldset><legend>Contenido y acciones permitidas</legend><div id="client-permissions" class="permission-list"></div></fieldset>
                     <button class="secondary-button" type="submit">Guardar API cliente</button>
                   </form>

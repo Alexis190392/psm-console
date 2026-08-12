@@ -943,9 +943,26 @@ input:focus {
   padding: 14px;
 }
 
+.remote-api-form__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .remote-api-form h2 {
   margin: 0;
   color: var(--cyan-soft);
+}
+
+.remote-api-form__fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.remote-api-form__fields label {
+  min-width: 0;
 }
 
 .remote-api-form label:not(.checkbox-field) > span {
@@ -969,8 +986,14 @@ input:focus {
 
 .permission-list {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px 10px;
+}
+
+@media (max-width: 1040px) {
+  .permission-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .configuration-filter {
@@ -1221,6 +1244,7 @@ input:focus {
   }
 
   .remote-api-form-grid,
+  .remote-api-form__fields,
   .permission-list {
     grid-template-columns: 1fr;
   }
