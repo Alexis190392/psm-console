@@ -106,7 +106,7 @@ export function registerIpcHandlers(
     if (!status.available) {
       throw new Error('APP_STARTUP_NOT_AVAILABLE');
     }
-    app.setLoginItemSettings({ openAtLogin: Boolean(enabled), openAsHidden: false });
+    app.setLoginItemSettings({ openAtLogin: enabled, openAsHidden: false });
     return getAppStartupStatus();
   });
 

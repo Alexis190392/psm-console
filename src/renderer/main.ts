@@ -514,12 +514,12 @@ if (!palcmApi) {
   createServerInstanceButton?.addEventListener('click', showNewServerDialog);
   createServerCancelButton?.addEventListener('click', hideNewServerDialog);
   createServerConfirmButton?.addEventListener('click', () => {
-    void createNewServerInstance();
+    createNewServerInstance();
   });
   newServerName?.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
       event.preventDefault();
-      void createNewServerInstance();
+      createNewServerInstance();
     }
   });
 
@@ -2643,7 +2643,9 @@ function bindAppSettingsControls(): void {
         showToast('Carpeta base actualizada.');
         return renderAppSettings();
       })
-      .catch(() => showToast('No se pudo cambiar la carpeta base.', 'error'));
+      .catch(() => {
+        showToast('No se pudo cambiar la carpeta base.', 'error');
+      });
   });
 
   const startupToggle = document.querySelector<HTMLInputElement>('#settings-startup-enabled');
@@ -2651,7 +2653,9 @@ function bindAppSettingsControls(): void {
     startupToggle.addEventListener('change', () => {
       const previous = !startupToggle.checked;
       void palcmApi?.app.updateStartup(startupToggle.checked)
-        .then(() => showToast('Cambio guardado.'))
+        .then(() => {
+          showToast('Cambio guardado.');
+        })
         .catch(() => {
           startupToggle.checked = previous;
           showToast('No se pudo guardar el cambio.', 'error');
@@ -3171,7 +3175,7 @@ function hideNewServerDialog(): void {
   }
 }
 
-async function createNewServerInstance(): Promise<void> {
+function createNewServerInstance(): void {
   const name = newServerName?.value.trim() ?? '';
   if (!name) {
     newServerName?.focus();
@@ -3179,7 +3183,7 @@ async function createNewServerInstance(): Promise<void> {
     return;
   }
 
-  await runUiAction('No se pudo crear el servidor', async () => {
+  runUiAction('No se pudo crear el servidor', async () => {
     await palcmApi?.instances.create(name);
     hideNewServerDialog();
     await refreshState();

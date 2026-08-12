@@ -981,12 +981,15 @@ export class RemoteApiService implements OnApplicationBootstrap, OnApplicationSh
     return {
       mode: status.mode,
       ...(status.selectedInstanceId ? { selectedInstanceId: status.selectedInstanceId } : {}),
-      instances: status.instances.map((instance, index) => ({
-        id: instance.id,
-        name: instance.name,
-        isSelected: instance.isSelected,
-        isRunning: executablePaths[index] ? runningPaths.has(executablePaths[index] as string) : false
-      }))
+      instances: status.instances.map((instance, index) => {
+        const executablePath = executablePaths[index];
+        return {
+          id: instance.id,
+          name: instance.name,
+          isSelected: instance.isSelected,
+          isRunning: executablePath ? runningPaths.has(executablePath) : false
+        };
+      })
     };
   }
 
