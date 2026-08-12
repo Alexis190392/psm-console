@@ -7641,6 +7641,16 @@ html.window-maximized .tactical-window-frame {
   background: rgba(3, 17, 26, 0.76);
 }
 
+/* El selector compacto se abre sobre el espacio de trabajo, sin alterar el z-index normal del lateral. */
+#app.app--server-instance-menu-open .sidebar {
+  z-index: 30;
+}
+
+#app.app--server-instance-menu-open .server-instance-selector,
+#app.app--server-instance-menu-open .server-instance-menu {
+  z-index: 31;
+}
+
 .server-instance-selector > label {
   display: block;
   margin-bottom: 7px;
