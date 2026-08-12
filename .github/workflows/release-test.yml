@@ -32,9 +32,6 @@ jobs:
       - name: Instalar dependencias
         run: npm ci
 
-      - name: Preparar Electron
-        run: npm rebuild electron --force && npx electron --version
-
       - name: Leer versión de la aplicación
         shell: pwsh
         run: |
