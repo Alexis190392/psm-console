@@ -864,7 +864,7 @@
     var groups = new Map();
     (configurationSchema && configurationSchema.settings || []).forEach(function (setting) {
       var definition = setting.definition || {};
-      var search = [definition.group, definition.label, setting.key, definition.help, definition.range].join(' ').toLocaleLowerCase();
+      var search = [definition.group, definition.label || '', setting.key, definition.help || '', definition.range || ''].join(' ').toLocaleLowerCase();
       if ((category && definition.group !== category) || (query && !search.includes(query))) {
         return;
       }
@@ -903,16 +903,23 @@
     var heading = document.createElement('div');
     heading.className = 'web-setting-heading';
     var label = document.createElement('strong');
-    label.textContent = definition.label || setting.key;
+    label.textContent = definition.label || '';
     var key = document.createElement('small');
     key.textContent = setting.key;
-    var info = document.createElement('button');
-    info.type = 'button';
-    info.className = 'setting-info';
-    info.textContent = 'i';
-    info.title = [definition.help, definition.range].filter(Boolean).join(' ');
-    info.setAttribute('aria-label', info.title || 'Informacion del parametro');
-    heading.append(label, key, info);
+    var infoText = [definition.help, definition.range].filter(Boolean).join(' ');
+    if (definition.label) {
+      heading.appendChild(label);
+    }
+    heading.appendChild(key);
+    if (infoText) {
+      var info = document.createElement('button');
+      info.type = 'button';
+      info.className = 'setting-info';
+      info.textContent = 'i';
+      info.title = infoText;
+      info.setAttribute('aria-label', infoText);
+      heading.appendChild(info);
+    }
     field.appendChild(heading);
     var currentValue = configurationDraftValues[setting.key] ?? unquoteConfigurationValue(setting.value);
     if (setting.zeroToggle) {

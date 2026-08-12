@@ -2,19 +2,16 @@ export type PalworldSettingKind = 'text' | 'number' | 'boolean' | 'select';
 
 export interface PalworldSettingDefinition {
   key: string;
-  label: string;
+  label?: string;
   group: string;
   kind: PalworldSettingKind;
-  help: string;
+  help?: string;
   range?: string;
   min?: number;
   max?: number;
   step?: number;
   options?: string[];
 }
-
-export const DEFAULT_SETTING_HELP =
-  'Parametro avanzado detectado en el INI. Si no estas seguro, conserva el valor actual y cambia solo despues de probar en el servidor.';
 
 export const PALWORLD_SETTING_DEFINITIONS: Record<string, PalworldSettingDefinition> = {
   ServerName: {

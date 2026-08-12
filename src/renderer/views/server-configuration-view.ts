@@ -75,20 +75,20 @@ function groupSettings(settings: ParsedPalworldSetting[]): Map<string, ParsedPal
 function renderSettingControl(setting: ParsedPalworldSetting): string {
   const definition = getSettingDefinition(setting.key, setting.value);
   const rawValue = unquoteSettingValue(setting.value);
-  const info = `${definition.help}${definition.range ? ` Rango: ${definition.range}` : ''}`;
+  const info = [definition.help, definition.range ? `Rango: ${definition.range}` : ''].filter(Boolean).join(' ');
   const searchText = [
     definition.group,
-    definition.label,
+    definition.label ?? '',
     setting.key,
-    definition.help,
+    definition.help ?? '',
     definition.range ?? ''
   ].join(' ');
 
   return `
     <article class="setting-field" data-setting-card data-setting-card-key="${escapeHtml(setting.key)}" data-setting-group="${escapeHtml(definition.group)}" data-search="${escapeHtml(normalizeSearchText(searchText))}">
       <span class="setting-field__top">
-        <span><strong>${escapeHtml(definition.label)}</strong><small>${escapeHtml(setting.key)}</small></span>
-        <button class="setting-info" type="button" aria-label="${escapeHtml(info)}" data-info="${escapeHtml(info)}">${renderIcon('info')}</button>
+        <span>${definition.label ? `<strong>${escapeHtml(definition.label)}</strong>` : ''}<small>${escapeHtml(setting.key)}</small></span>
+        ${info ? `<button class="setting-info" type="button" aria-label="${escapeHtml(info)}" data-info="${escapeHtml(info)}">${renderIcon('info')}</button>` : ''}
       </span>
       ${renderSettingInput(definition, setting.key, rawValue)}
     </article>

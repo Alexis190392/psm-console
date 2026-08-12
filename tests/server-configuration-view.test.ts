@@ -52,4 +52,13 @@ describe('server configuration view', () => {
     expect(html).not.toContain('data-zero-toggle-key="DayTimeSpeedRate"');
     expect(html).toContain('data-range-key="DayTimeSpeedRate"');
   });
+
+  it('renders unregistered parameters under Otros without a generated title or help button', () => {
+    const html = renderSettingsForm(parsePalworldSettings('OptionSettings=(FuturePalworldSetting=1)'));
+
+    expect(html).toContain('>Otros<');
+    expect(html).toContain('>FuturePalworldSetting<');
+    expect(html).not.toContain('Future Palworld Setting');
+    expect(html).not.toContain('class="setting-info"');
+  });
 });

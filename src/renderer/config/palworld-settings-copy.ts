@@ -1,5 +1,13 @@
 import type { PalworldSettingDefinition } from './palworld-settings-catalog';
 
+/**
+ * Fuente editable de los textos del editor de PalWorldSettings.ini.
+ *
+ * Al actualizar el servidor, agrega aqui las claves nuevas que quieras
+ * documentar. Las claves que no figuren se muestran en la categoria `Otros`,
+ * con su clave tecnica y sin titulo ni descripcion inventados.
+ */
+
 export type PalworldSettingCopy = Pick<PalworldSettingDefinition, 'label' | 'group' | 'help'> & Partial<Pick<PalworldSettingDefinition, 'range'>>;
 
 export const PALWORLD_SETTING_COPY: Record<string, PalworldSettingCopy> = {
