@@ -1499,6 +1499,30 @@ input[type="range"] {
   display: none;
 }
 
+.new-server-panel {
+  position: fixed;
+  z-index: 80;
+  top: 50%;
+  left: 50%;
+  width: min(460px, calc(100vw - 36px));
+  margin: 0;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.62), 0 0 32px rgba(0, 217, 232, 0.14);
+}
+
+.new-server-panel__field {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+  color: var(--color-text-muted);
+  font: 600 0.72rem/1 var(--font-mono);
+}
+
+.new-server-panel__field input {
+  width: 100%;
+  min-height: 42px;
+}
+
 .hidden {
   display: none !important;
 }

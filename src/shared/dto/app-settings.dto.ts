@@ -18,5 +18,6 @@ export interface AppSettingsStatusDto {
   settingsRelativePath: string;
   logsRelativePath: string;
   backupsRelativePath: string;
+  serverBaseFolder?: string;
   startup?: AppStartupStatusDto;
 }

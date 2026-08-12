@@ -1,5 +1,5 @@
 import type { INestApplicationContext } from '@nestjs/common';
-import { app, BrowserWindow, dialog, shell, type IpcMain, type IpcMainInvokeEvent, type ProcessMetric } from 'electron';
+import { app, BrowserWindow, dialog, shell, type IpcMain, type IpcMainInvokeEvent, type OpenDialogOptions, type ProcessMetric } from 'electron';
 import { ApplicationStateService } from '../../backend/application-state/application-state.service';
 import { AppSettingsService } from '../../backend/app-settings/app-settings.service';
 import { BackupService } from '../../backend/backup/backup.service';
@@ -148,6 +148,23 @@ export function registerIpcHandlers(
       return portablePathService.getServerInstances();
     }
     return portablePathService.addServerFolder(folderPath);
+  });
+
+  ipcMain.handle(ipcChannels.instancesCreate, (_event, name: string) =>
+    portablePathService.createServerFolder(name)
+  );
+
+  ipcMain.handle(ipcChannels.instancesSelectBaseFolder, async (event) => {
+    const parentWindow = getSenderWindow(event);
+    const options: OpenDialogOptions = {
+      title: 'Elegir carpeta base de servidores',
+      properties: ['openDirectory', 'createDirectory']
+    };
+    const result = parentWindow
+      ? await dialog.showOpenDialog(parentWindow, options)
+      : await dialog.showOpenDialog(options);
+    const folderPath = result.canceled ? undefined : result.filePaths[0];
+    return folderPath ? portablePathService.setServerBaseFolder(folderPath) : null;
   });
 
   ipcMain.handle(ipcChannels.instancesSelect, (_event, instanceId: string) =>

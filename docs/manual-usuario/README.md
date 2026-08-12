@@ -397,7 +397,9 @@ Los cambios no se aplican hasta confirmar **Guardar**.
 
 #### Varias instancias desde la web
 
-La API administrativa muestra un selector de servidor en la cabecera cuando la edición instalable tiene más de una carpeta registrada. Selecciona una instancia para administrar su configuración, backups, red y ejecución. En **Carpetas registradas**, **Crear servidor** genera una carpeta nueva dentro de `Documentos\PSM Console Servers` y la deja lista para instalar. **Registrar existente** acepta una ruta absoluta de una carpeta ya creada en el equipo donde se ejecuta PSM Console.
+La API administrativa muestra un selector de servidor en la cabecera cuando la edición instalable tiene más de una carpeta registrada. Selecciona una instancia para administrar su configuración, backups, red y ejecución. En **Carpetas registradas**, **Crear servidor** genera una carpeta nueva dentro de la carpeta base configurada y la deja lista para instalar. El nombre indicado se aplica como nombre inicial del servidor al crear `PalWorldSettings.ini`; una configuración existente nunca se reemplaza. **Registrar existente** acepta una ruta absoluta de una carpeta ya creada en el equipo donde se ejecuta PSM Console.
+
+Desde la aplicación instalada, abre **Configuración > Aplicación** y usa **Elegir carpeta base** para cambiar el destino predeterminado de los nuevos servidores. Por defecto es `Documentos\PSM Console Servers`. Las instancias ya registradas permanecen disponibles aunque estén fuera de esa carpeta.
 
 La API cliente solo muestra el selector cuando el administrador habilita el permiso **Cambiar servidor**. El perfil cliente no puede registrar ni ver las rutas físicas de las carpetas.
 

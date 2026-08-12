@@ -172,7 +172,14 @@ export class PalworldConfigurationService {
       });
       this.operationManagerService.appendLog(operationId, `copy "${templatePath}" "${activePath}"`);
       const templateContent = await readFile(templatePath, 'utf8');
-      await writeFile(activePath, normalizeAdminPassword(templateContent), 'utf8');
+      await writeFile(
+        activePath,
+        applyInitialServerName(
+          normalizeAdminPassword(templateContent),
+          this.portablePathService.getSelectedInitialServerName()
+        ),
+        'utf8'
+      );
       this.portableStateService.rememberConfiguration(templatePath, activePath);
 
       this.operationManagerService.update(operationId, {
@@ -374,6 +381,16 @@ function normalizeAdminPassword(content: string): string {
   }
 
   return upsertOptionSettings(content, new Map([['AdminPassword', `"${DEFAULT_ADMIN_PASSWORD}"`]]));
+}
+
+function applyInitialServerName(content: string, serverName: string | undefined): string {
+  const normalizedName = serverName?.trim();
+  if (!normalizedName) {
+    return content;
+  }
+
+  const escapedName = normalizedName.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  return upsertOptionSettings(content, new Map([['ServerName', `"${escapedName}"`]]));
 }
 
 function parseOptionSettings(content: string): Map<string, string> {

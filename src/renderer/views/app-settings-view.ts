@@ -133,7 +133,13 @@ function renderApplicationSettings(status: AppSettingsStatusDto, update: AppUpda
           <div><dt>Preferencias</dt><dd>${escapeHtml(status.settingsRelativePath)}</dd></div>
           <div><dt>Logs</dt><dd>${escapeHtml(status.logsRelativePath)}</dd></div>
           <div><dt>Backups</dt><dd>${escapeHtml(status.backupsRelativePath)}</dd></div>
+          ${status.serverBaseFolder
+            ? `<div><dt>Carpeta base</dt><dd title="${escapeHtml(status.serverBaseFolder)}">${escapeHtml(status.serverBaseFolder)}</dd></div>`
+            : ''}
         </dl>
+        ${status.serverBaseFolder
+          ? `<button id="settings-select-server-base" class="secondary-button button-with-icon" type="button">${renderIcon('folder')}<span>Elegir carpeta base</span></button>`
+          : ''}
       </article>
       <article class="content-card settings-overview-card">
         <h4>Inicio con Windows</h4>

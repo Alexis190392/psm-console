@@ -159,6 +159,7 @@ rootElement.innerHTML = `
         </button>
         <div id="server-instance-options" class="server-instance-menu__popover hidden" role="listbox" aria-label="Servidores registrados">
           <div id="server-instance-options-list" class="server-instance-menu__list"></div>
+          <button id="create-server-instance" class="server-instance-menu__add" type="button">+ Nuevo servidor</button>
           <button id="add-server-instance" class="server-instance-menu__add" type="button">+ Agregar carpeta</button>
         </div>
       </div>
@@ -320,6 +321,21 @@ rootElement.innerHTML = `
           <span id="operation-message" class="operation-message" aria-live="polite">Sin operacion activa.</span>
         </div>
       </div>
+      <div id="new-server-panel" class="confirmation-panel new-server-panel hidden" role="dialog" aria-modal="true" aria-labelledby="new-server-title">
+        <div>
+          <div class="confirmation-panel__eyebrow">MULTISERVIDOR</div>
+          <h3 id="new-server-title">Crear servidor</h3>
+          <p>El nombre se aplicara al crear la configuracion inicial del servidor.</p>
+          <label class="new-server-panel__field" for="new-server-name">
+            <span>Nombre del servidor</span>
+            <input id="new-server-name" type="text" maxlength="80" autocomplete="off" placeholder="Mi servidor Palworld" />
+          </label>
+        </div>
+        <div class="action-row">
+          <button id="create-server-confirm" class="primary-button" type="button">Crear servidor</button>
+          <button id="create-server-cancel" class="secondary-button" type="button">Cancelar</button>
+        </div>
+      </div>
       <div id="content-view" class="content-view hidden" role="main" tabindex="-1"></div>
     </section>
   </main>
@@ -352,6 +368,10 @@ const progressBar = document.querySelector<HTMLDivElement>('#progress-bar');
 const steamCmdFooter = document.querySelector('#steamcmd-footer');
 const operationMessage = document.querySelector('#operation-message');
 const confirmationPanel = document.querySelector<HTMLDivElement>('#confirmation-panel');
+const newServerPanel = document.querySelector<HTMLDivElement>('#new-server-panel');
+const newServerName = document.querySelector<HTMLInputElement>('#new-server-name');
+const createServerConfirmButton = document.querySelector<HTMLButtonElement>('#create-server-confirm');
+const createServerCancelButton = document.querySelector<HTMLButtonElement>('#create-server-cancel');
 const confirmationKind = document.querySelector('#confirmation-kind');
 const confirmationTitle = document.querySelector('#confirmation-title');
 const confirmationMessage = document.querySelector('#confirmation-message');
@@ -372,6 +392,7 @@ const serverInstanceTriggerLabel = document.querySelector<HTMLElement>('#server-
 const serverInstanceOptions = document.querySelector<HTMLElement>('#server-instance-options');
 const serverInstanceOptionsList = document.querySelector<HTMLElement>('#server-instance-options-list');
 const addServerInstanceButton = document.querySelector<HTMLButtonElement>('#add-server-instance');
+const createServerInstanceButton = document.querySelector<HTMLButtonElement>('#create-server-instance');
 const navLinks = Array.from(document.querySelectorAll<HTMLAnchorElement>('[data-nav]'));
 const adminNavGroup = document.querySelector<HTMLElement>('[data-nav-group="admin"]');
 const settingsNavGroup = document.querySelector<HTMLElement>('[data-nav-group="settings"]');
@@ -488,6 +509,18 @@ if (!palcmApi) {
       await palcmApi.instances.addFolder();
       await refreshState();
     });
+  });
+
+  createServerInstanceButton?.addEventListener('click', showNewServerDialog);
+  createServerCancelButton?.addEventListener('click', hideNewServerDialog);
+  createServerConfirmButton?.addEventListener('click', () => {
+    void createNewServerInstance();
+  });
+  newServerName?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      void createNewServerInstance();
+    }
   });
 
   serverInstanceTrigger?.addEventListener('click', () => {
@@ -2601,6 +2634,31 @@ function bindAppSettingsControls(): void {
     void palcmApi?.update.openRelease();
   });
 
+  document.querySelector<HTMLButtonElement>('#settings-select-server-base')?.addEventListener('click', () => {
+    void palcmApi?.instances.selectBaseFolder()
+      .then((folderPath) => {
+        if (!folderPath) {
+          return;
+        }
+        showToast('Carpeta base actualizada.');
+        return renderAppSettings();
+      })
+      .catch(() => showToast('No se pudo cambiar la carpeta base.', 'error'));
+  });
+
+  const startupToggle = document.querySelector<HTMLInputElement>('#settings-startup-enabled');
+  if (startupToggle) {
+    startupToggle.addEventListener('change', () => {
+      const previous = !startupToggle.checked;
+      void palcmApi?.app.updateStartup(startupToggle.checked)
+        .then(() => showToast('Cambio guardado.'))
+        .catch(() => {
+          startupToggle.checked = previous;
+          showToast('No se pudo guardar el cambio.', 'error');
+        });
+    });
+  }
+
   const idleForm = document.querySelector<HTMLFormElement>('[data-idle-policy-form]');
   const idleEnabled = idleForm?.elements.namedItem('enabled');
   const idleSeconds = idleForm?.elements.namedItem('emptySeconds');
@@ -3085,28 +3143,48 @@ function showServerInstanceSelection(): void {
         <p class="eyebrow">MULTISERVIDOR</p>
         <h3>Selecciona un servidor</h3>
         <p>${hasInstances
-          ? 'Elige una carpeta existente desde el selector lateral o agrega otra instancia.'
-          : 'Agrega la carpeta donde quieres instalar o administrar un servidor Palworld.'}</p>
-        <button class="primary-button" type="button" data-add-server-instance="true">+ Agregar carpeta</button>
+          ? 'Elige una instancia desde el selector lateral o crea otra.'
+          : 'Crea un servidor nuevo o registra una carpeta existente.'}</p>
+        <div class="action-row">
+          <button class="primary-button" type="button" data-create-server-instance="true">+ Nuevo servidor</button>
+          <button class="secondary-button" type="button" data-add-server-instance="true">Agregar carpeta</button>
+        </div>
       </section>
     </div>
   `;
   contentView.querySelector<HTMLButtonElement>('[data-add-server-instance="true"]')?.addEventListener('click', () => {
     addServerInstanceButton?.click();
   });
+  contentView.querySelector<HTMLButtonElement>('[data-create-server-instance="true"]')?.addEventListener('click', showNewServerDialog);
+}
 
-  const startupToggle = document.querySelector<HTMLInputElement>('#settings-startup-enabled');
-  if (startupToggle) {
-    startupToggle.addEventListener('change', () => {
-      const previous = !startupToggle.checked;
-      void palcmApi?.app.updateStartup(startupToggle.checked)
-        .then(() => showToast('Cambio guardado.'))
-        .catch(() => {
-          startupToggle.checked = previous;
-          showToast('No se pudo guardar el cambio.', 'error');
-        });
-    });
+function showNewServerDialog(): void {
+  setServerInstanceMenuOpen(false);
+  newServerPanel?.classList.remove('hidden');
+  requestAnimationFrame(() => newServerName?.focus());
+}
+
+function hideNewServerDialog(): void {
+  newServerPanel?.classList.add('hidden');
+  if (newServerName) {
+    newServerName.value = '';
   }
+}
+
+async function createNewServerInstance(): Promise<void> {
+  const name = newServerName?.value.trim() ?? '';
+  if (!name) {
+    newServerName?.focus();
+    showToast('Ingresa un nombre para el servidor.', 'error');
+    return;
+  }
+
+  await runUiAction('No se pudo crear el servidor', async () => {
+    await palcmApi?.instances.create(name);
+    hideNewServerDialog();
+    await refreshState();
+    showToast('Servidor creado. Completa la instalacion desde esta instancia.');
+  });
 }
 
 async function renderAdminView(renderId = ++activeViewRenderId): Promise<void> {

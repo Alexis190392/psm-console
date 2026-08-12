@@ -89,6 +89,8 @@ const ipcChannels = {
   appUpdateStartup: 'app:update-startup',
   instancesGetStatus: 'instances:get-status',
   instancesAddFolder: 'instances:add-folder',
+  instancesCreate: 'instances:create',
+  instancesSelectBaseFolder: 'instances:select-base-folder',
   instancesSelect: 'instances:select',
   appSettingsGetStatus: 'app-settings:get-status',
   remoteApiGetStatus: 'remote-api:get-status',
@@ -155,6 +157,8 @@ export interface PalcmApi {
   instances: {
     getStatus: () => Promise<ServerInstancesStatusDto>;
     addFolder: () => Promise<ServerInstancesStatusDto>;
+    create: (name: string) => Promise<ServerInstancesStatusDto>;
+    selectBaseFolder: () => Promise<string | null>;
     select: (instanceId: string) => Promise<ServerInstancesStatusDto>;
   };
   appSettings: {
@@ -253,6 +257,8 @@ const api: PalcmApi = {
   instances: {
     getStatus: () => ipcRenderer.invoke(ipcChannels.instancesGetStatus) as Promise<ServerInstancesStatusDto>,
     addFolder: () => ipcRenderer.invoke(ipcChannels.instancesAddFolder) as Promise<ServerInstancesStatusDto>,
+    create: (name) => ipcRenderer.invoke(ipcChannels.instancesCreate, name) as Promise<ServerInstancesStatusDto>,
+    selectBaseFolder: () => ipcRenderer.invoke(ipcChannels.instancesSelectBaseFolder) as Promise<string | null>,
     select: (instanceId) => ipcRenderer.invoke(ipcChannels.instancesSelect, instanceId) as Promise<ServerInstancesStatusDto>
   },
   appSettings: {

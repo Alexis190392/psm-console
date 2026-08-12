@@ -76,7 +76,10 @@ export class PortablePathService {
     };
   }
 
-  addServerFolder(folderPath: string): ServerInstancesStatusDto {
+  addServerFolder(
+    folderPath: string,
+    options: { displayName?: string; initialServerName?: string } = {}
+  ): ServerInstancesStatusDto {
     if (!this.isMultiServerMode()) {
       throw new Error('SERVER_INSTANCES_ONLY_AVAILABLE_IN_INSTALLABLE');
     }
@@ -92,13 +95,15 @@ export class PortablePathService {
     const next = existing ?? {
       id: createInstanceId(rootPath),
       rootPath,
-      name: readServerName(serverRoot) ?? createFolderDisplayName(rootPath),
+      name: readServerName(serverRoot) ?? options.displayName ?? createFolderDisplayName(rootPath),
       serverRoot,
+      initialServerName: options.initialServerName,
       addedAt: new Date().toISOString()
     };
 
     next.serverRoot = serverRoot;
-    next.name = readServerName(serverRoot) ?? next.name;
+    next.name = readServerName(serverRoot) ?? options.displayName ?? next.name;
+    next.initialServerName ??= options.initialServerName;
     if (!existing) {
       registry.instances.push(next);
     }
@@ -114,9 +119,12 @@ export class PortablePathService {
     }
 
     const folderName = sanitizeServerFolderName(name);
-    const rootPath = createUniqueServerFolder(join(this.getManagedServersRoot(), folderName));
+    const rootPath = createUniqueServerFolder(join(this.getServerBaseFolder(), folderName));
     mkdirSync(rootPath, { recursive: true });
-    return this.addServerFolder(rootPath);
+    return this.addServerFolder(rootPath, {
+      displayName: name.trim(),
+      initialServerName: name.trim()
+    });
   }
 
   selectServerInstance(instanceId: string): ServerInstancesStatusDto {
@@ -144,6 +152,30 @@ export class PortablePathService {
 
   getSelectedServerInstanceName(): string | undefined {
     return this.getSelectedInstance()?.name;
+  }
+
+  getSelectedInitialServerName(): string | undefined {
+    return this.getSelectedInstance()?.initialServerName;
+  }
+
+  getServerBaseFolder(): string {
+    return this.readRegistry().baseFolder ?? this.getDefaultManagedServersRoot();
+  }
+
+  setServerBaseFolder(folderPath: string): string {
+    if (!this.isMultiServerMode()) {
+      throw new Error('SERVER_INSTANCES_ONLY_AVAILABLE_IN_INSTALLABLE');
+    }
+
+    const baseFolder = normalize(resolve(folderPath));
+    if (!existsSync(baseFolder)) {
+      throw new Error('SERVER_INSTANCE_FOLDER_NOT_FOUND');
+    }
+
+    const registry = this.readRegistry();
+    registry.baseFolder = baseFolder;
+    this.writeRegistry(registry);
+    return baseFolder;
   }
 
   getServerInstanceExecutablePath(instanceId: string): string {
@@ -238,7 +270,7 @@ export class PortablePathService {
     return process.env['PALCM_APP_DATA_PATH'] ?? join(this.getDefaultPortableRoot(), 'app-data');
   }
 
-  private getManagedServersRoot(): string {
+  private getDefaultManagedServersRoot(): string {
     const documentsPath = process.env['PALCM_DOCUMENTS_PATH'];
     return join(documentsPath ?? this.getApplicationDataRoot(), 'PSM Console Servers');
   }
@@ -257,6 +289,7 @@ export class PortablePathService {
       const parsed = JSON.parse(readFileSync(path, 'utf8')) as Partial<ServerInstanceRegistry>;
       return {
         version: 1,
+        baseFolder: typeof parsed.baseFolder === 'string' ? parsed.baseFolder : undefined,
         selectedInstanceId: typeof parsed.selectedInstanceId === 'string' ? parsed.selectedInstanceId : undefined,
         instances: Array.isArray(parsed.instances)
           ? parsed.instances.filter(isManagedServerInstance)
@@ -279,12 +312,14 @@ interface ManagedServerInstance {
   rootPath: string;
   name: string;
   serverRoot?: string;
+  initialServerName?: string;
   addedAt: string;
 }
 
 interface ServerInstanceRegistry {
   version: 1;
   selectedInstanceId?: string;
+  baseFolder?: string;
   instances: ManagedServerInstance[];
 }
 

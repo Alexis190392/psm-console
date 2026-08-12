@@ -6,6 +6,8 @@ export const ipcChannels = {
   appUpdateStartup: 'app:update-startup',
   instancesGetStatus: 'instances:get-status',
   instancesAddFolder: 'instances:add-folder',
+  instancesCreate: 'instances:create',
+  instancesSelectBaseFolder: 'instances:select-base-folder',
   instancesSelect: 'instances:select',
   appSettingsGetStatus: 'app-settings:get-status',
   remoteApiGetStatus: 'remote-api:get-status',

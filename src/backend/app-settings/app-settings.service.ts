@@ -58,7 +58,10 @@ export class AppSettingsService {
       portableRoot: this.portablePathService.getPortableRoot(),
       settingsRelativePath: 'config/app-settings.json',
       logsRelativePath: 'logs/',
-      backupsRelativePath: 'backups/'
+      backupsRelativePath: 'backups/',
+      serverBaseFolder: this.portablePathService.isMultiServerMode()
+        ? this.portablePathService.getServerBaseFolder()
+        : undefined
     };
   }
 
